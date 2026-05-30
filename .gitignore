@@ -2,6 +2,7 @@
 .venv
 .python-version
 .ruff_cache
+.pytest_cache
 __pycache__
 *.py[cod]
 dist
