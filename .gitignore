@@ -1,0 +1,6 @@
+# uv
+.venv
+.python-version
+
+# os-related
+.DS_Store
