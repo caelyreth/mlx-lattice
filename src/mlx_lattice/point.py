@@ -190,9 +190,10 @@ def _place_cached_map_arrays(
     coords: mx.array,
     *arrays: mx.array,
 ) -> tuple[mx.array, ...]:
+    gpu_available = mx.metal.is_available() or mx.cuda.is_available()
     if (
         coords.dtype == mx.int32
-        and mx.metal.is_available()
+        and gpu_available
         and mx.default_device() == mx.Device(mx.gpu)
     ):
         device = mx.default_device()

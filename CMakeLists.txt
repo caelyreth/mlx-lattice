@@ -16,16 +16,14 @@ project(
 
 # MARK: - platform
 
-if(NOT APPLE)
-  message(FATAL_ERROR "mlx-lattice currently supports macOS only.")
-endif()
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(MLX_LATTICE_BUILD_METAL "Build the mlx-lattice Metal library" ON)
+option(MLX_LATTICE_BUILD_CUDA "Build the mlx-lattice CUDA kernels" ON)
 set(MLX_LATTICE_HAS_METAL 0)
+set(MLX_LATTICE_HAS_CUDA 0)
 
 # MARK: - paths
 
@@ -83,34 +81,71 @@ target_compile_definitions(
   PUBLIC
     MLX_LATTICE_VERSION="${PROJECT_VERSION}"
     MLX_LATTICE_HAS_CPU=1
-    MLX_LATTICE_HAS_CUDA=0
     MLX_LATTICE_HAS_ROCM=0)
 
 # MARK: - metal
 
-execute_process(
-  COMMAND xcrun -sdk macosx -find metal
-  RESULT_VARIABLE MLX_LATTICE_METAL_FIND_RESULT
-  OUTPUT_QUIET
-  ERROR_QUIET)
+if(APPLE)
+  execute_process(
+    COMMAND xcrun -sdk macosx -find metal
+    RESULT_VARIABLE MLX_LATTICE_METAL_FIND_RESULT
+    OUTPUT_QUIET
+    ERROR_QUIET)
 
-if(MLX_BUILD_METAL AND MLX_LATTICE_BUILD_METAL
-   AND MLX_LATTICE_METAL_FIND_RESULT EQUAL 0)
-  set(MLX_LATTICE_HAS_METAL 1)
-  mlx_build_metallib(
-    TARGET mlx_lattice_metallib
-    TITLE mlx_lattice
-    SOURCES
-      ${CMAKE_CURRENT_LIST_DIR}/native/backends/metal/conv3d.metal
-      ${CMAKE_CURRENT_LIST_DIR}/native/backends/metal/coords.metal
-    INCLUDE_DIRS ${PROJECT_SOURCE_DIR} ${MLX_INCLUDE_DIRS}
-    OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
-  add_dependencies(mlx_lattice_native mlx_lattice_metallib)
+  if(MLX_BUILD_METAL AND MLX_LATTICE_BUILD_METAL
+     AND MLX_LATTICE_METAL_FIND_RESULT EQUAL 0)
+    set(MLX_LATTICE_HAS_METAL 1)
+    mlx_build_metallib(
+      TARGET mlx_lattice_metallib
+      TITLE mlx_lattice
+      SOURCES
+        ${CMAKE_CURRENT_LIST_DIR}/native/backends/metal/conv3d.metal
+        ${CMAKE_CURRENT_LIST_DIR}/native/backends/metal/coords.metal
+      INCLUDE_DIRS ${PROJECT_SOURCE_DIR} ${MLX_INCLUDE_DIRS}
+      OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+    add_dependencies(mlx_lattice_native mlx_lattice_metallib)
+  endif()
 endif()
 
 target_compile_definitions(
   mlx_lattice_native
   PUBLIC MLX_LATTICE_HAS_METAL=${MLX_LATTICE_HAS_METAL})
+
+# MARK: - cuda
+
+if(MLX_LATTICE_BUILD_CUDA AND NOT APPLE)
+  include(CheckLanguage)
+  check_language(CUDA)
+  if(CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    find_package(CUDAToolkit QUIET)
+    if(CUDAToolkit_FOUND)
+      set(MLX_LATTICE_HAS_CUDA 1)
+      target_sources(
+        mlx_lattice_native
+        PRIVATE
+          ${CMAKE_CURRENT_LIST_DIR}/native/backends/cuda/conv3d.cu
+          ${CMAKE_CURRENT_LIST_DIR}/native/backends/cuda/coords.cu)
+      target_link_libraries(
+        mlx_lattice_native
+        PUBLIC CUDA::cudart CUDA::cuda_driver)
+      target_compile_options(
+        mlx_lattice_native
+        PRIVATE
+          $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+      set_target_properties(
+        mlx_lattice_native
+        PROPERTIES
+          CUDA_STANDARD 17
+          CUDA_STANDARD_REQUIRED ON
+          CUDA_SEPARABLE_COMPILATION ON)
+    endif()
+  endif()
+endif()
+
+target_compile_definitions(
+  mlx_lattice_native
+  PUBLIC MLX_LATTICE_HAS_CUDA=${MLX_LATTICE_HAS_CUDA})
 
 # MARK: - extension
 

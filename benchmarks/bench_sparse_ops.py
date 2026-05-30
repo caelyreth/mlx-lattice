@@ -67,7 +67,7 @@ def percentile(values: Sequence[float], q: float) -> float:
 
 def make_coords(n: int, *, backend: str) -> mx.array:
     span = math.ceil(n ** (1 / 3)) + 1
-    dtype = mx.int32 if backend == 'metal' else mx.int64
+    dtype = mx.int32 if backend in {'cuda', 'metal'} else mx.int64
     values = [
         [0, i % span, (i // span) % span, i // (span * span)]
         for i in range(n)
@@ -295,7 +295,7 @@ def run_case(
     repeat: int,
 ) -> Result:
     mx.set_default_device(
-        mx.Device(mx.gpu if backend == 'metal' else mx.cpu)
+        mx.Device(mx.gpu if backend in {'cuda', 'metal'} else mx.cpu)
     )
     fn = case.factory(n, backend)
     times = measure(fn, warmup=warmup, repeat=repeat)
@@ -352,9 +352,16 @@ def write_csv(path: Path, results: Sequence[Result]) -> None:
 
 def selected_backends(value: str) -> tuple[str, ...]:
     if value == 'all':
-        return ('cpu', 'metal') if mx.metal.is_available() else ('cpu',)
+        backends = ['cpu']
+        if mx.metal.is_available():
+            backends.append('metal')
+        if mx.cuda.is_available():
+            backends.append('cuda')
+        return tuple(backends)
     if value == 'metal' and not mx.metal.is_available():
         raise RuntimeError('Metal is not available.')
+    if value == 'cuda' and not mx.cuda.is_available():
+        raise RuntimeError('CUDA is not available.')
     return (value,)
 
 
@@ -367,7 +374,7 @@ def parse_args() -> argparse.Namespace:
         default=[1000, 5000, 25000, 100000],
     )
     parser.add_argument(
-        '--backend', choices=['all', 'cpu', 'metal'], default='all'
+        '--backend', choices=['all', 'cpu', 'metal', 'cuda'], default='all'
     )
     parser.add_argument('--warmup', type=int, default=3)
     parser.add_argument('--repeat', type=int, default=9)

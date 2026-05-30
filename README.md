@@ -37,7 +37,8 @@ uv build --wheel
 ```
 
 The native extension is built with CMake, scikit-build-core, nanobind, and the
-MLX C++/Metal extension toolchain. macOS is the only supported platform for now.
+MLX C++ backend toolchain. Metal builds are enabled on macOS; CUDA kernels are
+enabled on non-Apple hosts when CMake finds a CUDA compiler and toolkit.
 
 For native editor indexing:
 
