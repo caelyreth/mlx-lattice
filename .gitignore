@@ -2,6 +2,7 @@
 .venv
 .python-version
 .ruff_cache
+dist
 
 # preferences
 /.vscode
