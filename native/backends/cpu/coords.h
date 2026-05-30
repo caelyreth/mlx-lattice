@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ops/point.h"
+#include "ops/coords.h"
 
 namespace mlx_lattice::cpu {
 

@@ -1,8 +1,10 @@
-#include "ops/point.h"
+#include "ops/coords.h"
 
 #include <stdexcept>
 
-#include "backends/cpu/point.h"
+#include "backends/cpu/coords.h"
+#include "backends/metal/coords.h"
+#include "mlx/device.h"
 
 namespace mlx_lattice {
 
@@ -75,6 +77,10 @@ KernelMapData
 build_kernel_map(const mx::array& coords, Triple kernel_size, Triple stride) {
     validate_coords(coords);
     validate_positive(stride, "stride");
+    if (stride == Triple{1, 1, 1} && coords.dtype() == mx::int32 &&
+        mx::is_available(mx::Device::gpu)) {
+        return metal::build_subm_kernel_map(coords, kernel_size);
+    }
     return cpu::build_kernel_map(coords, kernel_size, stride);
 }
 

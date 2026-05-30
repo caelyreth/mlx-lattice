@@ -55,6 +55,25 @@ def test_build_kernel_map_submanifold_k3s1():
     assert sizes[center] == 3
 
 
+def test_build_kernel_map_uses_padded_metal_map_for_submanifold_int32():
+    if not mx.metal.is_available():
+        pytest.skip('Metal is not available.')
+    coords = mx.array(
+        [
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 2, 0, 0],
+        ],
+        dtype=mx.int32,
+    )
+
+    mapping = build_kernel_map(coords, kernel_size=3, stride=1)
+    mx.eval(mapping.kernels)
+
+    assert mapping.maps.shape == (coords.shape[0] * 27, 2)
+    assert int(mx.sum(mapping.kernels < 0).item()) > 0
+
+
 def test_build_kernel_map_stride_two_pooling():
     coords = mx.array(
         [

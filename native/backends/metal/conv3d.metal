@@ -35,6 +35,9 @@ using namespace metal;
     int in_row = maps[pair * 2];
     int out_row = maps[pair * 2 + 1];
     int kernel_index = kernels[pair];
+    if (kernel_index < 0) {
+        return;
+    }
 
     float acc = 0.0f;
     for (int in_col = 0; in_col < in_channels; ++in_col) {

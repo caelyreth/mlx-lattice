@@ -4,7 +4,7 @@
 
 #include "lattice/runtime.h"
 #include "ops/conv3d.h"
-#include "ops/point.h"
+#include "ops/coords.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

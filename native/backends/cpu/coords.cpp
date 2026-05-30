@@ -1,4 +1,4 @@
-#include "backends/cpu/point.h"
+#include "backends/cpu/coords.h"
 
 #include <algorithm>
 #include <array>

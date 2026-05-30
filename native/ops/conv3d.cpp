@@ -87,6 +87,9 @@ class Conv3dFeats : public mx::Primitive {
                 int in_row = maps_ptr[pair * 2];
                 int out_row = maps_ptr[pair * 2 + 1];
                 int kernel = kernels_ptr[pair];
+                if (kernel < 0) {
+                    continue;
+                }
                 for (int out_col = 0; out_col < out_channels; ++out_col) {
                     float acc = 0.0f;
                     for (int in_col = 0; in_col < in_channels; ++in_col) {
