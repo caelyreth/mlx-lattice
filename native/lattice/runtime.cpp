@@ -22,17 +22,15 @@
 
 namespace mlx_lattice {
 
-std::string version() {
-  return MLX_LATTICE_VERSION;
-}
+std::string version() { return MLX_LATTICE_VERSION; }
 
 Capabilities capabilities() {
-  return {
-      static_cast<bool>(MLX_LATTICE_HAS_CPU),
-      static_cast<bool>(MLX_LATTICE_HAS_METAL),
-      static_cast<bool>(MLX_LATTICE_HAS_CUDA),
-      static_cast<bool>(MLX_LATTICE_HAS_ROCM),
-  };
+    return {
+        static_cast<bool>(MLX_LATTICE_HAS_CPU),
+        static_cast<bool>(MLX_LATTICE_HAS_METAL),
+        static_cast<bool>(MLX_LATTICE_HAS_CUDA),
+        static_cast<bool>(MLX_LATTICE_HAS_ROCM),
+    };
 }
 
-}  // namespace mlx_lattice
+} // namespace mlx_lattice

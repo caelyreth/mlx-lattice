@@ -5,13 +5,13 @@
 namespace mlx_lattice {
 
 struct Capabilities {
-  bool cpu;
-  bool metal;
-  bool cuda;
-  bool rocm;
+    bool cpu;
+    bool metal;
+    bool cuda;
+    bool rocm;
 };
 
 std::string version();
 Capabilities capabilities();
 
-}  // namespace mlx_lattice
+} // namespace mlx_lattice

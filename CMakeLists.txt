@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.27)
 
 # MARK: - project
 
+if(NOT DEFINED SKBUILD_PROJECT_NAME)
+  set(SKBUILD_PROJECT_NAME mlx_lattice)
+endif()
+if(NOT DEFINED SKBUILD_PROJECT_VERSION)
+  set(SKBUILD_PROJECT_VERSION 0.1.0)
+endif()
+
 project(
   ${SKBUILD_PROJECT_NAME}
   VERSION ${SKBUILD_PROJECT_VERSION}
@@ -28,6 +35,11 @@ endif()
 
 # MARK: - dependencies
 
+if(DEFINED ENV{VIRTUAL_ENV} AND NOT DEFINED Python_EXECUTABLE)
+  set(Python_EXECUTABLE
+      "$ENV{VIRTUAL_ENV}/bin/python"
+      CACHE FILEPATH "Python executable from active virtual environment")
+endif()
 find_package(Python 3.12 COMPONENTS Interpreter Development.Module REQUIRED)
 
 if(NOT DEFINED nanobind_DIR)

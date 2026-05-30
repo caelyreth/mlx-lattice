@@ -14,6 +14,19 @@ uv build --wheel
 The native extension is built with CMake, scikit-build-core, nanobind, and the
 MLX C++/Metal extension toolchain. macOS is the only supported platform for now.
 
+For native editor indexing:
+
+```bash
+uv run cmake --preset clangd
+```
+
+Install and run hooks with:
+
+```bash
+prek install
+prek run --all-files
+```
+
 ### License
 
 Copyright © 2026 Yu
