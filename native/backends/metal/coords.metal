@@ -24,17 +24,80 @@ using namespace metal;
     }
 }
 
+int coord_hash_i32(int b, int x, int y, int z) {
+    uint h = 2166136261u;
+    h = (h ^ uint(b)) * 16777619u;
+    h = (h ^ uint(x)) * 16777619u;
+    h = (h ^ uint(y)) * 16777619u;
+    h = (h ^ uint(z)) * 16777619u;
+    int out = int(h & 0x7fffffffu);
+    return out == int(0x7fffffff) ? out - 1 : out;
+}
+
+bool same_coord(device const int* coords, int row, int b, int x, int y, int z) {
+    int base = row * 4;
+    return coords[base] == b && coords[base + 1] == x &&
+           coords[base + 2] == y && coords[base + 3] == z;
+}
+
+[[kernel]] void insert_coord_hash_i32(
+    device const int* coords [[buffer(0)]],
+    device atomic_int* table_keys [[buffer(1)]],
+    device int* table_rows [[buffer(2)]],
+    constant const int& rows [[buffer(3)]],
+    constant const int& table_capacity [[buffer(4)]],
+    constant const int& empty_key [[buffer(5)]],
+    uint row [[thread_position_in_grid]]
+) {
+    if (row >= uint(rows)) {
+        return;
+    }
+
+    int base = int(row) * 4;
+    int b = coords[base];
+    int x = coords[base + 1];
+    int y = coords[base + 2];
+    int z = coords[base + 3];
+    int key = coord_hash_i32(b, x, y, z);
+    int slot = key & (table_capacity - 1);
+
+    for (int probe = 0; probe < table_capacity; ++probe) {
+        int expected = empty_key;
+        if (atomic_compare_exchange_weak_explicit(
+                &table_keys[slot],
+                &expected,
+                key,
+                memory_order_relaxed,
+                memory_order_relaxed
+            )) {
+            table_rows[slot] = int(row);
+            return;
+        }
+        if (expected == key) {
+            int existing = table_rows[slot];
+            if (existing >= 0 && same_coord(coords, existing, b, x, y, z)) {
+                return;
+            }
+        }
+        slot = (slot + 1) & (table_capacity - 1);
+    }
+}
+
 [[kernel]] void build_subm_kernel_map_i32(
     device const int* coords [[buffer(0)]],
     device const int* offsets [[buffer(1)]],
-    device int* maps [[buffer(2)]],
-    device atomic_int* sizes [[buffer(3)]],
-    device int* kernels [[buffer(4)]],
-    device int* residual_maps [[buffer(5)]],
-    device int* residual_kernels [[buffer(6)]],
-    constant const int& rows [[buffer(7)]],
-    constant const int& kernel_count [[buffer(8)]],
-    constant const int& center_kernel [[buffer(9)]],
+    device const int* table_keys [[buffer(2)]],
+    device const int* table_rows [[buffer(3)]],
+    device int* maps [[buffer(4)]],
+    device atomic_int* sizes [[buffer(5)]],
+    device int* kernels [[buffer(6)]],
+    device int* residual_maps [[buffer(7)]],
+    device int* residual_kernels [[buffer(8)]],
+    constant const int& rows [[buffer(9)]],
+    constant const int& kernel_count [[buffer(10)]],
+    constant const int& center_kernel [[buffer(11)]],
+    constant const int& table_capacity [[buffer(12)]],
+    constant const int& empty_key [[buffer(13)]],
     uint elem [[thread_position_in_grid]]
 ) {
     uint total = uint(rows * kernel_count);
@@ -49,11 +112,23 @@ using namespace metal;
     int target_x = coords[base + 1] + offsets[kernel_index * 3];
     int target_y = coords[base + 2] + offsets[kernel_index * 3 + 1];
     int target_z = coords[base + 3] + offsets[kernel_index * 3 + 2];
+    int key = coord_hash_i32(target_b, target_x, target_y, target_z);
+    int slot = key & (table_capacity - 1);
 
-    for (int in_row = 0; in_row < rows; ++in_row) {
-        int input = in_row * 4;
-        if (coords[input] == target_b && coords[input + 1] == target_x &&
-            coords[input + 2] == target_y && coords[input + 3] == target_z) {
+    for (int probe = 0; probe < table_capacity; ++probe) {
+        int found_key = table_keys[slot];
+        if (found_key == empty_key) {
+            return;
+        }
+        if (found_key == key) {
+            int in_row = table_rows[slot];
+            if (in_row < 0 ||
+                !same_coord(
+                    coords, in_row, target_b, target_x, target_y, target_z
+                )) {
+                slot = (slot + 1) & (table_capacity - 1);
+                continue;
+            }
             maps[elem * 2] = in_row;
             maps[elem * 2 + 1] = out_row;
             kernels[elem] = kernel_index;
@@ -70,6 +145,7 @@ using namespace metal;
             }
             return;
         }
+        slot = (slot + 1) & (table_capacity - 1);
     }
 }
 

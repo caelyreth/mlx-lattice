@@ -49,11 +49,25 @@ mx::array make_i32_array(std::vector<int32_t> data, mx::Shape shape) {
     return mx::array(data.begin(), std::move(shape), mx::int32);
 }
 
+int next_power_of_two(int value) {
+    int out = 1;
+    while (out < value) {
+        out <<= 1;
+    }
+    return out;
+}
+
 class SubmKernelMap : public mx::Primitive {
   public:
-    SubmKernelMap(mx::Stream stream, int rows, int kernels, int center_kernel)
+    SubmKernelMap(
+        mx::Stream stream,
+        int rows,
+        int kernels,
+        int center_kernel,
+        int table_capacity
+    )
         : mx::Primitive(stream), rows_(rows), kernels_(kernels),
-          center_kernel_(center_kernel) {}
+          center_kernel_(center_kernel), table_capacity_(table_capacity) {}
 
     // MARK: - primitive
 
@@ -75,6 +89,8 @@ class SubmKernelMap : public mx::Primitive {
         auto& residual_maps = outputs[3];
         auto& residual_kernels = outputs[4];
         auto& residual_offsets = outputs[5];
+        auto& table_keys = outputs[6];
+        auto& table_rows = outputs[7];
 
         maps.set_data(mx::allocator::malloc(maps.nbytes()));
         sizes.set_data(mx::allocator::malloc(sizes.nbytes()));
@@ -86,6 +102,8 @@ class SubmKernelMap : public mx::Primitive {
         residual_offsets.set_data(
             mx::allocator::malloc(residual_offsets.nbytes())
         );
+        table_keys.set_data(mx::allocator::malloc(table_keys.nbytes()));
+        table_rows.set_data(mx::allocator::malloc(table_rows.nbytes()));
 
         auto& s = stream();
         auto& device = mx::metal::device(s.device);
@@ -94,6 +112,8 @@ class SubmKernelMap : public mx::Primitive {
 
         int pair_slots = rows_ * kernels_;
         auto fill = device.get_kernel("fill_i32", library);
+        int invalid = -1;
+        int empty_key = 0x7fffffff;
 
         encoder.set_compute_pipeline_state(fill);
         encoder.set_output_array(sizes, 0);
@@ -111,7 +131,6 @@ class SubmKernelMap : public mx::Primitive {
 
         encoder.set_compute_pipeline_state(fill);
         encoder.set_output_array(kernels, 0);
-        int invalid = -1;
         encoder.set_bytes(invalid, 1);
         encoder.set_bytes(pair_slots, 2);
         auto kernel_group = std::min(
@@ -137,6 +156,32 @@ class SubmKernelMap : public mx::Primitive {
             MTL::Size(residual_group, 1, 1)
         );
 
+        encoder.set_compute_pipeline_state(fill);
+        encoder.set_output_array(table_keys, 0);
+        encoder.set_bytes(empty_key, 1);
+        encoder.set_bytes(table_capacity_, 2);
+        auto table_key_group = std::min(
+            static_cast<size_t>(std::max(table_capacity_, 1)),
+            fill->maxTotalThreadsPerThreadgroup()
+        );
+        encoder.dispatch_threads(
+            MTL::Size(static_cast<size_t>(table_capacity_), 1, 1),
+            MTL::Size(table_key_group, 1, 1)
+        );
+
+        encoder.set_compute_pipeline_state(fill);
+        encoder.set_output_array(table_rows, 0);
+        encoder.set_bytes(invalid, 1);
+        encoder.set_bytes(table_capacity_, 2);
+        auto table_row_group = std::min(
+            static_cast<size_t>(std::max(table_capacity_, 1)),
+            fill->maxTotalThreadsPerThreadgroup()
+        );
+        encoder.dispatch_threads(
+            MTL::Size(static_cast<size_t>(table_capacity_), 1, 1),
+            MTL::Size(table_row_group, 1, 1)
+        );
+
         auto fill_linear = device.get_kernel("fill_linear_i32", library);
         encoder.set_compute_pipeline_state(fill_linear);
         encoder.set_output_array(residual_offsets, 0);
@@ -157,18 +202,38 @@ class SubmKernelMap : public mx::Primitive {
             return;
         }
 
+        auto insert = device.get_kernel("insert_coord_hash_i32", library);
+        encoder.set_compute_pipeline_state(insert);
+        encoder.set_input_array(coords, 0);
+        encoder.set_output_array(table_keys, 1);
+        encoder.set_output_array(table_rows, 2);
+        encoder.set_bytes(rows_, 3);
+        encoder.set_bytes(table_capacity_, 4);
+        encoder.set_bytes(empty_key, 5);
+        auto insert_group = std::min(
+            static_cast<size_t>(rows_), insert->maxTotalThreadsPerThreadgroup()
+        );
+        encoder.dispatch_threads(
+            MTL::Size(static_cast<size_t>(rows_), 1, 1),
+            MTL::Size(insert_group, 1, 1)
+        );
+
         auto build = device.get_kernel("build_subm_kernel_map_i32", library);
         encoder.set_compute_pipeline_state(build);
         encoder.set_input_array(coords, 0);
         encoder.set_input_array(offsets, 1);
-        encoder.set_output_array(maps, 2);
-        encoder.set_output_array(sizes, 3);
-        encoder.set_output_array(kernels, 4);
-        encoder.set_output_array(residual_maps, 5);
-        encoder.set_output_array(residual_kernels, 6);
-        encoder.set_bytes(rows_, 7);
-        encoder.set_bytes(kernels_, 8);
-        encoder.set_bytes(center_kernel_, 9);
+        encoder.set_input_array(table_keys, 2);
+        encoder.set_input_array(table_rows, 3);
+        encoder.set_output_array(maps, 4);
+        encoder.set_output_array(sizes, 5);
+        encoder.set_output_array(kernels, 6);
+        encoder.set_output_array(residual_maps, 7);
+        encoder.set_output_array(residual_kernels, 8);
+        encoder.set_bytes(rows_, 9);
+        encoder.set_bytes(kernels_, 10);
+        encoder.set_bytes(center_kernel_, 11);
+        encoder.set_bytes(table_capacity_, 12);
+        encoder.set_bytes(empty_key, 13);
         auto build_group = std::min(
             static_cast<size_t>(pair_slots),
             build->maxTotalThreadsPerThreadgroup()
@@ -207,13 +272,15 @@ class SubmKernelMap : public mx::Primitive {
     bool is_equivalent(const mx::Primitive& other) const override {
         const auto& map = static_cast<const SubmKernelMap&>(other);
         return rows_ == map.rows_ && kernels_ == map.kernels_ &&
-               center_kernel_ == map.center_kernel_;
+               center_kernel_ == map.center_kernel_ &&
+               table_capacity_ == map.table_capacity_;
     }
 
   private:
     int rows_;
     int kernels_;
     int center_kernel_;
+    int table_capacity_;
 };
 
 class GenerativeMap : public mx::Primitive {
@@ -336,19 +403,30 @@ build_subm_kernel_map(const mx::array& coords, Triple kernel_size) {
     auto rows = coords.shape(0);
     auto pair_slots = rows * int(offsets.size());
     auto residual_slots = rows * std::max(int(offsets.size()) - 1, 0);
+    auto table_capacity = next_power_of_two(std::max(rows * 4, 1));
     auto outputs = mx::array::make_arrays(
         {mx::Shape{pair_slots, 2},
          mx::Shape{int(offsets.size())},
          mx::Shape{pair_slots},
          mx::Shape{residual_slots, 2},
          mx::Shape{residual_slots},
-         mx::Shape{rows + 1}},
-        {mx::int32, mx::int32, mx::int32, mx::int32, mx::int32, mx::int32},
+         mx::Shape{rows + 1},
+         mx::Shape{table_capacity},
+         mx::Shape{table_capacity}},
+        {mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32},
         std::make_shared<SubmKernelMap>(
             mx::default_stream(mx::Device::gpu),
             rows,
             int(offsets.size()),
-            center_kernel
+            center_kernel,
+            table_capacity
         ),
         {mx::contiguous(coords, false, mx::Device::gpu),
          mx::contiguous(offset_values, false, mx::Device::gpu)}
