@@ -1,8 +1,15 @@
+from typing import cast
+
 import pytest
 
 mx = pytest.importorskip('mlx.core')
 
-from mlx_lattice import SparseTensor, conv3d, pool3d  # noqa: E402
+from mlx_lattice import (  # noqa: E402
+    SparseTensor,
+    conv3d,
+    generative_conv_transpose3d,
+    pool3d,
+)
 
 
 def assert_allclose(actual, expected, *, rtol=1e-5, atol=1e-6):
@@ -70,3 +77,19 @@ def test_pool3d_k2s2():
 
     assert out.coords.tolist() == [[0, 0, 0, 0], [0, 1, 0, 0]]
     assert_allclose(out.feats, mx.array([[3.0], [3.0]]))
+
+
+def test_generative_conv_transpose3d_k2s2():
+    coords = mx.array([[0, 1, 0, 0]], dtype=mx.int32)
+    feats = mx.array([[2.0]], dtype=mx.float32)
+    weight = mx.ones((8, 1, 1), dtype=mx.float32)
+    x = SparseTensor(coords, feats, stride=2)
+
+    out = generative_conv_transpose3d(x, weight, kernel_size=2, stride=2)
+    coords_out = cast(list[list[int]], out.coords.tolist())
+
+    assert out.stride == (1, 1, 1)
+    assert out.coords.shape == (8, 4)
+    assert coords_out[0] == [0, 2, 0, 0]
+    assert coords_out[-1] == [0, 3, 1, 1]
+    assert_allclose(out.feats, mx.full((8, 1), 2.0, dtype=mx.float32))

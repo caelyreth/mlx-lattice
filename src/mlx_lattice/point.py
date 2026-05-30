@@ -7,6 +7,9 @@ from typing import cast
 import mlx.core as mx
 
 from mlx_lattice._native import (
+    build_generative_map as _build_generative_map,
+)
+from mlx_lattice._native import (
     build_kernel_map as _build_kernel_map,
 )
 from mlx_lattice._native import (
@@ -92,6 +95,42 @@ def build_kernel_map(
         out_coords,
         offset_values,
     ) = _build_kernel_map(coords, kernel, step)
+    return KernelMap(
+        maps=maps,
+        sizes=sizes,
+        kernels=kernels,
+        residual_maps=residual_maps,
+        residual_kernels=residual_kernels,
+        residual_offsets=residual_offsets,
+        out_coords=out_coords,
+        offsets=_offsets_from_array(offset_values),
+    )
+
+
+def build_generative_map(
+    coords: mx.array,
+    kernel_size: int | Sequence[int] = 2,
+    stride: int | Sequence[int] = 2,
+) -> KernelMap:
+    if coords.ndim != 2 or coords.shape[1] != 4:
+        raise ValueError('coords must have shape (N, 4).')
+    if coords.dtype not in (mx.int32, mx.int64):
+        raise ValueError('coords must be int32 or int64.')
+
+    kernel = triple(kernel_size, name='kernel_size')
+    step = triple(stride, name='stride')
+    if any(value <= 0 for value in step):
+        raise ValueError('stride values must be positive.')
+    (
+        maps,
+        sizes,
+        kernels,
+        residual_maps,
+        residual_kernels,
+        residual_offsets,
+        out_coords,
+        offset_values,
+    ) = _build_generative_map(coords, kernel, step)
     return KernelMap(
         maps=maps,
         sizes=sizes,

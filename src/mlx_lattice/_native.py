@@ -46,6 +46,23 @@ def build_kernel_map(
     return _ext().build_kernel_map(coords, *kernel_size, *stride)
 
 
+def build_generative_map(
+    coords: mx.array,
+    kernel_size: tuple[int, int, int],
+    stride: tuple[int, int, int],
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    return _ext().build_generative_map(coords, *kernel_size, *stride)
+
+
 def conv3d_feats(
     feats: mx.array,
     weight: mx.array,

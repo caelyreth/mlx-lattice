@@ -70,3 +70,18 @@ def test_sparse_feature_modules_preserve_coordinates():
     assert out.coords.tolist() == x.coords.tolist()
     assert out.coord_key == x.coord_key
     assert out.feats.shape == (x.n_points, 2)
+
+
+def test_nn_generative_conv_transpose3d():
+    coords = mx.array([[0, 0, 0, 0]], dtype=mx.int32)
+    feats = mx.array([[1.0]], dtype=mx.float32)
+    x = SparseTensor(coords, feats, stride=2)
+    layer = lnn.GenerativeConvTranspose3d(1, 1, kernel_size=2, stride=2)
+    layer.weight = mx.ones((1, 2, 2, 2, 1), dtype=mx.float32)
+    layer.bias = mx.array([0.5], dtype=mx.float32)
+
+    out = layer(x)
+
+    assert out.stride == (1, 1, 1)
+    assert out.coords.shape == (8, 4)
+    assert_allclose(out.feats, mx.full((8, 1), 1.5, dtype=mx.float32))

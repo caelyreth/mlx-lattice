@@ -72,3 +72,38 @@ using namespace metal;
         }
     }
 }
+
+[[kernel]] void build_generative_map_i32(
+    device const int* coords [[buffer(0)]],
+    device const int* offsets [[buffer(1)]],
+    device int* maps [[buffer(2)]],
+    device int* kernels [[buffer(3)]],
+    device int* out_coords [[buffer(4)]],
+    constant const int& rows [[buffer(5)]],
+    constant const int& kernel_count [[buffer(6)]],
+    constant const int& stride_x [[buffer(7)]],
+    constant const int& stride_y [[buffer(8)]],
+    constant const int& stride_z [[buffer(9)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    uint total = uint(rows * kernel_count);
+    if (elem >= total) {
+        return;
+    }
+
+    int in_row = int(elem / uint(kernel_count));
+    int kernel_index = int(elem - uint(in_row * kernel_count));
+    int out_row = int(elem);
+    int in_base = in_row * 4;
+    int out_base = out_row * 4;
+    maps[out_row * 2] = in_row;
+    maps[out_row * 2 + 1] = out_row;
+    kernels[out_row] = kernel_index;
+    out_coords[out_base] = coords[in_base];
+    out_coords[out_base + 1] =
+        coords[in_base + 1] * stride_x + offsets[kernel_index * 3];
+    out_coords[out_base + 2] =
+        coords[in_base + 2] * stride_y + offsets[kernel_index * 3 + 1];
+    out_coords[out_base + 3] =
+        coords[in_base + 3] * stride_z + offsets[kernel_index * 3 + 2];
+}

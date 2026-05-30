@@ -6,7 +6,14 @@ from collections.abc import Sequence
 import mlx.core as mx
 import mlx.nn as nn
 
-from mlx_lattice.ops import conv3d, linear, pool3d, relu, sigmoid
+from mlx_lattice.ops import (
+    conv3d,
+    generative_conv_transpose3d,
+    linear,
+    pool3d,
+    relu,
+    sigmoid,
+)
 from mlx_lattice.tensor import SparseTensor
 from mlx_lattice.types import Triple, triple
 
@@ -104,6 +111,46 @@ class Conv3d(nn.Module):
         )
 
 
+class GenerativeConvTranspose3d(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int | Sequence[int] = 2,
+        stride: int | Sequence[int] = 2,
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        if in_channels <= 0 or out_channels <= 0:
+            raise ValueError('channels must be positive.')
+        kernel = triple(kernel_size, name='kernel_size')
+        if any(size <= 0 for size in kernel):
+            raise ValueError('kernel_size values must be positive.')
+
+        scale = math.sqrt(1 / (in_channels * _volume(kernel)))
+        self.weight = mx.random.uniform(
+            low=-scale,
+            high=scale,
+            shape=(out_channels, *kernel, in_channels),
+        )
+        if bias:
+            self.bias = mx.zeros((out_channels,))
+
+        self.kernel_size = kernel
+        self.stride = triple(stride, name='stride')
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        bias = self.bias if 'bias' in self else None
+        return generative_conv_transpose3d(
+            x,
+            self.weight,
+            bias,
+            kernel_size=self.kernel_size,
+            stride=self.stride,
+            weight_layout='mlx',
+        )
+
+
 class SumPool3d(nn.Module):
     def __init__(
         self,
@@ -124,6 +171,7 @@ class SumPool3d(nn.Module):
 
 Pool3d = SumPool3d
 SparseConv3d = Conv3d
+SparseGenerativeConvTranspose3d = GenerativeConvTranspose3d
 SparseLinear = Linear
 
 

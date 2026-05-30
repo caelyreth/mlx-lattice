@@ -93,4 +93,19 @@ build_kernel_map(const mx::array& coords, Triple kernel_size, Triple stride) {
     return cpu::build_kernel_map(coords, kernel_size, stride);
 }
 
+KernelMapData build_generative_map(
+    const mx::array& coords,
+    Triple kernel_size,
+    Triple stride
+) {
+    validate_coords(coords);
+    validate_positive(kernel_size, "kernel_size");
+    validate_positive(stride, "stride");
+    if (kernel_size == stride && coords.dtype() == mx::int32 &&
+        mx::is_available(mx::Device::gpu)) {
+        return metal::build_generative_map(coords, kernel_size, stride);
+    }
+    return cpu::build_generative_map(coords, kernel_size, stride);
+}
+
 } // namespace mlx_lattice

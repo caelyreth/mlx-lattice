@@ -97,4 +97,35 @@ NB_MODULE(_ext, m) {
         "sy"_a,
         "sz"_a
     );
+    m.def(
+        "build_generative_map",
+        [](const mlx_lattice::mx::array& coords,
+           int kx,
+           int ky,
+           int kz,
+           int sx,
+           int sy,
+           int sz) {
+            auto out = mlx_lattice::build_generative_map(
+                coords, {kx, ky, kz}, {sx, sy, sz}
+            );
+            return nb::make_tuple(
+                out.maps,
+                out.sizes,
+                out.kernels,
+                out.residual_maps,
+                out.residual_kernels,
+                out.residual_offsets,
+                out.out_coords,
+                out.offsets
+            );
+        },
+        "coords"_a,
+        "kx"_a,
+        "ky"_a,
+        "kz"_a,
+        "sx"_a,
+        "sy"_a,
+        "sz"_a
+    );
 }

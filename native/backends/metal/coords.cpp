@@ -45,6 +45,10 @@ mx::array make_offsets_array(const std::vector<Triple>& offsets) {
     );
 }
 
+mx::array make_i32_array(std::vector<int32_t> data, mx::Shape shape) {
+    return mx::array(data.begin(), std::move(shape), mx::int32);
+}
+
 class SubmKernelMap : public mx::Primitive {
   public:
     SubmKernelMap(mx::Stream stream, int rows, int kernels, int center_kernel)
@@ -212,6 +216,102 @@ class SubmKernelMap : public mx::Primitive {
     int center_kernel_;
 };
 
+class GenerativeMap : public mx::Primitive {
+  public:
+    GenerativeMap(mx::Stream stream, int rows, int kernels, Triple stride)
+        : mx::Primitive(stream), rows_(rows), kernels_(kernels),
+          stride_(stride) {}
+
+    // MARK: - primitive
+
+    void
+    eval_cpu(const std::vector<mx::array>&, std::vector<mx::array>&) override {
+        throw std::runtime_error("GenerativeMap has no CPU implementation.");
+    }
+
+    void eval_gpu(
+        const std::vector<mx::array>& inputs,
+        std::vector<mx::array>& outputs
+    ) override {
+#ifdef _METAL_
+        const auto& coords = inputs[0];
+        const auto& offsets = inputs[1];
+        auto& maps = outputs[0];
+        auto& kernels = outputs[1];
+        auto& out_coords = outputs[2];
+
+        maps.set_data(mx::allocator::malloc(maps.nbytes()));
+        kernels.set_data(mx::allocator::malloc(kernels.nbytes()));
+        out_coords.set_data(mx::allocator::malloc(out_coords.nbytes()));
+
+        auto& s = stream();
+        auto& device = mx::metal::device(s.device);
+        auto library = device.get_library("mlx_lattice", binary_dir());
+        auto& encoder = mx::metal::get_command_encoder(s);
+        auto build = device.get_kernel("build_generative_map_i32", library);
+        int pair_count = rows_ * kernels_;
+        if (pair_count == 0) {
+            return;
+        }
+
+        encoder.set_compute_pipeline_state(build);
+        encoder.set_input_array(coords, 0);
+        encoder.set_input_array(offsets, 1);
+        encoder.set_output_array(maps, 2);
+        encoder.set_output_array(kernels, 3);
+        encoder.set_output_array(out_coords, 4);
+        encoder.set_bytes(rows_, 5);
+        encoder.set_bytes(kernels_, 6);
+        encoder.set_bytes(stride_[0], 7);
+        encoder.set_bytes(stride_[1], 8);
+        encoder.set_bytes(stride_[2], 9);
+        auto group = std::min(
+            static_cast<size_t>(pair_count),
+            build->maxTotalThreadsPerThreadgroup()
+        );
+        encoder.dispatch_threads(
+            MTL::Size(static_cast<size_t>(pair_count), 1, 1),
+            MTL::Size(group, 1, 1)
+        );
+#else
+        throw std::runtime_error("Metal support is not available.");
+#endif
+    }
+
+    std::vector<mx::array>
+    jvp(const std::vector<mx::array>&,
+        const std::vector<mx::array>&,
+        const std::vector<int>&) override {
+        throw std::runtime_error("GenerativeMap has no jvp implementation.");
+    }
+
+    std::vector<mx::array>
+    vjp(const std::vector<mx::array>&,
+        const std::vector<mx::array>&,
+        const std::vector<int>&,
+        const std::vector<mx::array>&) override {
+        throw std::runtime_error("GenerativeMap has no vjp implementation.");
+    }
+
+    std::pair<std::vector<mx::array>, std::vector<int>>
+    vmap(const std::vector<mx::array>&, const std::vector<int>&) override {
+        throw std::runtime_error("GenerativeMap has no vmap implementation.");
+    }
+
+    const char* name() const override { return "GenerativeMap"; }
+
+    bool is_equivalent(const mx::Primitive& other) const override {
+        const auto& map = static_cast<const GenerativeMap&>(other);
+        return rows_ == map.rows_ && kernels_ == map.kernels_ &&
+               stride_ == map.stride_;
+    }
+
+  private:
+    int rows_;
+    int kernels_;
+    Triple stride_;
+};
+
 } // namespace
 
 // MARK: - api
@@ -262,6 +362,50 @@ build_subm_kernel_map(const mx::array& coords, Triple kernel_size) {
         outputs[4],
         outputs[5],
         coords,
+        offset_values,
+    };
+}
+
+KernelMapData build_generative_map(
+    const mx::array& coords,
+    Triple kernel_size,
+    Triple stride
+) {
+    if (coords.dtype() != mx::int32) {
+        throw std::invalid_argument(
+            "Metal generative maps require int32 coords."
+        );
+    }
+
+    auto offsets = kernel_offsets(kernel_size);
+    auto offset_values = make_offsets_array(offsets);
+    auto rows = coords.shape(0);
+    auto pair_count = rows * int(offsets.size());
+    auto sizes =
+        mx::full({int(offsets.size())}, rows, mx::int32, mx::Device::gpu);
+    auto outputs = mx::array::make_arrays(
+        {mx::Shape{pair_count, 2},
+         mx::Shape{pair_count},
+         mx::Shape{pair_count, 4}},
+        {mx::int32, mx::int32, mx::int32},
+        std::make_shared<GenerativeMap>(
+            mx::default_stream(mx::Device::gpu),
+            rows,
+            int(offsets.size()),
+            stride
+        ),
+        {mx::contiguous(coords, false, mx::Device::gpu),
+         mx::contiguous(offset_values, false, mx::Device::gpu)}
+    );
+
+    return {
+        outputs[0],
+        sizes,
+        outputs[1],
+        make_i32_array({}, mx::Shape{0, 2}),
+        make_i32_array({}, mx::Shape{0}),
+        make_i32_array({0}, mx::Shape{1}),
+        outputs[2],
         offset_values,
     };
 }

@@ -4,7 +4,11 @@ import pytest
 
 mx = pytest.importorskip('mlx.core')
 
-from mlx_lattice import build_kernel_map, downsample  # noqa: E402
+from mlx_lattice import (  # noqa: E402
+    build_generative_map,
+    build_kernel_map,
+    downsample,
+)
 
 
 def test_downsample_quantizes_and_deduplicates_coords():
@@ -94,3 +98,22 @@ def test_build_kernel_map_stride_two_pooling():
     sizes = cast(list[int], mapping.sizes.tolist())
     assert sum(int(v) for v in sizes) == 3
     assert len(mapping.offsets) == 8
+
+
+def test_build_generative_map_k2s2():
+    coords = mx.array([[0, 1, 2, 3]], dtype=mx.int32)
+
+    mapping = build_generative_map(coords, kernel_size=2, stride=2)
+
+    assert mapping.out_coords.tolist() == [
+        [0, 2, 4, 6],
+        [0, 2, 4, 7],
+        [0, 2, 5, 6],
+        [0, 2, 5, 7],
+        [0, 3, 4, 6],
+        [0, 3, 4, 7],
+        [0, 3, 5, 6],
+        [0, 3, 5, 7],
+    ]
+    assert mapping.maps.tolist() == [[0, i] for i in range(8)]
+    assert mapping.kernels.tolist() == list(range(8))

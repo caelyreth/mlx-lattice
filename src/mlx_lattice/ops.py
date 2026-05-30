@@ -9,7 +9,11 @@ from mlx_lattice._native import conv3d_feats as _conv3d_feats
 from mlx_lattice._native import (
     conv3d_residual_feats as _conv3d_residual_feats,
 )
-from mlx_lattice.point import downsample, kernel_offsets
+from mlx_lattice.point import (
+    build_generative_map,
+    downsample,
+    kernel_offsets,
+)
 from mlx_lattice.tensor import SparseTensor
 from mlx_lattice.types import triple
 
@@ -189,6 +193,50 @@ def conv3d(
     return SparseTensor(mapping.out_coords, feats, out_stride)
 
 
+def generative_conv_transpose3d(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: int | Sequence[int] = 2,
+    stride: int | Sequence[int] = 2,
+    weight_layout: Literal['flat', 'mlx'] | None = None,
+) -> SparseTensor:
+    kernel = triple(kernel_size, name='kernel_size')
+    op_stride = triple(stride, name='stride')
+    weight = _normalize_weight(weight, kernel, weight_layout)
+    if weight.dtype != mx.float32 or x.feats.dtype != mx.float32:
+        raise ValueError(
+            'transpose conv currently supports float32 tensors.'
+        )
+    if weight.shape[1] != x.channels:
+        raise ValueError(
+            'weight input channels must match tensor features.'
+        )
+    if any(a % b != 0 for a, b in zip(x.stride, op_stride, strict=True)):
+        raise ValueError('input tensor stride must be divisible by stride.')
+
+    mapping = build_generative_map(
+        x.coords, kernel_size=kernel, stride=op_stride
+    )
+    feats = _conv3d_feats(
+        x.feats,
+        weight,
+        mapping.maps,
+        mapping.kernels,
+        int(mapping.out_coords.shape[0]),
+    )
+    if bias is not None:
+        if bias.ndim != 1 or bias.shape[0] != weight.shape[2]:
+            raise ValueError('bias must have shape (Cout,).')
+        feats = feats + bias
+
+    out_stride = tuple(
+        a // b for a, b in zip(x.stride, op_stride, strict=True)
+    )
+    return SparseTensor(mapping.out_coords, feats, out_stride)
+
+
 def pool3d(
     x: SparseTensor,
     *,
@@ -202,6 +250,7 @@ def pool3d(
 
 spdownsample = downsample
 sparse_conv3d = conv3d
+generative_sparse_conv_transpose3d = generative_conv_transpose3d
 sparse_pool3d = pool3d
 
 

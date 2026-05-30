@@ -355,4 +355,55 @@ build_kernel_map(const mx::array& coords, Triple kernel_size, Triple stride) {
     };
 }
 
+KernelMapData build_generative_map(
+    const mx::array& coords,
+    Triple kernel_size,
+    Triple stride
+) {
+    auto offsets = mlx_lattice::kernel_offsets(kernel_size);
+    auto values = read_coords(coords);
+    std::vector<Coord> out;
+    std::vector<int32_t> maps;
+    std::vector<int32_t> kernels;
+    std::vector<int32_t> sizes(offsets.size(), 0);
+    out.reserve(values.size() * offsets.size());
+    maps.reserve(values.size() * offsets.size() * 2);
+    kernels.reserve(values.size() * offsets.size());
+
+    for (int in_row = 0; in_row < int(values.size()); ++in_row) {
+        auto coord = values[in_row];
+        for (int kernel = 0; kernel < int(offsets.size()); ++kernel) {
+            auto offset = offsets[kernel];
+            int out_row = int(out.size());
+            out.push_back({
+                coord[0],
+                coord[1] * stride[0] + offset[0],
+                coord[2] * stride[1] + offset[1],
+                coord[3] * stride[2] + offset[2],
+            });
+            maps.push_back(in_row);
+            maps.push_back(out_row);
+            kernels.push_back(kernel);
+            ++sizes[kernel];
+        }
+    }
+
+    std::vector<int32_t> flat_offsets;
+    flat_offsets.reserve(offsets.size() * 3);
+    for (auto offset : offsets) {
+        flat_offsets.insert(flat_offsets.end(), offset.begin(), offset.end());
+    }
+
+    return {
+        make_i32_array(maps, mx::Shape{int(maps.size() / 2), 2}),
+        make_i32_array(sizes, mx::Shape{int(sizes.size())}),
+        make_i32_array(kernels, mx::Shape{int(kernels.size())}),
+        make_i32_array({}, mx::Shape{0, 2}),
+        make_i32_array({}, mx::Shape{0}),
+        make_i32_array({0}, mx::Shape{1}),
+        make_coords_array(out, coords.dtype()),
+        make_i32_array(flat_offsets, mx::Shape{int(offsets.size()), 3}),
+    };
+}
+
 } // namespace mlx_lattice::cpu
