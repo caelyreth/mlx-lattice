@@ -20,6 +20,16 @@ build-dir = "build/{wheel_tag}"
 wheel.packages = ["src/mlx_lattice"]
 wheel.platlib = true
 sdist.include = ["CMakeLists.txt", "native/**", "src/**"]
+sdist.exclude = [
+  ".DS_Store",
+  ".ruff_cache/**",
+  "build/**",
+  "dist/**",
+  "references/**",
+  "**/.DS_Store",
+  "**/__pycache__/**",
+  "**/*.py[cod]",
+]
 
 [tool.ruff]
 line-length = 76

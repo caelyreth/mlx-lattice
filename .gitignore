@@ -3,8 +3,12 @@
 .python-version
 .ruff_cache
 __pycache__
+*.py[cod]
 dist
 build
+
+# local reference material
+references
 
 # preferences
 /.vscode
