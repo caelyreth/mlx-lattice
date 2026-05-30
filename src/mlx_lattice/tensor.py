@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import cast
 
 import mlx.core as mx
 
-from mlx_lattice.point import KernelMap, build_kernel_map
+from mlx_lattice.coords import CoordinateManager, CoordinateMapKey
+from mlx_lattice.point import KernelMap
 from mlx_lattice.types import Triple, triple
 
 
@@ -14,6 +16,8 @@ class SparseTensor:
     coords: mx.array
     feats: mx.array
     stride: Triple = (1, 1, 1)
+    coord_key: CoordinateMapKey | None = None
+    coord_manager: CoordinateManager | None = None
     _maps: dict[tuple[Triple, Triple], KernelMap] = field(
         default_factory=dict,
         init=False,
@@ -26,6 +30,9 @@ class SparseTensor:
         coords: mx.array,
         feats: mx.array,
         stride: int | Sequence[int] = 1,
+        *,
+        coord_key: CoordinateMapKey | None = None,
+        coord_manager: CoordinateManager | None = None,
     ) -> None:
         if coords.ndim != 2 or coords.shape[1] != 4:
             raise ValueError('coords must have shape (N, 4).')
@@ -37,9 +44,20 @@ class SparseTensor:
             )
         if coords.dtype not in (mx.int32, mx.int64):
             raise ValueError('coords must be int32 or int64.')
+        normalized_stride = triple(stride, name='stride')
+        manager = (
+            CoordinateManager() if coord_manager is None else coord_manager
+        )
+        key = (
+            manager.insert(coords, normalized_stride)
+            if coord_key is None
+            else coord_key
+        )
         object.__setattr__(self, 'coords', coords)
         object.__setattr__(self, 'feats', feats)
-        object.__setattr__(self, 'stride', triple(stride, name='stride'))
+        object.__setattr__(self, 'stride', normalized_stride)
+        object.__setattr__(self, 'coord_key', key)
+        object.__setattr__(self, 'coord_manager', manager)
         object.__setattr__(self, '_maps', {})
 
     @property
@@ -68,10 +86,13 @@ class SparseTensor:
         feats: mx.array | None = None,
         stride: int | Sequence[int] | None = None,
     ) -> SparseTensor:
+        same_coords = coords is None or coords is self.coords
         return SparseTensor(
             self.coords if coords is None else coords,
             self.feats if feats is None else feats,
             self.stride if stride is None else stride,
+            coord_key=self.coord_key if same_coords else None,
+            coord_manager=self.coord_manager if same_coords else None,
         )
 
     def kernel_map(
@@ -84,9 +105,57 @@ class SparseTensor:
             triple(stride, name='stride'),
         )
         if key not in self._maps:
-            self._maps[key] = build_kernel_map(
-                self.coords,
+            if self.coord_key is None or self.coord_manager is None:
+                raise RuntimeError(
+                    'SparseTensor has no coordinate manager.'
+                )
+            self._maps[key] = self.coord_manager.kernel_map(
+                self.coord_key,
                 kernel_size=key[0],
                 stride=key[1],
             )
         return self._maps[key]
+
+    @property
+    def batch_indices(self) -> mx.array:
+        return self.coords[:, 0]
+
+    @property
+    def decomposed_coordinates(self) -> tuple[mx.array, ...]:
+        return tuple(
+            mx.take(self.coords[:, 1:], rows, axis=0)
+            for rows in self.batch_rows
+        )
+
+    @property
+    def decomposed_features(self) -> tuple[mx.array, ...]:
+        return tuple(
+            mx.take(self.feats, rows, axis=0) for rows in self.batch_rows
+        )
+
+    @property
+    def batch_rows(self) -> tuple[mx.array, ...]:
+        rows: dict[int, list[int]] = {}
+        coords = cast(list[list[int]], self.coords.tolist())
+        for row, coord in enumerate(coords):
+            rows.setdefault(int(coord[0]), []).append(row)
+        return tuple(
+            mx.array(values, dtype=mx.int32)
+            for _, values in sorted(rows.items())
+        )
+
+    def same_coords(self, other: SparseTensor) -> bool:
+        return (
+            self.coord_key is not None
+            and self.coord_key == other.coord_key
+            and self.coord_manager is other.coord_manager
+        ) or (
+            self.stride == other.stride
+            and self.coords.shape == other.coords.shape
+            and self.coords.tolist() == other.coords.tolist()
+        )
+
+    def __add__(self, other: SparseTensor) -> SparseTensor:
+        if not self.same_coords(other):
+            raise ValueError('sparse tensor coordinates must match.')
+        return self.replace(feats=self.feats + other.feats)

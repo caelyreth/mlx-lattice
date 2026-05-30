@@ -2,7 +2,13 @@ import pytest
 
 mx = pytest.importorskip('mlx.core')
 
-from mlx_lattice import SparseTensor  # noqa: E402
+from mlx_lattice import (  # noqa: E402
+    SparseTensor,
+    cat,
+    prune,
+    sparse_collate,
+    topk_rows,
+)
 
 
 def test_sparse_tensor_validates_shape():
@@ -41,3 +47,45 @@ def test_sparse_tensor_replace_and_astype():
     assert out.shape == (1, 1)
     assert out.dtype == mx.float16
     assert out.coords.tolist() == coords.tolist()
+
+
+def test_sparse_tensor_add_and_cat_reuse_coordinates():
+    coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
+    feats = mx.ones((2, 1), dtype=mx.float32)
+    x = SparseTensor(coords, feats)
+
+    y = x.replace(feats=feats * 2)
+    summed = x + y
+    joined = cat([x, y])
+
+    assert summed.feats.tolist() == [[3.0], [3.0]]
+    assert joined.feats.tolist() == [[1.0, 2.0], [1.0, 2.0]]
+    assert joined.coord_key == x.coord_key
+
+
+def test_sparse_collate_decompose_topk_and_prune():
+    x = sparse_collate(
+        [
+            mx.array([[0, 0, 0], [1, 0, 0]], dtype=mx.int32),
+            mx.array([[2, 0, 0], [3, 0, 0]], dtype=mx.int32),
+        ],
+        [
+            mx.array([[0.5], [2.0]], dtype=mx.float32),
+            mx.array([[3.0], [1.0]], dtype=mx.float32),
+        ],
+    )
+
+    rows = topk_rows(x, [1, 1])
+    out = prune(x, rows)
+
+    assert x.coords.tolist() == [
+        [0, 0, 0, 0],
+        [0, 1, 0, 0],
+        [1, 2, 0, 0],
+        [1, 3, 0, 0],
+    ]
+    assert [part.tolist() for part in x.decomposed_coordinates] == [
+        [[0, 0, 0], [1, 0, 0]],
+        [[2, 0, 0], [3, 0, 0]],
+    ]
+    assert out.feats.tolist() == [[2.0], [3.0]]
