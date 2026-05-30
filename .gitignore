@@ -1,6 +1,11 @@
 # uv
 .venv
 .python-version
+.ruff_cache
+
+# preferences
+/.vscode
+/.zed
 
 # os-related
 .DS_Store
