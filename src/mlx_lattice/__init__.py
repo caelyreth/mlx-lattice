@@ -1,11 +1,24 @@
 from mlx_lattice import nn as nn
 from mlx_lattice._native import capabilities, version
-from mlx_lattice.nn import Conv3d, Pool3d, SparseConv3d, SumPool3d
+from mlx_lattice.nn import (
+    BatchNorm,
+    Conv3d,
+    Linear,
+    Pool3d,
+    ReLU,
+    Sigmoid,
+    SparseConv3d,
+    SparseLinear,
+    SumPool3d,
+)
 from mlx_lattice.ops import (
     cat,
     conv3d,
+    linear,
     pool3d,
     prune,
+    relu,
+    sigmoid,
     sparse_collate,
     sparse_conv3d,
     sparse_pool3d,
@@ -16,10 +29,15 @@ from mlx_lattice.point import KernelMap, build_kernel_map, downsample
 from mlx_lattice.tensor import SparseTensor
 
 __all__ = [
+    'BatchNorm',
     'Conv3d',
     'KernelMap',
+    'Linear',
     'Pool3d',
+    'ReLU',
+    'Sigmoid',
     'SparseConv3d',
+    'SparseLinear',
     'SparseTensor',
     'SumPool3d',
     'build_kernel_map',
@@ -27,9 +45,12 @@ __all__ = [
     'cat',
     'conv3d',
     'downsample',
+    'linear',
     'nn',
     'pool3d',
     'prune',
+    'relu',
+    'sigmoid',
     'sparse_collate',
     'sparse_conv3d',
     'sparse_pool3d',

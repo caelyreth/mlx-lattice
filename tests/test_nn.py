@@ -57,3 +57,16 @@ def test_nn_sum_pool3d():
 
     assert out.coords.tolist() == [[0, 0, 0, 0], [0, 1, 0, 0]]
     assert_allclose(out.feats, mx.array([[3.0], [3.0]], dtype=mx.float32))
+
+
+def test_sparse_feature_modules_preserve_coordinates():
+    x = make_tensor()
+    linear = lnn.Linear(1, 2)
+    relu = lnn.ReLU()
+    sigmoid = lnn.Sigmoid()
+
+    out = sigmoid(relu(linear(x)))
+
+    assert out.coords.tolist() == x.coords.tolist()
+    assert out.coord_key == x.coord_key
+    assert out.feats.shape == (x.n_points, 2)

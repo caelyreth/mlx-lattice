@@ -6,9 +6,55 @@ from collections.abc import Sequence
 import mlx.core as mx
 import mlx.nn as nn
 
-from mlx_lattice.ops import conv3d, pool3d
+from mlx_lattice.ops import conv3d, linear, pool3d, relu, sigmoid
 from mlx_lattice.tensor import SparseTensor
 from mlx_lattice.types import Triple, triple
+
+
+class Linear(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, bias: bool = True
+    ):
+        super().__init__()
+        if in_channels <= 0 or out_channels <= 0:
+            raise ValueError('channels must be positive.')
+        scale = math.sqrt(1 / in_channels)
+        self.weight = mx.random.uniform(
+            low=-scale,
+            high=scale,
+            shape=(out_channels, in_channels),
+        )
+        if bias:
+            self.bias = mx.zeros((out_channels,))
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        bias = self.bias if 'bias' in self else None
+        return linear(x, self.weight, bias)
+
+
+class ReLU(nn.Module):
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return relu(x)
+
+
+class Sigmoid(nn.Module):
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return sigmoid(x)
+
+
+class BatchNorm(nn.Module):
+    def __init__(
+        self,
+        num_features: int,
+        eps: float = 1e-5,
+        momentum: float = 0.1,
+        affine: bool = True,
+    ) -> None:
+        super().__init__()
+        self.norm = nn.BatchNorm(num_features, eps, momentum, affine)
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return x.replace(feats=self.norm(x.feats))
 
 
 class Conv3d(nn.Module):
@@ -78,6 +124,7 @@ class SumPool3d(nn.Module):
 
 Pool3d = SumPool3d
 SparseConv3d = Conv3d
+SparseLinear = Linear
 
 
 def _volume(values: Triple) -> int:

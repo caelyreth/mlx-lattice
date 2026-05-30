@@ -80,6 +80,33 @@ def topk_rows(
     return mx.concatenate(selected, axis=0)
 
 
+def linear(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+) -> SparseTensor:
+    if weight.ndim != 2:
+        raise ValueError('weight must have shape (Cout, Cin).')
+    if weight.shape[1] != x.channels:
+        raise ValueError(
+            'weight input channels must match tensor features.'
+        )
+    feats = x.feats @ mx.swapaxes(weight, 0, 1)
+    if bias is not None:
+        if bias.ndim != 1 or bias.shape[0] != weight.shape[0]:
+            raise ValueError('bias must have shape (Cout,).')
+        feats = feats + bias
+    return x.replace(feats=feats)
+
+
+def relu(x: SparseTensor) -> SparseTensor:
+    return x.replace(feats=mx.maximum(x.feats, 0))
+
+
+def sigmoid(x: SparseTensor) -> SparseTensor:
+    return x.replace(feats=mx.sigmoid(x.feats))
+
+
 def conv3d(
     x: SparseTensor,
     weight: mx.array,
@@ -114,6 +141,14 @@ def conv3d(
         )
 
     op_stride = triple(stride, name='stride')
+    if op_stride == (1, 1, 1) and kernel == (1, 1, 1):
+        feats = x.feats @ weight[0]
+        if bias is not None:
+            if bias.ndim != 1 or bias.shape[0] != weight.shape[2]:
+                raise ValueError('bias must have shape (Cout,).')
+            feats = feats + bias
+        return x.replace(feats=feats)
+
     mapping = x.kernel_map(kernel_size=kernel, stride=op_stride)
     if weight.shape[0] != len(mapping.offsets):
         raise ValueError(
