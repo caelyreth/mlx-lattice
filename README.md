@@ -2,6 +2,9 @@
 
 Sparse point cloud convolution library for Apple [MLX](https://github.com/ml-explore/mlx).
 
+> [!CAUTION]
+> We're working on the proofing of math correctness between those operators in different backends. Currently, only the Metal operators have the identical math property, while the CUDA operators still need to be verified.
+
 ### Usage
 
 ```python
