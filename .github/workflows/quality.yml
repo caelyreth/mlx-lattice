@@ -65,7 +65,7 @@ jobs:
       - name: Set up Linux CUDA environment
         uses: ./.github/actions/setup-linux
         with:
-          toolkit: cuda-13.0
+          toolkit: cuda-13.2
           python-version: "3.12"
           ccache-key: mlx-lattice-cuda-quality
 
