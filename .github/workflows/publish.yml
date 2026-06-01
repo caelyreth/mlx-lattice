@@ -17,19 +17,9 @@ env:
   UV_LINK_MODE: copy
 
 jobs:
-  build-wheels:
-    name: Wheel (${{ matrix.os.runner }}, Python ${{ matrix.python-version }})
-    runs-on: ${{ matrix.os.runner }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13", "3.14"]
-        os:
-          - runner: macos-26
-            deployment_target: "26.0"
-          - runner: macos-15
-            deployment_target: "15.0"
+  build-macos-26-wheels:
+    name: macOS 26 wheels
+    runs-on: macos-26
 
     steps:
       - name: Checkout
@@ -38,28 +28,145 @@ jobs:
       - name: Set up macOS environment
         uses: ./.github/actions/setup-macos
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.11.17"
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
       - name: Check tag matches project version
-        run: test "${GITHUB_REF_NAME#v}" = "$(uv version --short)"
+        run: python scripts/check-release-version.py
 
-      - name: Build wheel
-        run: uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist
+      - name: Build wheels
+        run: bash scripts/build-wheels.sh macos
         env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.os.deployment_target }}
+          MACOSX_DEPLOYMENT_TARGET: "26.0"
 
-      - name: Upload wheel
+      - name: Upload wheels
         uses: actions/upload-artifact@v7
         with:
-          name: wheel-${{ matrix.os.runner }}-py${{ matrix.python-version }}
+          name: pypi-wheel-macos-26
+          path: dist/*.whl
+          if-no-files-found: error
+          compression-level: 0
+
+  build-macos-15-wheels:
+    name: macOS 15 wheels
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up macOS environment
+        uses: ./.github/actions/setup-macos
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check tag matches project version
+        run: python scripts/check-release-version.py
+
+      - name: Build wheels
+        run: bash scripts/build-wheels.sh macos
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: pypi-wheel-macos-15
+          path: dist/*.whl
+          if-no-files-found: error
+          compression-level: 0
+
+  build-linux-cpu-wheels:
+    name: Linux CPU wheels
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Linux CPU environment
+        uses: ./.github/actions/setup-linux
+        with:
+          toolkit: cpu
+          python-version: "3.12"
+          ccache-key: mlx-lattice-linux-cpu-wheel
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check tag matches project version
+        run: python scripts/check-release-version.py
+
+      - name: Build wheels
+        run: bash scripts/build-wheels.sh linux-cpu
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: pypi-wheel-linux-cpu
+          path: dist/*.whl
+          if-no-files-found: error
+          compression-level: 0
+
+  build-linux-cuda-wheels:
+    name: Linux CUDA 13 wheels
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Linux CUDA environment
+        uses: ./.github/actions/setup-linux
+        with:
+          toolkit: cuda-13.2
+          python-version: "3.12"
+          ccache-key: mlx-lattice-linux-cuda13-wheel
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check tag matches project version
+        run: python scripts/check-release-version.py
+
+      - name: Check CUDA compiler
+        run: |
+          nvcc --version
+          echo "CUDA_PATH=${CUDA_PATH}"
+          test -f "${CUDA_PATH}/targets/x86_64-linux/include/cublasLt.h"
+
+      - name: Build wheels
+        run: bash scripts/build-wheels.sh linux-cuda13
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: pypi-wheel-linux-cuda13
           path: dist/*.whl
           if-no-files-found: error
           compression-level: 0
@@ -86,7 +193,7 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Check tag matches project version
-        run: test "${GITHUB_REF_NAME#v}" = "$(uv version --short)"
+        run: python scripts/check-release-version.py
 
       - name: Build sdist
         run: uv build --sdist --out-dir dist
@@ -94,7 +201,7 @@ jobs:
       - name: Upload sdist
         uses: actions/upload-artifact@v7
         with:
-          name: sdist
+          name: pypi-sdist
           path: dist/*.tar.gz
           if-no-files-found: error
           compression-level: 0
@@ -102,7 +209,14 @@ jobs:
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: [build-wheels, build-sdist]
+    needs:
+      [
+        build-macos-26-wheels,
+        build-macos-15-wheels,
+        build-linux-cpu-wheels,
+        build-linux-cuda-wheels,
+        build-sdist,
+      ]
     environment:
       name: pypi
     permissions:
@@ -110,6 +224,9 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Set up uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
@@ -118,43 +235,11 @@ jobs:
       - name: Download distributions
         uses: actions/download-artifact@v8
         with:
+          pattern: pypi-*
           path: artifacts
 
       - name: Prepare distributions
-        run: |
-          rm -rf dist
-          mkdir -p dist
-
-          shopt -s globstar nullglob
-          declare -A seen
-
-          for file in artifacts/**/*; do
-            if [[ ! -f "$file" ]]; then
-              continue
-            fi
-
-            case "$file" in
-              *.whl|*.tar.gz) ;;
-              *) continue ;;
-            esac
-
-            filename="$(basename "$file")"
-            if [[ -n "${seen[$filename]:-}" ]]; then
-              echo "::error::Duplicate distribution filename: $filename"
-              echo "::error::First: ${seen[$filename]}"
-              echo "::error::Second: $file"
-              exit 1
-            fi
-
-            seen[$filename]="$file"
-            cp "$file" "dist/$filename"
-          done
-
-          if [[ "${#seen[@]}" -ne 7 ]]; then
-            echo "::error::Expected 7 distributions, found ${#seen[@]}"
-            find artifacts -type f -print
-            exit 1
-          fi
+        run: bash scripts/collect-distributions.sh 13
 
       - name: List distributions
         run: ls -lh dist
@@ -196,40 +281,7 @@ jobs:
           path: artifacts
 
       - name: Prepare distributions
-        run: |
-          rm -rf dist
-          mkdir -p dist
-
-          shopt -s globstar nullglob
-          declare -A seen
-
-          for file in artifacts/**/*; do
-            if [[ ! -f "$file" ]]; then
-              continue
-            fi
-
-            case "$file" in
-              *.whl|*.tar.gz) ;;
-              *) continue ;;
-            esac
-
-            filename="$(basename "$file")"
-            if [[ -n "${seen[$filename]:-}" ]]; then
-              echo "::error::Duplicate distribution filename: $filename"
-              echo "::error::First: ${seen[$filename]}"
-              echo "::error::Second: $file"
-              exit 1
-            fi
-
-            seen[$filename]="$file"
-            cp "$file" "dist/$filename"
-          done
-
-          if [[ "${#seen[@]}" -ne 7 ]]; then
-            echo "::error::Expected 7 distributions, found ${#seen[@]}"
-            find artifacts -type f -print
-            exit 1
-          fi
+        run: bash scripts/collect-distributions.sh 13
 
       - name: Create release notes
         run: npx --yes changelogithub@14 --contributors --emoji false

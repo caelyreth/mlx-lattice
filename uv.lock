@@ -133,9 +133,13 @@ dependencies = [
 [package.optional-dependencies]
 cuda13 = [
     { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
+    { name = "mlx-lattice-cuda13", marker = "sys_platform == 'linux'" },
 ]
 
 [package.dev-dependencies]
+cuda-build = [
+    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
+]
 dev = [
     { name = "cmake" },
     { name = "nanobind" },
@@ -151,10 +155,12 @@ requires-dist = [
     { name = "mlx", marker = "sys_platform == 'darwin'", specifier = ">=0.31" },
     { name = "mlx", extras = ["cpu"], marker = "sys_platform == 'linux'", specifier = ">=0.31" },
     { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux' and extra == 'cuda13'", specifier = ">=0.31" },
+    { name = "mlx-lattice-cuda13", marker = "sys_platform == 'linux' and extra == 'cuda13'", directory = "src/mlx_lattice_cuda13" },
 ]
 provides-extras = ["cuda13"]
 
 [package.metadata.requires-dev]
+cuda-build = [{ name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux'", specifier = ">=0.31" }]
 dev = [
     { name = "cmake", specifier = ">=3.27" },
     { name = "nanobind", specifier = ">=2" },
@@ -164,6 +170,17 @@ dev = [
     { name = "scikit-build-core", specifier = ">=0.12" },
     { name = "ty", specifier = ">=0.0.40" },
 ]
+
+[[package]]
+name = "mlx-lattice-cuda13"
+version = "0.1.7"
+source = { directory = "src/mlx_lattice_cuda13" }
+dependencies = [
+    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux'", specifier = ">=0.31" }]
 
 [[package]]
 name = "mlx-metal"

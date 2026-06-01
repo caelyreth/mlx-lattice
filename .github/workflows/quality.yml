@@ -84,13 +84,13 @@ jobs:
           test -f "${CUDA_PATH}/targets/x86_64-linux/include/cublasLt.h"
 
       - name: Install build dependencies
-        run: uv sync --group dev --extra cuda13 --no-install-project
+        run: uv sync --group dev --group cuda-build --no-install-project
 
       - name: Build project
         run: |
           uv sync \
             --group dev \
-            --extra cuda13 \
+            --group cuda-build \
             --no-build-isolation \
             --reinstall-package mlx-lattice \
             -Ccmake.define.CMAKE_CUDA_ARCHITECTURES=89 \

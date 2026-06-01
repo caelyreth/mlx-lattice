@@ -26,6 +26,10 @@ option(
   MLX_LATTICE_REQUIRE_CUDA
   "Fail configuration when CUDA kernels cannot be built"
   OFF)
+set(
+  MLX_LATTICE_EXTENSION_DESTINATION
+  "mlx_lattice"
+  CACHE STRING "Python package directory for the native extension")
 set(MLX_LATTICE_HAS_METAL 0)
 set(MLX_LATTICE_HAS_CUDA 0)
 
@@ -200,8 +204,8 @@ target_link_libraries(_ext PRIVATE mlx_lattice_native)
 
 # MARK: - install
 
-install(TARGETS _ext LIBRARY DESTINATION mlx_lattice)
+install(TARGETS _ext LIBRARY DESTINATION ${MLX_LATTICE_EXTENSION_DESTINATION})
 install(
   FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/mlx_lattice.metallib
-  DESTINATION mlx_lattice
+  DESTINATION ${MLX_LATTICE_EXTENSION_DESTINATION}
   OPTIONAL)

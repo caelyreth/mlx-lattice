@@ -3,7 +3,7 @@ description: Install dependencies for Linux quality gates
 
 inputs:
   toolkit:
-    description: "Toolkit to install: cpu, cuda-12.8, or cuda-13.2"
+    description: "Toolkit to install: cpu or cuda-13.2"
     required: false
     default: cpu
   python-version:
@@ -68,10 +68,7 @@ runs:
         esac
 
         case "${{ inputs.toolkit }}" in
-          cuda-12.9)
-            cuda_packages="libcudnn9-dev-cuda-12 cuda-compiler-12-8 cuda-libraries-dev-12-8"
-            ;;
-          cuda-13.0)
+          cuda-13.2)
             cuda_packages="libcudnn9-dev-cuda-13 cuda-compiler-13-2 cuda-libraries-dev-13-2"
             ;;
           *)

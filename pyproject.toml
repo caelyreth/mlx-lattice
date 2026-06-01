@@ -11,7 +11,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cuda13 = ["mlx[cuda13]>=0.31; platform_system == 'Linux'"]
+cuda13 = [
+  "mlx[cuda13]>=0.31; platform_system == 'Linux'",
+  "mlx-lattice-cuda13==0.1.7; platform_system == 'Linux'",
+]
 
 [project.urls]
 Homepage = "https://github.com/utakotoba/mlx-lattice"
@@ -29,6 +32,9 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [dependency-groups]
+cuda-build = [
+  "mlx[cuda13]>=0.31; platform_system == 'Linux'",
+]
 dev = [
   "cmake>=3.27",
   "nanobind>=2",
@@ -39,6 +45,9 @@ dev = [
   "ty>=0.0.40",
 ]
 
+[tool.uv.sources]
+mlx-lattice-cuda13 = { path = "src/mlx_lattice_cuda13" }
+
 [tool.scikit-build]
 minimum-version = "0.12"
 build-dir = "build/{wheel_tag}"
@@ -48,6 +57,8 @@ sdist.include = [
   "CMakeLists.txt",
   "CMakePresets.json",
   "native/**",
+  "scripts/**",
+  "src/mlx_lattice_cuda13/**",
   "src/**/*.py",
   "src/**/*.pyi",
   "src/**/py.typed",
