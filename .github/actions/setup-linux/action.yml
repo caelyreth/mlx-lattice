@@ -30,6 +30,7 @@ runs:
         sudo apt-get install -y --no-install-recommends \
           build-essential \
           ca-certificates \
+          libfmt-dev \
           gdb \
           gnupg \
           ninja-build \
