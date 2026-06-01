@@ -7,6 +7,12 @@ resolution-markers = [
     "sys_platform != 'darwin' and sys_platform != 'linux'",
 ]
 
+[manifest]
+members = [
+    "mlx-lattice",
+    "mlx-lattice-cuda13",
+]
+
 [[package]]
 name = "cmake"
 version = "4.3.2"
@@ -155,7 +161,7 @@ requires-dist = [
     { name = "mlx", marker = "sys_platform == 'darwin'", specifier = ">=0.31" },
     { name = "mlx", extras = ["cpu"], marker = "sys_platform == 'linux'", specifier = ">=0.31" },
     { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux' and extra == 'cuda13'", specifier = ">=0.31" },
-    { name = "mlx-lattice-cuda13", marker = "sys_platform == 'linux' and extra == 'cuda13'", directory = "src/mlx_lattice_cuda13" },
+    { name = "mlx-lattice-cuda13", marker = "sys_platform == 'linux' and extra == 'cuda13'", editable = "packages/mlx_lattice_cuda13" },
 ]
 provides-extras = ["cuda13"]
 
@@ -173,8 +179,7 @@ dev = [
 
 [[package]]
 name = "mlx-lattice-cuda13"
-version = "0.1.7"
-source = { directory = "src/mlx_lattice_cuda13" }
+source = { editable = "packages/mlx_lattice_cuda13" }
 dependencies = [
     { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
 ]

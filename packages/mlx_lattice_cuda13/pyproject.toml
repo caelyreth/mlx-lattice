@@ -1,9 +1,9 @@
 [project]
 name = "mlx-lattice-cuda13"
-version = "0.1.7"
 description = "CUDA 13 backend for mlx-lattice"
 readme = "../../README.md"
 requires-python = ">=3.12"
+dynamic = ["version"]
 authors = [{ name = "Yu", email = "i@letter.cafe" }]
 dependencies = [
   "mlx[cuda13]>=0.31; platform_system == 'Linux'",
@@ -27,11 +27,17 @@ build-backend = "scikit_build_core.build"
 minimum-version = "0.12"
 cmake.source-dir = "../.."
 build-dir = "../../build/cuda13/{wheel_tag}"
-wheel.packages = ["."]
+wheel.packages = []
 wheel.platlib = true
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "../../pyproject.toml"
+regex = '''(?m)^version = "(?P<value>[^"]+)"'''
 
 [tool.scikit-build.cmake.define]
 MLX_LATTICE_EXTENSION_DESTINATION = "mlx_lattice_cuda13"
+MLX_LATTICE_PACKAGE_FILES_DIR = "packages/mlx_lattice_cuda13"
 MLX_LATTICE_REQUIRE_CUDA = "ON"
 MLX_LATTICE_BUILD_CUDA = "ON"
 MLX_LATTICE_BUILD_METAL = "OFF"

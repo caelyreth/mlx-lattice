@@ -17,9 +17,6 @@ if tag.startswith('v'):
 
 versions = {
     'mlx-lattice': project_version('pyproject.toml'),
-    'mlx-lattice-cuda13': project_version(
-        'src/mlx_lattice_cuda13/pyproject.toml'
-    ),
 }
 
 mismatches = {

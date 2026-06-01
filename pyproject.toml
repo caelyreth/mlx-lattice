@@ -4,16 +4,11 @@ version = "0.1.7"
 description = "Sparse point cloud convolution library for MLX"
 readme = "README.md"
 requires-python = ">=3.12"
+dynamic = ["optional-dependencies"]
 authors = [{ name = "Yu", email = "i@letter.cafe" }]
 dependencies = [
   "mlx>=0.31; platform_system == 'Darwin'",
   "mlx[cpu]>=0.31; platform_system == 'Linux'",
-]
-
-[project.optional-dependencies]
-cuda13 = [
-  "mlx[cuda13]>=0.31; platform_system == 'Linux'",
-  "mlx-lattice-cuda13==0.1.7; platform_system == 'Linux'",
 ]
 
 [project.urls]
@@ -32,9 +27,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [dependency-groups]
-cuda-build = [
-  "mlx[cuda13]>=0.31; platform_system == 'Linux'",
-]
+cuda-build = ["mlx[cuda13]>=0.31; platform_system == 'Linux'"]
 dev = [
   "cmake>=3.27",
   "nanobind>=2",
@@ -46,22 +39,23 @@ dev = [
 ]
 
 [tool.uv.sources]
-mlx-lattice-cuda13 = { path = "src/mlx_lattice_cuda13" }
+mlx-lattice-cuda13 = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
 
 [tool.scikit-build]
 minimum-version = "0.12"
 build-dir = "build/{wheel_tag}"
-wheel.packages = ["src/mlx_lattice"]
+wheel.packages = ["mlx_lattice"]
 wheel.platlib = true
 sdist.include = [
   "CMakeLists.txt",
   "CMakePresets.json",
+  "mlx_lattice/**",
   "native/**",
+  "packages/*/**",
   "scripts/**",
-  "src/mlx_lattice_cuda13/**",
-  "src/**/*.py",
-  "src/**/*.pyi",
-  "src/**/py.typed",
 ]
 sdist.exclude = [
   ".DS_Store",
@@ -73,14 +67,23 @@ sdist.exclude = [
   "**/*.py[cod]",
   "**/__pycache__",
   "**/__pycache__/**",
-  "src/**/__pycache__",
-  "src/**/__pycache__/**",
+  "mlx_lattice/**/__pycache__",
+  "mlx_lattice/**/__pycache__/**",
+  "packages/**/__pycache__",
+  "packages/**/__pycache__/**",
   "tests/**/__pycache__",
   "tests/**/__pycache__/**",
 ]
 
 [tool.scikit-build.editable]
 rebuild = true
+
+[tool.scikit-build.metadata.optional-dependencies]
+provider = "scikit_build_core.metadata.template"
+result = { cuda13 = [
+  "mlx[cuda13]>=0.31; platform_system == 'Linux'",
+  "mlx-lattice-cuda13=={project[version]}; platform_system == 'Linux'",
+] }
 
 [tool.ruff]
 line-length = 76

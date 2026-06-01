@@ -30,6 +30,10 @@ set(
   MLX_LATTICE_EXTENSION_DESTINATION
   "mlx_lattice"
   CACHE STRING "Python package directory for the native extension")
+set(
+  MLX_LATTICE_PACKAGE_FILES_DIR
+  ""
+  CACHE PATH "Optional Python package files to install with the extension")
 set(MLX_LATTICE_HAS_METAL 0)
 set(MLX_LATTICE_HAS_CUDA 0)
 
@@ -205,6 +209,15 @@ target_link_libraries(_ext PRIVATE mlx_lattice_native)
 # MARK: - install
 
 install(TARGETS _ext LIBRARY DESTINATION ${MLX_LATTICE_EXTENSION_DESTINATION})
+if(MLX_LATTICE_PACKAGE_FILES_DIR)
+  install(
+    DIRECTORY ${MLX_LATTICE_PACKAGE_FILES_DIR}/
+    DESTINATION ${MLX_LATTICE_EXTENSION_DESTINATION}
+    FILES_MATCHING
+      PATTERN "*.py"
+      PATTERN "*.pyi"
+      PATTERN "py.typed")
+endif()
 install(
   FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/mlx_lattice.metallib
   DESTINATION ${MLX_LATTICE_EXTENSION_DESTINATION}

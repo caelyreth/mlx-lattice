@@ -42,7 +42,7 @@ for python in ${pythons}; do
         --group cuda-build \
         --no-install-project
       UV_PYTHON="${python}" uv build \
-        src/mlx_lattice_cuda13 \
+        --package mlx-lattice-cuda13 \
         --wheel \
         --python "${python}" \
         --no-build-isolation \

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 from collections.abc import Mapping
 from typing import Any
@@ -10,10 +11,11 @@ import mlx.core as mx
 def _ext():
     import mlx.core  # noqa: F401
 
-    if importlib.util.find_spec('mlx_lattice_cuda13._ext') is not None:
-        from mlx_lattice_cuda13 import _ext as native
-
-        return native
+    if (
+        importlib.util.find_spec('mlx_lattice_cuda13') is not None
+        and importlib.util.find_spec('mlx_lattice_cuda13._ext') is not None
+    ):
+        return importlib.import_module('mlx_lattice_cuda13._ext')
 
     from . import _ext as native
 
