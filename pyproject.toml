@@ -29,7 +29,15 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [dependency-groups]
-dev = ["cmake>=3.27", "nanobind>=2", "ninja>=1.11", "pytest>=8", "ruff>=0.15.15", "ty>=0.0.40"]
+dev = [
+  "cmake>=3.27",
+  "nanobind>=2",
+  "ninja>=1.11",
+  "pytest>=8",
+  "ruff>=0.15.15",
+  "scikit-build-core>=0.12",
+  "ty>=0.0.40",
+]
 
 [tool.scikit-build]
 minimum-version = "0.12"

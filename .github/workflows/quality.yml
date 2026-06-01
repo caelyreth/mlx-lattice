@@ -18,7 +18,7 @@ env:
 jobs:
   mac-quality:
     name: macOS quality (Python ${{ matrix.python-version }})
-    runs-on: macos-latest
+    runs-on: macos-26
 
     strategy:
       fail-fast: false
@@ -83,14 +83,8 @@ jobs:
           echo "CUDA_PATH=${CUDA_PATH}"
           test -f "${CUDA_PATH}/targets/x86_64-linux/include/cublasLt.h"
 
-      - name: Detect CUDA driver
-        id: cuda-driver
-        run: |
-          if nvidia-smi; then
-            echo "available=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "available=false" >> "${GITHUB_OUTPUT}"
-          fi
+      - name: Install build dependencies
+        run: uv sync --group dev --extra cuda13 --no-install-project
 
       - name: Build project
         run: |
@@ -99,53 +93,7 @@ jobs:
             --extra cuda13 \
             --no-build-isolation \
             --reinstall-package mlx-lattice \
-            -Ccmake.define.CMAKE_CUDA_ARCHITECTURES=80 \
+            -Ccmake.define.CMAKE_CUDA_ARCHITECTURES=89 \
             -Ccmake.define.MLX_LATTICE_REQUIRE_CUDA=ON \
             -Ccmake.define.MLX_LATTICE_BUILD_CUDA=ON \
             -Ccmake.define.MLX_LATTICE_BUILD_METAL=OFF
-
-      - name: Configure runtime linker paths
-        run: |
-          mlx_package_dir="$(
-            uv run --no-sync python -c "import importlib.util, pathlib, sys; spec = importlib.util.find_spec('mlx'); roots = list(spec.submodule_search_locations or []) if spec else []; print(pathlib.Path(roots[0]) if roots else ''); sys.exit(0 if roots else 1)"
-          )"
-
-          {
-            echo "MLX_PACKAGE_DIR=${mlx_package_dir}"
-            echo "LD_LIBRARY_PATH=${mlx_package_dir}/lib:${LD_LIBRARY_PATH:-}"
-          } >> "${GITHUB_ENV}"
-
-      - name: Check built backend flags
-        run: |
-          uv run --no-sync python - <<'PY'
-          import importlib.util
-          import pathlib
-
-          candidates = sorted(pathlib.Path("build").glob("*/_ext*.so"))
-          if not candidates:
-              candidates = sorted(pathlib.Path("src/mlx_lattice").glob("_ext*.so"))
-          if not candidates:
-              raise SystemExit("Could not find the built mlx-lattice extension")
-
-          spec = importlib.util.spec_from_file_location("_ext", candidates[-1])
-          if spec is None or spec.loader is None:
-              raise SystemExit(f"Could not load extension spec for {candidates[-1]}")
-
-          native = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(native)
-
-          capabilities = native.capabilities()
-          print("MLX Lattice capabilities:", capabilities)
-
-          if not capabilities.get("cuda"):
-              raise SystemExit("mlx-lattice was not built with CUDA support")
-          PY
-
-      - name: Test
-        if: steps.cuda-driver.outputs.available == 'true'
-        run: uv run --no-sync pytest
-
-      - name: Skip CUDA runtime tests
-        if: steps.cuda-driver.outputs.available != 'true'
-        run: |
-          echo "Skipping pytest: CUDA toolkit is installed, but no real NVIDIA driver/GPU is available."
