@@ -10,10 +10,16 @@ Sparse point cloud convolution library for Apple [MLX](https://github.com/ml-exp
 Currently, the following operations are supported:
 
 - Tensor: `SparseTensor`, `sparse_collate`, `cat`, `prune`, `topk_rows`
-- Coordinates: `downsample`, `build_kernel_map`, `build_generative_map`
+- Coordinates: `downsample`, `build_kernel_map`, `build_generative_map`,
+  `build_transposed_kernel_map`
 - Features: `linear`, `relu`, `sigmoid`
-- Sparse ops: `conv3d`, `generative_conv_transpose3d`, `pool3d`
-- Modules: `Linear`, `Conv3d`, `GenerativeConvTranspose3d`, `SumPool3d`,
+- Sparse convolution: `conv3d` with stride, padding, and dilation;
+  `conv_transpose3d`; `generative_conv_transpose3d`
+- Sparse pooling: `pool3d`, `max_pool3d`, `avg_pool3d`, `global_pool`,
+  `global_sum_pool`, `global_avg_pool`, `global_max_pool`
+- Modules: `Linear`, `Conv3d`, `ConvTranspose3d`,
+  `GenerativeConvTranspose3d`, `SumPool3d`, `MaxPool3d`, `AvgPool3d`,
+  `GlobalPool`, `GlobalSumPool`, `GlobalAvgPool`, `GlobalMaxPool`,
   `BatchNorm`, `ReLU`, `Sigmoid`
 
 ### Usage
