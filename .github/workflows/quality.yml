@@ -45,10 +45,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Lint
-        run: |
-          uv run --no-sync ruff check .
-          uv run --no-sync ty check
+      - name: Ruff
+        run: uv run --no-sync ruff check .
+
+      - name: Ty
+        run: uv run --no-sync ty check
 
       - name: Test
         run: uv run --no-sync pytest
