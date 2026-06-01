@@ -11,6 +11,10 @@ from mlx_lattice.ops import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    global_avg_pool,
+    global_max_pool,
+    global_pool,
+    global_sum_pool,
     linear,
     max_pool3d,
     pool3d,
@@ -256,6 +260,39 @@ class AvgPool3d(nn.Module):
         return avg_pool3d(
             x, kernel_size=self.kernel_size, stride=self.stride
         )
+
+
+class GlobalPool(nn.Module):
+    def __init__(self, mode: str = 'avg') -> None:
+        super().__init__()
+        self.mode = mode
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return global_pool(x, mode=self.mode)
+
+
+class GlobalSumPool(GlobalPool):
+    def __init__(self) -> None:
+        super().__init__('sum')
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return global_sum_pool(x)
+
+
+class GlobalAvgPool(GlobalPool):
+    def __init__(self) -> None:
+        super().__init__('avg')
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return global_avg_pool(x)
+
+
+class GlobalMaxPool(GlobalPool):
+    def __init__(self) -> None:
+        super().__init__('max')
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return global_max_pool(x)
 
 
 Pool3d = SumPool3d

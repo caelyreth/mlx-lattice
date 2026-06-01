@@ -6,7 +6,15 @@ from mlx_lattice._ops.conv import (
     generative_conv_transpose3d,
 )
 from mlx_lattice._ops.feature import linear, relu, sigmoid
-from mlx_lattice._ops.pool import avg_pool3d, max_pool3d, pool3d
+from mlx_lattice._ops.pool import (
+    avg_pool3d,
+    global_avg_pool,
+    global_max_pool,
+    global_pool,
+    global_sum_pool,
+    max_pool3d,
+    pool3d,
+)
 from mlx_lattice._ops.tensor import cat, prune, sparse_collate, topk_rows
 from mlx_lattice.point import downsample
 
@@ -29,6 +37,10 @@ __all__ = [
     'generative_conv_transpose3d',
     'generative_sparse_conv_transpose3d',
     'generic_sparse_conv_transpose3d',
+    'global_avg_pool',
+    'global_max_pool',
+    'global_pool',
+    'global_sum_pool',
     'linear',
     'max_pool3d',
     'pool3d',

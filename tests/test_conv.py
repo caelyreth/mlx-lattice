@@ -10,8 +10,12 @@ from mlx_lattice import (  # noqa: E402
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    global_avg_pool,
+    global_max_pool,
+    global_sum_pool,
     max_pool3d,
     pool3d,
+    sparse_collate,
 )
 
 
@@ -184,6 +188,35 @@ def test_avg_pool3d_k3s1():
 
     assert out.coords.tolist() == coords.tolist()
     assert_allclose(out.feats, mx.array([[2.0], [2.0], [2.5]]))
+
+
+def test_global_pool_by_batch():
+    x = sparse_collate(
+        [
+            mx.array([[0, 0, 0], [1, 0, 0]], dtype=mx.int32),
+            mx.array([[0, 0, 0]], dtype=mx.int32),
+        ],
+        [
+            mx.array([[1.0, 2.0], [3.0, 4.0]], dtype=mx.float32),
+            mx.array([[5.0, 1.0]], dtype=mx.float32),
+        ],
+    )
+
+    summed = global_sum_pool(x)
+    averaged = global_avg_pool(x)
+    maxed = global_max_pool(x)
+
+    assert summed.coords.tolist() == [[0, 0, 0, 0], [1, 0, 0, 0]]
+    assert_allclose(
+        summed.feats, mx.array([[4.0, 6.0], [5.0, 1.0]], dtype=mx.float32)
+    )
+    assert_allclose(
+        averaged.feats,
+        mx.array([[2.0, 3.0], [5.0, 1.0]], dtype=mx.float32),
+    )
+    assert_allclose(
+        maxed.feats, mx.array([[3.0, 4.0], [5.0, 1.0]], dtype=mx.float32)
+    )
 
 
 def test_generative_conv_transpose3d_k2s2():

@@ -79,6 +79,77 @@ def avg_pool3d(
     return pool3d(x, kernel_size=kernel_size, stride=stride, mode='avg')
 
 
+def global_pool(
+    x: SparseTensor,
+    *,
+    mode: str = 'avg',
+) -> SparseTensor:
+    pooled = []
+    coords = []
+    if x.batch_counts is None:
+        for rows in x.batch_rows:
+            if rows.shape[0] == 0:
+                continue
+            batch = int(mx.take(x.coords[:, 0], rows[0]).item())
+            pooled.append(
+                _global_pool_feats(mx.take(x.feats, rows, axis=0), mode)
+            )
+            coords.append([batch, 0, 0, 0])
+    else:
+        start = 0
+        for batch, row_count in enumerate(x.batch_counts):
+            stop = start + int(row_count)
+            if stop > x.n_points:
+                raise ValueError(
+                    'batch row counts exceed sparse tensor row count.'
+                )
+            pooled.append(_global_pool_feats(x.feats[start:stop], mode))
+            coords.append([batch, 0, 0, 0])
+            start = stop
+        if start != x.n_points:
+            raise ValueError('batch row counts must cover all sparse rows.')
+
+    if not pooled:
+        out_coords = mx.array([], dtype=x.coords.dtype).reshape((0, 4))
+        out_feats = mx.array([], dtype=x.feats.dtype).reshape(
+            (0, x.channels)
+        )
+    else:
+        out_coords = mx.array(coords, dtype=x.coords.dtype)
+        out_feats = mx.concatenate(pooled, axis=0)
+    return SparseTensor(out_coords, out_feats, x.stride)
+
+
+def _global_pool_feats(feats: mx.array, mode: str) -> mx.array:
+    if feats.shape[0] == 0:
+        return mx.zeros((1, feats.shape[1]), dtype=feats.dtype)
+    if mode == 'sum':
+        return mx.sum(feats, axis=0, keepdims=True)
+    if mode == 'avg':
+        return mx.mean(feats, axis=0, keepdims=True)
+    if mode == 'max':
+        return mx.max(feats, axis=0, keepdims=True)
+    raise ValueError("pool mode must be 'sum', 'max', or 'avg'.")
+
+
+def global_sum_pool(
+    x: SparseTensor,
+) -> SparseTensor:
+    return global_pool(x, mode='sum')
+
+
+def global_avg_pool(
+    x: SparseTensor,
+) -> SparseTensor:
+    return global_pool(x, mode='avg')
+
+
+def global_max_pool(
+    x: SparseTensor,
+) -> SparseTensor:
+    return global_pool(x, mode='max')
+
+
 def _pooled_tensor(
     x: SparseTensor,
     coords: mx.array,
