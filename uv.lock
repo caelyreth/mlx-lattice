@@ -68,6 +68,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+cpu = [
+    { name = "mlx-cpu", marker = "sys_platform == 'linux'" },
+]
 cuda13 = [
     { name = "mlx-cuda-13", marker = "sys_platform == 'linux'" },
 ]
@@ -95,6 +98,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mlx-cpu"
+version = "0.31.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/e3/2f832234ede13002ee84088772c3a73ee6efd9bcbd6d7a7b243e8cef7e3b/mlx_cpu-0.31.1-py3-none-manylinux_2_35_aarch64.whl", hash = "sha256:8c5a1366efa6be47bec573a31bb224127d0e11c07fe789c3a11a0fc50ad595e3", size = 8696444, upload-time = "2026-03-11T23:20:56.259Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/1a/c17fad043443085578312efd05656246333ee3719ee94b69be43ebc77b23/mlx_cpu-0.31.1-py3-none-manylinux_2_35_x86_64.whl", hash = "sha256:27578a396f08431dd2cc089e755ef58f77d16261d9e91bd0f230157bc1662911", size = 10279829, upload-time = "2026-03-11T23:20:58.536Z" },
+]
+
+[[package]]
 name = "mlx-cuda-13"
 version = "0.31.1"
 source = { registry = "https://pypi.org/simple" }
@@ -114,8 +126,13 @@ name = "mlx-lattice"
 version = "0.1.7"
 source = { editable = "." }
 dependencies = [
-    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
+    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cpu"], marker = "sys_platform == 'linux'" },
     { name = "mlx", version = "0.31.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+]
+
+[package.optional-dependencies]
+cuda13 = [
+    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
 ]
 
 [package.dev-dependencies]
@@ -131,8 +148,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "mlx", marker = "sys_platform == 'darwin'", specifier = ">=0.31" },
-    { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux'", specifier = ">=0.31" },
+    { name = "mlx", extras = ["cpu"], marker = "sys_platform == 'linux'", specifier = ">=0.31" },
+    { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux' and extra == 'cuda13'", specifier = ">=0.31" },
 ]
+provides-extras = ["cuda13"]
 
 [package.metadata.requires-dev]
 dev = [

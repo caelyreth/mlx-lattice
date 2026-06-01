@@ -83,10 +83,21 @@ jobs:
           echo "CUDA_PATH=${CUDA_PATH}"
           test -f "${CUDA_PATH}/targets/x86_64-linux/include/cublasLt.h"
 
+      - name: Detect CUDA driver
+        id: cuda-driver
+        run: |
+          if nvidia-smi; then
+            echo "available=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "available=false" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Build project
         run: |
           uv sync \
             --group dev \
+            --extra cuda13 \
+            --no-build-isolation \
             --reinstall-package mlx-lattice \
             -Ccmake.define.CMAKE_CUDA_ARCHITECTURES=80 \
             -Ccmake.define.MLX_LATTICE_REQUIRE_CUDA=ON \
@@ -107,9 +118,23 @@ jobs:
       - name: Check built backend flags
         run: |
           uv run --no-sync python - <<'PY'
-          import mlx_lattice as lattice
+          import importlib.util
+          import pathlib
 
-          capabilities = lattice.capabilities()
+          candidates = sorted(pathlib.Path("build").glob("*/_ext*.so"))
+          if not candidates:
+              candidates = sorted(pathlib.Path("src/mlx_lattice").glob("_ext*.so"))
+          if not candidates:
+              raise SystemExit("Could not find the built mlx-lattice extension")
+
+          spec = importlib.util.spec_from_file_location("_ext", candidates[-1])
+          if spec is None or spec.loader is None:
+              raise SystemExit(f"Could not load extension spec for {candidates[-1]}")
+
+          native = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(native)
+
+          capabilities = native.capabilities()
           print("MLX Lattice capabilities:", capabilities)
 
           if not capabilities.get("cuda"):
@@ -117,4 +142,10 @@ jobs:
           PY
 
       - name: Test
+        if: steps.cuda-driver.outputs.available == 'true'
         run: uv run --no-sync pytest
+
+      - name: Skip CUDA runtime tests
+        if: steps.cuda-driver.outputs.available != 'true'
+        run: |
+          echo "Skipping pytest: CUDA toolkit is installed, but no real NVIDIA driver/GPU is available."
