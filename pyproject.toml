@@ -7,6 +7,12 @@ requires-python = ">=3.12"
 authors = [{ name = "Yu", email = "i@letter.cafe" }]
 dependencies = ["mlx>=0.31"]
 
+[project.urls]
+Homepage = "https://github.com/utakotoba/mlx-lattice"
+Repository = "https://github.com/utakotoba/mlx-lattice.git"
+Issues = "https://github.com/utakotoba/mlx-lattice/issues"
+Changelog = "https://github.com/utakotoba/mlx-lattice/releases"
+
 [build-system]
 requires = ["scikit-build-core>=0.12", "nanobind>=2", "mlx>=0.31"]
 build-backend = "scikit_build_core.build"
