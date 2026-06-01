@@ -10,6 +10,32 @@ cuda_architectures="${MLX_LATTICE_CUDA_ARCHITECTURES:-80}"
 mkdir -p "${out_dir}"
 uv python install ${pythons}
 
+retag_linux_wheel() {
+  local package="${1}"
+  local python_tag="${2}"
+  local python_version="${3}"
+  local wheel_file
+
+  wheel_file="$(
+    find "${out_dir}" \
+      -maxdepth 1 \
+      -type f \
+      -name "${package}-*-${python_tag}-${python_tag}-linux_x86_64.whl" \
+      -print \
+      -quit
+  )"
+  if [[ -z "${wheel_file}" ]]; then
+    echo "Could not find linux_x86_64 wheel for ${package} ${python_tag} in ${out_dir}" >&2
+    find "${out_dir}" -maxdepth 1 -type f -name '*.whl' -print >&2
+    exit 1
+  fi
+
+  UV_PYTHON="${python_version}" uv run --no-sync wheel tags \
+    --platform-tag "${manylinux_tag}" \
+    --remove \
+    "${wheel_file}"
+}
+
 for python in ${pythons}; do
   echo "::group::Build ${target} wheel for Python ${python}"
   python_tag="cp${python/./}"
@@ -31,9 +57,9 @@ for python in ${pythons}; do
         --python "${python}" \
         --no-build-isolation \
         --out-dir "${out_dir}" \
-        -Cwheel.tags="${python_tag}-${python_tag}-${manylinux_tag}" \
         -Ccmake.define.MLX_LATTICE_BUILD_CUDA=OFF \
         -Ccmake.define.MLX_LATTICE_BUILD_METAL=OFF
+      retag_linux_wheel "mlx_lattice" "${python_tag}" "${python}"
       ;;
     linux-cuda13)
       rm -rf .venv
@@ -47,9 +73,9 @@ for python in ${pythons}; do
         --python "${python}" \
         --no-build-isolation \
         --out-dir "${out_dir}" \
-        -Cwheel.tags="${python_tag}-${python_tag}-${manylinux_tag}" \
         -Ccmake.define.CMAKE_CUDA_ARCHITECTURES="${cuda_architectures}" \
         -Ccmake.define.MLX_LATTICE_REQUIRE_CUDA=ON
+      retag_linux_wheel "mlx_lattice_cuda13" "${python_tag}" "${python}"
       ;;
     *)
       echo "Unknown wheel target: ${target}" >&2

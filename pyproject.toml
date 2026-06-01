@@ -1,6 +1,6 @@
 [project]
 name = "mlx-lattice"
-version = "0.1.7"
+version = "0.1.8"
 description = "Sparse point cloud convolution library for MLX"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -36,6 +36,7 @@ dev = [
   "ruff>=0.15.15",
   "scikit-build-core>=0.12",
   "ty>=0.0.40",
+  "wheel>=0.45",
 ]
 
 [tool.uv.sources]

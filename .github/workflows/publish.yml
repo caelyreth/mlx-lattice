@@ -206,19 +206,15 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  publish:
-    name: Publish to PyPI
+  publish-cuda13:
+    name: Publish CUDA 13 backend to PyPI
     runs-on: ubuntu-latest
     needs:
       [
-        build-macos-26-wheels,
-        build-macos-15-wheels,
-        build-linux-cpu-wheels,
         build-linux-cuda-wheels,
-        build-sdist,
       ]
     environment:
-      name: pypi
+      name: pypi-cuda13
     permissions:
       contents: read
       id-token: write
@@ -235,11 +231,11 @@ jobs:
       - name: Download distributions
         uses: actions/download-artifact@v8
         with:
-          pattern: pypi-*
+          pattern: pypi-wheel-linux-cuda13
           path: artifacts
 
       - name: Prepare distributions
-        run: bash scripts/collect-distributions.sh 13
+        run: bash scripts/collect-distributions.sh 3
 
       - name: List distributions
         run: ls -lh dist
@@ -250,17 +246,91 @@ jobs:
             unzip -t "$wheel"
           done
 
+      - name: Publish distributions
+        run: >
+          uv publish
+          --trusted-publishing always
+          --check-url https://pypi.org/simple/
+          dist/mlx_lattice_cuda13-*.whl
+
+  publish-main:
+    name: Publish main package to PyPI
+    runs-on: ubuntu-latest
+    needs:
+      [
+        build-macos-26-wheels,
+        build-macos-15-wheels,
+        build-linux-cpu-wheels,
+        build-sdist,
+        publish-cuda13,
+      ]
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.17"
+
+      - name: Download macOS 26 wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: pypi-wheel-macos-26
+          path: artifacts/pypi-wheel-macos-26
+
+      - name: Download macOS 15 wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: pypi-wheel-macos-15
+          path: artifacts/pypi-wheel-macos-15
+
+      - name: Download Linux CPU wheels
+        uses: actions/download-artifact@v8
+        with:
+          name: pypi-wheel-linux-cpu
+          path: artifacts/pypi-wheel-linux-cpu
+
+      - name: Download source distribution
+        uses: actions/download-artifact@v8
+        with:
+          name: pypi-sdist
+          path: artifacts/pypi-sdist
+
+      - name: Prepare distributions
+        run: bash scripts/collect-distributions.sh 10
+
+      - name: List distributions
+        run: ls -lh dist
+
+      - name: Check distribution archives
+        run: |
+          for wheel in dist/mlx_lattice-*.whl; do
+            unzip -t "$wheel"
+          done
+
           for sdist in dist/*.tar.gz; do
             tar -tzf "$sdist" >/dev/null
           done
 
       - name: Publish distributions
-        run: uv publish --trusted-publishing always dist/*
+        run: >
+          uv publish
+          --trusted-publishing always
+          --check-url https://pypi.org/simple/
+          dist/mlx_lattice-[0-9]*.whl
+          dist/mlx_lattice-*.tar.gz
 
   release:
     name: GitHub release
     runs-on: ubuntu-latest
-    needs: publish
+    needs: [publish-cuda13, publish-main]
     permissions:
       contents: write
 
