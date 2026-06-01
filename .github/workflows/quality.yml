@@ -99,10 +99,19 @@ jobs:
             -Ccmake.define.MLX_LATTICE_BUILD_CUDA=ON \
             -Ccmake.define.MLX_LATTICE_BUILD_METAL=OFF
 
+      - name: Configure runtime linker paths
+        run: |
+          mlx_package_dir="$(
+            uv run --no-sync python -c "import importlib.util, pathlib, sys; spec = importlib.util.find_spec('mlx'); roots = list(spec.submodule_search_locations or []) if spec else []; print(pathlib.Path(roots[0]) if roots else ''); sys.exit(0 if roots else 1)"
+          )"
+
+          {
+            echo "MLX_PACKAGE_DIR=${mlx_package_dir}"
+            echo "LD_LIBRARY_PATH=${mlx_package_dir}/lib:${CUDA_PATH}/lib64:${CUDA_PATH}/lib64/stubs:${LD_LIBRARY_PATH:-}"
+          } >> "${GITHUB_ENV}"
+
       - name: Check built backend flags
         run: |
-          export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${CUDA_PATH}/lib64/stubs:${LD_LIBRARY_PATH:-}"
-
           uv run --no-sync python - <<'PY'
           import mlx_lattice as lattice
 
@@ -114,7 +123,4 @@ jobs:
           PY
 
       - name: Test
-        run: |
-          export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${CUDA_PATH}/lib64/stubs:${LD_LIBRARY_PATH:-}"
-
-          uv run --no-sync pytest
+        run: uv run --no-sync pytest

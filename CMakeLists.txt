@@ -59,7 +59,9 @@ find_package(nanobind CONFIG REQUIRED PATHS "${nanobind_DIR}" NO_DEFAULT_PATH)
 
 if(NOT DEFINED MLX_DIR OR NOT EXISTS "${MLX_DIR}")
   execute_process(
-    COMMAND "${Python_EXECUTABLE}" -m mlx --cmake-dir
+    COMMAND
+      "${Python_EXECUTABLE}" -c
+      "import importlib.util, pathlib, sys; spec = importlib.util.find_spec('mlx'); roots = list(spec.submodule_search_locations or []) if spec else []; candidates = [pathlib.Path(root) / 'share' / 'cmake' / 'MLX' for root in roots]; matches = [path for path in candidates if (path / 'MLXConfig.cmake').exists()]; print(matches[0] if matches else ''); sys.exit(0 if matches else 1)"
     OUTPUT_STRIP_TRAILING_WHITESPACE
     OUTPUT_VARIABLE MLX_DIR
     COMMAND_ERROR_IS_FATAL ANY)
