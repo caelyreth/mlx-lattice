@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 import mlx.core as mx
 
-from mlx_lattice.point import KernelMap, build_kernel_map
+from mlx_lattice.point import KernelMap, build_kernel_map, inverse_map
 from mlx_lattice.types import Triple, triple
 
 
@@ -44,6 +44,11 @@ class CoordinateManager:
 
     def coords(self, key: CoordinateMapKey) -> mx.array:
         return self._coords[key]
+
+    def inverse_map(
+        self, source: CoordinateMapKey, target: CoordinateMapKey
+    ) -> mx.array:
+        return inverse_map(self.coords(source), self.coords(target))
 
     def kernel_map(
         self,

@@ -7,7 +7,7 @@ from typing import cast
 import mlx.core as mx
 
 from mlx_lattice.coords import CoordinateManager, CoordinateMapKey
-from mlx_lattice.point import KernelMap
+from mlx_lattice.point import KernelMap, inverse_map
 from mlx_lattice.types import Triple, triple
 
 
@@ -105,6 +105,18 @@ class SparseTensor:
             batch_counts=self.batch_counts if same_coords else None,
         )
 
+    def reuse_coords_from(self, other: SparseTensor) -> SparseTensor:
+        if not self.same_coords(other):
+            raise ValueError('sparse tensor coordinates must match.')
+        return SparseTensor(
+            other.coords,
+            self.feats,
+            other.stride,
+            coord_key=other.coord_key,
+            coord_manager=other.coord_manager,
+            batch_counts=other.batch_counts,
+        )
+
     def kernel_map(
         self,
         kernel_size: int | Sequence[int] = 3,
@@ -170,6 +182,18 @@ class SparseTensor:
             and self.coords.shape == other.coords.shape
             and self.coords.tolist() == other.coords.tolist()
         )
+
+    def inverse_map(self, other: SparseTensor) -> mx.array:
+        if (
+            self.coord_key is not None
+            and other.coord_key is not None
+            and self.coord_manager is not None
+            and self.coord_manager is other.coord_manager
+        ):
+            return self.coord_manager.inverse_map(
+                self.coord_key, other.coord_key
+            )
+        return inverse_map(self.coords, other.coords)
 
     def __add__(self, other: SparseTensor) -> SparseTensor:
         if not self.same_coords(other):

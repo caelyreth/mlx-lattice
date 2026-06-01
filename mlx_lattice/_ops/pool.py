@@ -7,7 +7,7 @@ import mlx.core as mx
 from mlx_lattice._native import max_pool3d_feats as _max_pool3d_feats
 from mlx_lattice._native import pool3d_feats as _pool3d_feats
 from mlx_lattice._ops.conv import conv3d
-from mlx_lattice.point import kernel_offsets
+from mlx_lattice.point import KernelMap, kernel_offsets
 from mlx_lattice.tensor import SparseTensor
 from mlx_lattice.types import triple
 
@@ -18,18 +18,28 @@ def pool3d(
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
     mode: str = 'sum',
+    kernel_map: KernelMap | None = None,
 ) -> SparseTensor:
     kernel = triple(kernel_size, name='kernel_size')
     op_stride = triple(stride, name='stride')
-    mapping = x.kernel_map(kernel_size=kernel, stride=op_stride)
+    mapping = kernel_map or x.kernel_map(
+        kernel_size=kernel, stride=op_stride
+    )
 
     if mode == 'avg':
-        summed = pool3d(x, kernel_size=kernel, stride=op_stride, mode='sum')
+        summed = pool3d(
+            x,
+            kernel_size=kernel,
+            stride=op_stride,
+            mode='sum',
+            kernel_map=mapping,
+        )
         counts = pool3d(
             x.replace(feats=mx.ones((x.n_points, 1), dtype=x.feats.dtype)),
             kernel_size=kernel,
             stride=op_stride,
             mode='sum',
+            kernel_map=mapping,
         )
         return summed.replace(feats=summed.feats / counts.feats)
     if mode == 'max':
@@ -49,7 +59,13 @@ def pool3d(
             mx.eye(x.channels, dtype=x.feats.dtype),
             (volume, x.channels, x.channels),
         )
-        return conv3d(x, weight, kernel_size=kernel, stride=op_stride)
+        return conv3d(
+            x,
+            weight,
+            kernel_size=kernel,
+            stride=op_stride,
+            kernel_map=mapping,
+        )
 
     feats = _pool3d_feats(
         x.feats,
@@ -66,8 +82,15 @@ def max_pool3d(
     *,
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
+    kernel_map: KernelMap | None = None,
 ) -> SparseTensor:
-    return pool3d(x, kernel_size=kernel_size, stride=stride, mode='max')
+    return pool3d(
+        x,
+        kernel_size=kernel_size,
+        stride=stride,
+        mode='max',
+        kernel_map=kernel_map,
+    )
 
 
 def avg_pool3d(
@@ -75,8 +98,15 @@ def avg_pool3d(
     *,
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
+    kernel_map: KernelMap | None = None,
 ) -> SparseTensor:
-    return pool3d(x, kernel_size=kernel_size, stride=stride, mode='avg')
+    return pool3d(
+        x,
+        kernel_size=kernel_size,
+        stride=stride,
+        mode='avg',
+        kernel_map=kernel_map,
+    )
 
 
 def global_pool(

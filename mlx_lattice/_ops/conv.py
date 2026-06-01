@@ -10,6 +10,7 @@ from mlx_lattice._native import (
     conv3d_residual_feats as _conv3d_residual_feats,
 )
 from mlx_lattice.point import (
+    KernelMap,
     build_generative_map,
     build_transposed_kernel_map,
 )
@@ -28,6 +29,7 @@ def conv3d(
     dilation: int | Sequence[int] = 1,
     transposed: bool = False,
     weight_layout: Literal['flat', 'mlx'] | None = None,
+    kernel_map: KernelMap | None = None,
 ) -> SparseTensor:
     if transposed:
         return conv_transpose3d(
@@ -39,6 +41,7 @@ def conv3d(
             padding=padding,
             dilation=dilation,
             weight_layout=weight_layout,
+            kernel_map=kernel_map,
         )
     kernel = triple(kernel_size, name='kernel_size')
     pad = triple(padding, name='padding')
@@ -57,7 +60,8 @@ def conv3d(
 
     op_stride = triple(stride, name='stride')
     if (
-        op_stride == (1, 1, 1)
+        kernel_map is None
+        and op_stride == (1, 1, 1)
         and kernel == (1, 1, 1)
         and pad == (0, 0, 0)
         and rate == (1, 1, 1)
@@ -69,7 +73,7 @@ def conv3d(
             feats = feats + bias
         return x.replace(feats=feats)
 
-    mapping = x.kernel_map(
+    mapping = kernel_map or x.kernel_map(
         kernel_size=kernel,
         stride=op_stride,
         padding=pad,
@@ -132,6 +136,7 @@ def generative_conv_transpose3d(
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
     weight_layout: Literal['flat', 'mlx'] | None = None,
+    kernel_map: KernelMap | None = None,
 ) -> SparseTensor:
     kernel = triple(kernel_size, name='kernel_size')
     op_stride = triple(stride, name='stride')
@@ -147,9 +152,13 @@ def generative_conv_transpose3d(
     if any(a % b != 0 for a, b in zip(x.stride, op_stride, strict=True)):
         raise ValueError('input tensor stride must be divisible by stride.')
 
-    mapping = build_generative_map(
+    mapping = kernel_map or build_generative_map(
         x.coords, kernel_size=kernel, stride=op_stride
     )
+    if weight.shape[0] != len(mapping.offsets):
+        raise ValueError(
+            'weight kernel dimension does not match kernel_size.'
+        )
     feats = _conv3d_feats(
         x.feats,
         weight,
@@ -183,6 +192,7 @@ def conv_transpose3d(
     padding: int | Sequence[int] = 0,
     dilation: int | Sequence[int] = 1,
     weight_layout: Literal['flat', 'mlx'] | None = None,
+    kernel_map: KernelMap | None = None,
 ) -> SparseTensor:
     kernel = triple(kernel_size, name='kernel_size')
     op_stride = triple(stride, name='stride')
@@ -205,13 +215,17 @@ def conv_transpose3d(
     if any(a % b != 0 for a, b in zip(x.stride, op_stride, strict=True)):
         raise ValueError('input tensor stride must be divisible by stride.')
 
-    mapping = build_transposed_kernel_map(
+    mapping = kernel_map or build_transposed_kernel_map(
         x.coords,
         kernel_size=kernel,
         stride=op_stride,
         padding=pad,
         dilation=rate,
     )
+    if weight.shape[0] != len(mapping.offsets):
+        raise ValueError(
+            'weight kernel dimension does not match kernel_size.'
+        )
     feats = _conv3d_feats(
         x.feats,
         weight,

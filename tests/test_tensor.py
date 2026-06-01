@@ -37,6 +37,19 @@ def test_sparse_tensor_reuses_kernel_map():
     assert first is second
 
 
+def test_sparse_tensor_reuses_explicit_coordinate_map():
+    coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
+    feats = mx.ones((2, 1), dtype=mx.float32)
+    x = SparseTensor(coords, feats)
+    y = SparseTensor(mx.array(coords.tolist(), dtype=mx.int32), feats + 1)
+
+    reused = y.reuse_coords_from(x)
+
+    assert reused.coord_key == x.coord_key
+    assert reused.coord_manager is x.coord_manager
+    assert reused.inverse_map(x).tolist() == [0, 1]
+
+
 def test_sparse_tensor_replace_and_astype():
     coords = mx.array([[0, 0, 0, 0]], dtype=mx.int32)
     feats = mx.array([[1.0]], dtype=mx.float32)
