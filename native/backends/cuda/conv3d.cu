@@ -208,6 +208,39 @@ void eval_pool3d_feats(
     );
 }
 
+void eval_max_pool3d_feats(
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs,
+    mx::Stream stream,
+    int rows,
+    int channels
+) {
+    const auto& feats = inputs[0];
+    const auto& maps = inputs[1];
+    const auto& kernels = inputs[2];
+    auto& out = outputs[0];
+
+    out.set_data(mx::allocator::malloc(out.nbytes()));
+    auto& encoder = mx::cu::get_command_encoder(stream);
+    encoder.set_input_array(feats);
+    encoder.set_input_array(maps);
+    encoder.set_input_array(kernels);
+    encoder.set_output_array(out);
+
+    launch(
+        encoder,
+        max_pool3d_feats_float32,
+        static_cast<size_t>(rows) * channels,
+        mx::gpu_ptr<float>(feats),
+        mx::gpu_ptr<int32_t>(maps),
+        mx::gpu_ptr<int32_t>(kernels),
+        mx::gpu_ptr<float>(out),
+        rows,
+        channels,
+        maps.shape(0)
+    );
+}
+
 void eval_pool3d_feats_grad(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs,

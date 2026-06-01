@@ -31,6 +31,13 @@ void validate_pool3d_feats(
     int out_rows
 );
 
+void validate_max_pool3d_feats(
+    const mx::array& feats,
+    const mx::array& maps,
+    const mx::array& kernels,
+    int out_rows
+);
+
 void validate_pool3d_feats_grad(
     const mx::array& grad,
     const mx::array& maps,

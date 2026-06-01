@@ -236,6 +236,34 @@ using namespace metal;
     out[elem] = acc;
 }
 
+[[kernel]] void max_pool3d_feats_float32(
+    device const float* feats [[buffer(0)]],
+    device const int* maps [[buffer(1)]],
+    device const int* kernels [[buffer(2)]],
+    device float* out [[buffer(3)]],
+    constant const int& rows [[buffer(4)]],
+    constant const int& channels [[buffer(5)]],
+    constant const int& pair_count [[buffer(6)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    uint total = uint(rows * channels);
+    if (elem >= total) {
+        return;
+    }
+
+    int row = int(elem / uint(channels));
+    int channel = int(elem - uint(row * channels));
+    float acc = -INFINITY;
+    for (int pair = 0; pair < pair_count; ++pair) {
+        if (kernels[pair] < 0 || maps[pair * 2 + 1] != row) {
+            continue;
+        }
+        int in_row = maps[pair * 2];
+        acc = max(acc, feats[in_row * channels + channel]);
+    }
+    out[elem] = acc;
+}
+
 [[kernel]] void pool3d_feats_grad_float32(
     device const float* grad [[buffer(0)]],
     device const int* maps [[buffer(1)]],

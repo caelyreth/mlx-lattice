@@ -93,6 +93,21 @@ void validate_pool3d_feats(
     }
 }
 
+void validate_max_pool3d_feats(
+    const mx::array& feats,
+    const mx::array& maps,
+    const mx::array& kernels,
+    int out_rows
+) {
+    if (out_rows < 0) {
+        throw std::invalid_argument("out_rows must be non-negative.");
+    }
+    if (feats.ndim() != 2 || feats.dtype() != mx::float32) {
+        throw std::invalid_argument("feats must be a float32 matrix.");
+    }
+    validate_maps_and_kernels(maps, kernels);
+}
+
 void validate_pool3d_feats_grad(
     const mx::array& grad,
     const mx::array& maps,

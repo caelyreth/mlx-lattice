@@ -52,6 +52,46 @@ void eval_pool3d_feats(
 #endif
 }
 
+void eval_max_pool3d_feats(
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs,
+    mx::Stream stream,
+    int rows,
+    int channels
+) {
+#ifdef _METAL_
+    const auto& feats = inputs[0];
+    const auto& maps = inputs[1];
+    const auto& kernels = inputs[2];
+    auto& out = outputs[0];
+
+    out.set_data(mx::allocator::malloc(out.nbytes()));
+    auto& device = mx::metal::device(stream.device);
+    auto library = device.get_library("mlx_lattice", binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+
+    auto pool = device.get_kernel("max_pool3d_feats_float32", library);
+    auto elements = static_cast<size_t>(rows) * static_cast<size_t>(channels);
+    if (elements == 0) {
+        return;
+    }
+
+    encoder.set_compute_pipeline_state(pool);
+    encoder.set_input_array(feats, 0);
+    encoder.set_input_array(maps, 1);
+    encoder.set_input_array(kernels, 2);
+    encoder.set_output_array(out, 3);
+    encoder.set_bytes(rows, 4);
+    encoder.set_bytes(channels, 5);
+    int pair_count = maps.shape(0);
+    encoder.set_bytes(pair_count, 6);
+    auto group = std::min(elements, pool->maxTotalThreadsPerThreadgroup());
+    encoder.dispatch_threads(MTL::Size(elements, 1, 1), MTL::Size(group, 1, 1));
+#else
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
 void eval_pool3d_feats_grad(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs,

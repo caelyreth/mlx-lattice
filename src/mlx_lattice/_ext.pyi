@@ -113,3 +113,11 @@ def pool3d_feats(
     *,
     stream: Any | None = None,
 ) -> mx.array: ...
+def max_pool3d_feats(
+    feats: mx.array,
+    maps: mx.array,
+    kernels: mx.array,
+    out_rows: int,
+    *,
+    stream: Any | None = None,
+) -> mx.array: ...

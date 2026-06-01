@@ -221,6 +221,34 @@ __global__ void pool3d_feats_float32(
     out[elem] = acc;
 }
 
+__global__ void max_pool3d_feats_float32(
+    const float* __restrict__ feats,
+    const int* __restrict__ maps,
+    const int* __restrict__ kernels,
+    float* __restrict__ out,
+    int rows,
+    int channels,
+    int pair_count
+) {
+    int elem = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * channels;
+    if (elem >= total) {
+        return;
+    }
+
+    int row = elem / channels;
+    int channel = elem - row * channels;
+    float acc = -INFINITY;
+    for (int pair = 0; pair < pair_count; ++pair) {
+        if (kernels[pair] < 0 || maps[pair * 2 + 1] != row) {
+            continue;
+        }
+        int in_row = maps[pair * 2];
+        acc = fmaxf(acc, feats[in_row * channels + channel]);
+    }
+    out[elem] = acc;
+}
+
 __global__ void pool3d_feats_grad_float32(
     const float* __restrict__ grad,
     const int* __restrict__ maps,

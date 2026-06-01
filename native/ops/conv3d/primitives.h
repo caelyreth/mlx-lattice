@@ -35,6 +35,9 @@ std::shared_ptr<mx::Primitive>
 make_pool3d_feats_primitive(mx::Stream stream, int rows, int channels);
 
 std::shared_ptr<mx::Primitive>
+make_max_pool3d_feats_primitive(mx::Stream stream, int rows, int channels);
+
+std::shared_ptr<mx::Primitive>
 make_pool3d_feats_grad_primitive(mx::Stream stream, int rows, int channels);
 
 std::shared_ptr<mx::Primitive> make_conv3d_feats_grad_primitive(

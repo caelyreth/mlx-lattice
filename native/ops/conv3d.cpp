@@ -132,6 +132,28 @@ mx::array pool3d_feats(
     );
 }
 
+mx::array max_pool3d_feats(
+    const mx::array& feats,
+    const mx::array& maps,
+    const mx::array& kernels,
+    int out_rows,
+    mx::StreamOrDevice stream
+) {
+    validate_max_pool3d_feats(feats, maps, kernels, out_rows);
+
+    auto s = to_stream(stream);
+    auto feats_contiguous = mx::contiguous(feats, false, s);
+    auto maps_contiguous = mx::contiguous(maps, false, s);
+    auto kernels_contiguous = mx::contiguous(kernels, false, s);
+
+    return mx::array(
+        mx::Shape{out_rows, feats.shape(1)},
+        mx::float32,
+        make_max_pool3d_feats_primitive(s, out_rows, feats.shape(1)),
+        {feats_contiguous, maps_contiguous, kernels_contiguous}
+    );
+}
+
 mx::array pool3d_feats_grad(
     const mx::array& grad,
     const mx::array& maps,

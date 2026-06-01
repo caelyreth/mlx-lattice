@@ -328,6 +328,57 @@ class Pool3dFeats : public mx::Primitive {
     int channels_;
 };
 
+class MaxPool3dFeats : public mx::Primitive {
+  public:
+    MaxPool3dFeats(mx::Stream stream, int rows, int channels)
+        : mx::Primitive(stream), rows_(rows), channels_(channels) {}
+
+    void eval_cpu(
+        const std::vector<mx::array>& inputs,
+        std::vector<mx::array>& outputs
+    ) override {
+        cpu::eval_max_pool3d_feats(inputs, outputs, stream(), rows_, channels_);
+    }
+
+    void eval_gpu(
+        const std::vector<mx::array>& inputs,
+        std::vector<mx::array>& outputs
+    ) override {
+        eval_gpu_max_pool3d_feats(inputs, outputs, stream(), rows_, channels_);
+    }
+
+    std::vector<mx::array>
+    jvp(const std::vector<mx::array>&,
+        const std::vector<mx::array>&,
+        const std::vector<int>&) override {
+        throw std::runtime_error("MaxPool3dFeats has no jvp implementation.");
+    }
+
+    std::vector<mx::array>
+    vjp(const std::vector<mx::array>&,
+        const std::vector<mx::array>&,
+        const std::vector<int>&,
+        const std::vector<mx::array>&) override {
+        throw std::runtime_error("MaxPool3dFeats has no vjp implementation.");
+    }
+
+    std::pair<std::vector<mx::array>, std::vector<int>>
+    vmap(const std::vector<mx::array>&, const std::vector<int>&) override {
+        throw std::runtime_error("MaxPool3dFeats has no vmap implementation.");
+    }
+
+    const char* name() const override { return "MaxPool3dFeats"; }
+
+    bool is_equivalent(const mx::Primitive& other) const override {
+        const auto& pool = static_cast<const MaxPool3dFeats&>(other);
+        return rows_ == pool.rows_ && channels_ == pool.channels_;
+    }
+
+  private:
+    int rows_;
+    int channels_;
+};
+
 class Pool3dFeatsGrad : public mx::Primitive {
   public:
     Pool3dFeatsGrad(mx::Stream stream, int rows, int channels)
@@ -548,6 +599,11 @@ std::shared_ptr<mx::Primitive> make_conv3d_residual_feats_primitive(
 std::shared_ptr<mx::Primitive>
 make_pool3d_feats_primitive(mx::Stream stream, int rows, int channels) {
     return std::make_shared<Pool3dFeats>(stream, rows, channels);
+}
+
+std::shared_ptr<mx::Primitive>
+make_max_pool3d_feats_primitive(mx::Stream stream, int rows, int channels) {
+    return std::make_shared<MaxPool3dFeats>(stream, rows, channels);
 }
 
 std::shared_ptr<mx::Primitive>

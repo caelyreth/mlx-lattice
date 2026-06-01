@@ -68,6 +68,16 @@ NB_MODULE(_ext, m) {
         "stream"_a = nb::none()
     );
     m.def(
+        "max_pool3d_feats",
+        &mlx_lattice::max_pool3d_feats,
+        "feats"_a,
+        "maps"_a,
+        "kernels"_a,
+        "out_rows"_a,
+        nb::kw_only(),
+        "stream"_a = nb::none()
+    );
+    m.def(
         "downsample_coords",
         [](const mlx_lattice::mx::array& coords, int sx, int sy, int sz) {
             return mlx_lattice::downsample_coords(coords, {sx, sy, sz});

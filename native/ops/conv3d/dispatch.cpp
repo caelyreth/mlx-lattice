@@ -120,6 +120,26 @@ void eval_gpu_pool3d_feats(
     require_gpu_backend();
 }
 
+void eval_gpu_max_pool3d_feats(
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs,
+    mx::Stream stream,
+    int rows,
+    int channels
+) {
+#if MLX_LATTICE_HAS_CUDA
+    if (mx::cu::is_available()) {
+        cuda::eval_max_pool3d_feats(inputs, outputs, stream, rows, channels);
+        return;
+    }
+#endif
+#if MLX_LATTICE_HAS_METAL
+    metal::eval_max_pool3d_feats(inputs, outputs, stream, rows, channels);
+    return;
+#endif
+    require_gpu_backend();
+}
+
 void eval_gpu_pool3d_feats_grad(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs,
