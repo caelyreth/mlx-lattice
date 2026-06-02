@@ -1,0 +1,11 @@
+CompileFlags:
+  CompilationDatabase: build/clangd
+
+Index:
+  Background: Build
+
+Diagnostics:
+  ClangTidy:
+    Add:
+      - bugprone-*
+      - performance-*

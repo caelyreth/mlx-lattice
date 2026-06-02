@@ -1,3 +1,4 @@
+# MARK: - metadata
 [project]
 name = "mlx-lattice"
 version = "0.2.0"
@@ -13,3 +14,63 @@ Homepage = "https://github.com/utakotoba/mlx-lattice"
 Repository = "https://github.com/utakotoba/mlx-lattice.git"
 Issues = "https://github.com/utakotoba/mlx-lattice/issues"
 Changelog = "https://github.com/utakotoba/mlx-lattice/releases"
+
+[build-system]
+requires = ["scikit-build-core>=0.12", "nanobind>=2"]
+build-backend = "scikit_build_core.build"
+
+# MARK: - deps
+
+[dependency-groups]
+dev = ["nanobind>=2", "pytest>=8", "ruff>=0.15.15", "ty>=0.0.42"]
+
+# MARK: - build
+
+[tool.scikit-build]
+minimum-version = "0.12"
+build-dir = "build/{state}-{wheel_tag}"
+wheel.packages = ["mlx_lattice"]
+wheel.py-api = "cp312"
+sdist.include = [
+  "CMakeLists.txt",
+  "CMakePresets.json",
+  "mlx_lattice/**",
+  "native/**",
+  "tests/**",
+]
+sdist.exclude = [
+  ".DS_Store",
+  ".ruff_cache/**",
+  ".pytest_cache/**",
+  "build/**",
+  "dist/**",
+  "**/.DS_Store",
+  "**/*.py[cod]",
+  "**/__pycache__/**",
+]
+
+[tool.scikit-build.editable]
+rebuild = true
+
+# MARK: - fmt + lint
+
+[tool.ruff]
+line-length = 76
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RUF"]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.ty.rules]
+unused-ignore-comment = "warn"
+redundant-cast = "warn"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

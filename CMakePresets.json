@@ -1,0 +1,33 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 27,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "clangd",
+      "displayName": "clangd",
+      "description": "Generate compile_commands.json for clangd.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clangd",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
+        "SKBUILD": "ON",
+        "SKBUILD_PROJECT_VERSION": "0.2.0",
+        "SKBUILD_SABI_COMPONENT": "Development.SABIModule",
+        "SKBUILD_SABI_VERSION": "3.12"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "clangd",
+      "displayName": "clangd",
+      "configurePreset": "clangd"
+    }
+  ]
+}
