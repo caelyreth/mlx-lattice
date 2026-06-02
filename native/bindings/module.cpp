@@ -3,7 +3,6 @@
 
 #include <string>
 
-#include "lattice/arithmetic.h"
 #include "lattice/runtime.h"
 
 namespace nb = nanobind;
@@ -32,12 +31,5 @@ NB_MODULE(_ext, m) {
         "capabilities",
         &capabilities,
         "Return compiled native backend capabilities."
-    );
-    m.def(
-        "add_ints",
-        &mlx_lattice::add_ints,
-        "Add two integers using the native C++ core.",
-        nb::arg("lhs"),
-        nb::arg("rhs")
     );
 }

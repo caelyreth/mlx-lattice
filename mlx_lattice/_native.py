@@ -8,7 +8,3 @@ def backend_info() -> dict[str, object]:
         'version': _ext.version(),
         'capabilities': _ext.capabilities(),
     }
-
-
-def add_ints(lhs: int, rhs: int) -> int:
-    return _ext.add_ints(lhs, rhs)

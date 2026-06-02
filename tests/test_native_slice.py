@@ -13,7 +13,3 @@ def test_native_backend_info() -> None:
         'cuda': False,
         'rocm': False,
     }
-
-
-def test_native_add_ints() -> None:
-    assert mlx_lattice.add_ints(20, 22) == 42

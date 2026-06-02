@@ -4,9 +4,7 @@ add_library(mlx_lattice_core STATIC)
 
 target_sources(
   mlx_lattice_core
-  PRIVATE
-    arithmetic.cpp
-    runtime.cpp)
+  PRIVATE runtime.cpp)
 
 target_include_directories(
   mlx_lattice_core
