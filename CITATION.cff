@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+title: mlx-lattice
+type: software
+license: MIT
+year: 2026
+abstract: >-
+  Sparse convolution library for MLX designed for point
+  cloud operation
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+authors:
+  - given-names: Zhenyan
+    family-names: Lin
+    affiliation: Hangzhou Normal University
+repository-code: https://github.com/utakotoba/mlx-lattice
+
+# acknowledgements
+references:
+  - type: software
+    title: >-
+      MLX: Efficient and flexible machine learning on Apple
+      silicon
+    authors:
+      - given-names: Awni
+        family-names: Hannun
+        affiliation: Apple
+      - given-names: Jagrit
+        family-names: Digani
+        affiliation: Apple
+      - given-names: Angelos
+        family-names: Katharopoulos
+        affiliation: Apple
+      - given-names: Ronan
+        family-names: Collobert
+        affiliation: Apple
+    year: 2023
+    repository-code: https://github.com/ml-explore
+    license: MIT
+    scope: >-
+      Dependency used for tensor computation on Apple silicon
