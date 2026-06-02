@@ -15,6 +15,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_OSX_SYSROOT": "macosx",
         "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
         "SKBUILD": "ON",
         "SKBUILD_PROJECT_VERSION": "0.2.0",

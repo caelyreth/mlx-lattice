@@ -1,0 +1,7 @@
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*
+WarningsAsErrors: "*"
+HeaderFilterRegex: "^native/"
+FormatStyle: file

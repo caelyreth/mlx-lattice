@@ -20,9 +20,7 @@ nb::dict capabilities() {
     return out;
 }
 
-std::string version() {
-    return std::string(mlx_lattice::version());
-}
+std::string version() { return std::string(mlx_lattice::version()); }
 
 } // namespace
 

@@ -22,7 +22,13 @@ build-backend = "scikit_build_core.build"
 # MARK: - deps
 
 [dependency-groups]
-dev = ["nanobind>=2", "pytest>=8", "ruff>=0.15.15", "ty>=0.0.42"]
+dev = [
+  "nanobind>=2",
+  "prek>=0.4.3",
+  "pytest>=8",
+  "ruff>=0.15.15",
+  "ty>=0.0.42",
+]
 
 # MARK: - build
 

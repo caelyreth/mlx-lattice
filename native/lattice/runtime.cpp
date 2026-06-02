@@ -2,9 +2,7 @@
 
 namespace mlx_lattice {
 
-std::string_view version() noexcept {
-    return MLX_LATTICE_VERSION;
-}
+std::string_view version() noexcept { return MLX_LATTICE_VERSION; }
 
 Capabilities capabilities() noexcept {
     return Capabilities{

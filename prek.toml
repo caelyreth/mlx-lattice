@@ -1,0 +1,65 @@
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "check-toml"
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "ruff format"
+entry = "uv run ruff format"
+language = "system"
+types_or = ["python", "pyi"]
+
+[[repos.hooks]]
+id = "ruff-check-fix"
+name = "ruff check --fix"
+entry = "uv run ruff check --fix"
+language = "system"
+types_or = ["python", "pyi"]
+
+[[repos.hooks]]
+id = "pytest"
+name = "pytest"
+entry = "uv run pytest"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "cmake-clangd"
+name = "cmake --preset clangd"
+entry = "cmake --preset clangd"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "clang-format"
+name = "clang-format"
+entry = "clang-format -i"
+language = "system"
+files = "^native/.*\\.(c|cc|cpp|cxx|h|hh|hpp|hxx|metal|cu|cuh)$"
+
+[[repos.hooks]]
+id = "clang-tidy"
+name = "clang-tidy"
+entry = "clang-tidy -p build/clangd"
+language = "system"
+files = "^native/.*\\.(c|cc|cpp|cxx)$"
