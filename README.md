@@ -17,4 +17,14 @@ Copyright © 2026 Z.Y. Lin; open sourced under [Apache-2.0 license](/LICENSE)
 
 If you use this project in research, please cite this repository using the metadata in [`CITATION.cff`](./CITATION.cff).
 
+```BibTex
+@software{mlx-lattice2026,
+  author = {Lin, Zhenyan},
+  license = {MIT},
+  title = {{mlx-lattice}: Sparse convolution library for MLX},
+  url = {https://github.com/utakotoba/mlx-lattice},
+  year = {2026},
+}
+```
+
 This project uses [MLX](https://github.com/ml-explore/mlx) for machine learning on Apple silicon. If MLX is relevant to your research results, please cite MLX as requested by its authors, refer to [mlx#citing-mlx](https://github.com/ml-explore/mlx#citing-mlx).

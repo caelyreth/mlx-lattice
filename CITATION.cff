@@ -3,9 +3,7 @@ title: mlx-lattice
 type: software
 license: MIT
 year: 2026
-abstract: >-
-  Sparse convolution library for MLX designed for point
-  cloud operation
+abstract: Sparse convolution library for MLX
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
