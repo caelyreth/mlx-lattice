@@ -4,6 +4,7 @@ nanobind_add_module(
   _ext
   STABLE_ABI
   NB_STATIC
+  NB_DOMAIN mlx
   module.cpp)
 
 target_link_libraries(_ext PRIVATE mlx_lattice_core)
@@ -28,3 +29,7 @@ add_custom_target(_ext_stub ALL DEPENDS ${MLX_LATTICE_EXT_STUB})
 
 install(TARGETS _ext LIBRARY DESTINATION mlx_lattice)
 install(FILES ${MLX_LATTICE_EXT_STUB} DESTINATION mlx_lattice)
+install(
+  FILES ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/mlx_lattice.metallib
+  DESTINATION mlx_lattice
+  OPTIONAL)

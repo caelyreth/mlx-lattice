@@ -3,9 +3,16 @@ from __future__ import annotations
 from mlx_lattice.core.coords import (
     CoordinateManager,
     CoordinateMapKey,
+    build_generative_map,
+    build_kernel_map,
+    build_transposed_kernel_map,
     contains_coords,
+    downsample_coords,
+    intersection_coords,
     inverse_map,
+    kernel_offsets,
     lookup_coords,
+    union_coords,
 )
 from mlx_lattice.core.maps import (
     ConvSpec,
@@ -37,8 +44,15 @@ __all__ = [
     'PoolSpec',
     'SparseTensor',
     'Triple',
+    'build_generative_map',
+    'build_kernel_map',
+    'build_transposed_kernel_map',
     'contains_coords',
+    'downsample_coords',
+    'intersection_coords',
     'inverse_map',
+    'kernel_offsets',
     'lookup_coords',
     'triple',
+    'union_coords',
 ]

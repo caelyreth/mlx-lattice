@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from typing import cast
+
 import mlx_lattice
 
 
 def test_native_backend_info() -> None:
     info = mlx_lattice.backend_info()
+    capabilities = cast(dict[str, bool], info['capabilities'])
 
     assert info['version'] == mlx_lattice.__version__
-    assert info['capabilities'] == {
-        'cpu': True,
-        'metal': False,
-        'cuda': False,
-        'rocm': False,
-    }
+    assert capabilities['cpu'] is True
+    assert set(capabilities) == {'cpu', 'metal', 'cuda', 'rocm'}
+    assert all(isinstance(value, bool) for value in capabilities.values())

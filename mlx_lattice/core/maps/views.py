@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import mlx.core as mx
 
+from mlx_lattice.core.types import Triple
+
 
 @dataclass(frozen=True, slots=True)
 class EdgeIndex:
@@ -105,6 +107,7 @@ class InputCsrView:
 @dataclass(frozen=True, slots=True, init=False)
 class KernelMap:
     edges: EdgeIndex
+    kernel_offsets: tuple[Triple, ...]
     out_coords: mx.array | None = None
     output_csr: OutputCsrView | None = None
     kernel_buckets: KernelBucketView | None = None
@@ -119,6 +122,7 @@ class KernelMap:
         out_rows: mx.array,
         kernel_ids: mx.array,
         *,
+        kernel_offsets: tuple[Triple, ...] = (),
         out_coords: mx.array | None = None,
         output_csr: OutputCsrView | None = None,
         kernel_buckets: KernelBucketView | None = None,
@@ -131,9 +135,20 @@ class KernelMap:
             _validate_coords(out_coords, name='out_coords')
 
         edges = EdgeIndex(in_rows, out_rows, kernel_ids)
+        normalized_kernel_offsets = tuple(
+            (int(x), int(y), int(z)) for x, y, z in kernel_offsets
+        )
         normalized_n_in_rows = _optional_count(n_in_rows, 'n_in_rows')
         normalized_n_out_rows = _optional_count(n_out_rows, 'n_out_rows')
         normalized_n_kernels = _optional_count(n_kernels, 'n_kernels')
+        if (
+            normalized_kernel_offsets
+            and normalized_n_kernels is not None
+            and len(normalized_kernel_offsets) != normalized_n_kernels
+        ):
+            raise ValueError('n_kernels must match kernel_offsets.')
+        if normalized_kernel_offsets:
+            normalized_n_kernels = len(normalized_kernel_offsets)
         if out_coords is not None:
             out_coord_rows = int(out_coords.shape[0])
             if (
@@ -166,6 +181,9 @@ class KernelMap:
             raise ValueError('n_kernels must match kernel buckets.')
 
         object.__setattr__(self, 'edges', edges)
+        object.__setattr__(
+            self, 'kernel_offsets', normalized_kernel_offsets
+        )
         object.__setattr__(self, 'out_coords', out_coords)
         object.__setattr__(self, 'output_csr', output_csr)
         object.__setattr__(self, 'kernel_buckets', kernel_buckets)
