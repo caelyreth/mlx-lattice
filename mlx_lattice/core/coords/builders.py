@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import cast
 
 import mlx.core as mx
 
 from mlx_lattice._native import ext
-from mlx_lattice.core.coords.validation import (
-    make_i32_array,
-    validate_coords,
-)
+from mlx_lattice.core.coords.validation import validate_coords
 from mlx_lattice.core.maps import (
     InputCsrView,
     KernelBucketView,
@@ -20,7 +17,14 @@ from mlx_lattice.core.maps import (
 from mlx_lattice.core.types import Triple, triple
 
 type NativeKernelMap = tuple[
-    mx.array, mx.array, mx.array, mx.array, mx.array
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    tuple[mx.array, mx.array, mx.array],
+    tuple[mx.array, mx.array, mx.array],
+    tuple[mx.array, mx.array, mx.array],
 ]
 
 
@@ -133,141 +137,33 @@ def _kernel_map_from_native(
     *,
     n_in_rows: int,
 ) -> KernelMap:
-    in_rows, out_rows, kernel_ids, out_coords, offset_values = native
+    (
+        in_rows,
+        out_rows,
+        kernel_ids,
+        out_coords,
+        offset_values,
+        output_csr,
+        kernel_buckets,
+        input_csr,
+    ) = native
     offsets = _offsets_from_array(offset_values)
-    edges = _edges_from_arrays(in_rows, out_rows, kernel_ids)
-    return _kernel_map_from_edges(
-        edges,
-        in_rows=in_rows,
-        out_rows=out_rows,
-        kernel_ids=kernel_ids,
-        out_coords=out_coords,
+    return KernelMap(
+        in_rows,
+        out_rows,
+        kernel_ids,
         kernel_offsets=offsets,
+        out_coords=out_coords,
+        output_csr=OutputCsrView(*output_csr),
+        kernel_buckets=KernelBucketView(*kernel_buckets),
+        input_csr=InputCsrView(*input_csr),
         n_in_rows=n_in_rows,
         n_out_rows=int(out_coords.shape[0]),
+        n_kernels=len(offsets),
     )
-
-
-def _kernel_map_from_edges(
-    edges: Sequence[tuple[int, int, int]],
-    *,
-    in_rows: mx.array | None = None,
-    out_rows: mx.array | None = None,
-    kernel_ids: mx.array | None = None,
-    out_coords: mx.array,
-    kernel_offsets: tuple[Triple, ...],
-    n_in_rows: int,
-    n_out_rows: int,
-) -> KernelMap:
-    in_row_values = [edge[0] for edge in edges]
-    out_row_values = [edge[1] for edge in edges]
-    kernel_id_values = [edge[2] for edge in edges]
-    return KernelMap(
-        make_i32_array(in_row_values) if in_rows is None else in_rows,
-        make_i32_array(out_row_values) if out_rows is None else out_rows,
-        make_i32_array(kernel_id_values)
-        if kernel_ids is None
-        else kernel_ids,
-        kernel_offsets=kernel_offsets,
-        out_coords=out_coords,
-        output_csr=_output_csr_view(edges, n_out_rows),
-        kernel_buckets=_kernel_bucket_view(edges, len(kernel_offsets)),
-        input_csr=_input_csr_view(edges, n_in_rows),
-        n_in_rows=n_in_rows,
-        n_out_rows=n_out_rows,
-        n_kernels=len(kernel_offsets),
-    )
-
-
-def _output_csr_view(
-    edges: Sequence[tuple[int, int, int]],
-    n_out_rows: int,
-) -> OutputCsrView:
-    grouped = _group_by(edges, key=lambda edge: edge[1], rows=n_out_rows)
-    return OutputCsrView(
-        offsets=make_i32_array(_offsets(grouped)),
-        in_rows=make_i32_array(
-            edge[0] for bucket in grouped for edge in bucket
-        ),
-        kernel_ids=make_i32_array(
-            edge[2] for bucket in grouped for edge in bucket
-        ),
-    )
-
-
-def _kernel_bucket_view(
-    edges: Sequence[tuple[int, int, int]],
-    n_kernels: int,
-) -> KernelBucketView:
-    grouped = _group_by(edges, key=lambda edge: edge[2], rows=n_kernels)
-    return KernelBucketView(
-        offsets=make_i32_array(_offsets(grouped)),
-        in_rows=make_i32_array(
-            edge[0] for bucket in grouped for edge in bucket
-        ),
-        out_rows=make_i32_array(
-            edge[1] for bucket in grouped for edge in bucket
-        ),
-    )
-
-
-def _input_csr_view(
-    edges: Sequence[tuple[int, int, int]],
-    n_in_rows: int,
-) -> InputCsrView:
-    grouped = _group_by(edges, key=lambda edge: edge[0], rows=n_in_rows)
-    return InputCsrView(
-        offsets=make_i32_array(_offsets(grouped)),
-        out_rows=make_i32_array(
-            edge[1] for bucket in grouped for edge in bucket
-        ),
-        kernel_ids=make_i32_array(
-            edge[2] for bucket in grouped for edge in bucket
-        ),
-    )
-
-
-def _group_by(
-    edges: Sequence[tuple[int, int, int]],
-    *,
-    key: Callable[[tuple[int, int, int]], int],
-    rows: int,
-) -> list[list[tuple[int, int, int]]]:
-    grouped: list[list[tuple[int, int, int]]] = [[] for _ in range(rows)]
-    for edge in edges:
-        grouped[int(key(edge))].append(edge)
-    return grouped
-
-
-def _offsets(grouped: Sequence[Sequence[object]]) -> list[int]:
-    out = [0]
-    total = 0
-    for bucket in grouped:
-        total += len(bucket)
-        out.append(total)
-    return out
 
 
 # MARK: - arrays
-
-
-def _edges_from_arrays(
-    in_rows: mx.array,
-    out_rows: mx.array,
-    kernel_ids: mx.array,
-) -> list[tuple[int, int, int]]:
-    in_values = cast(list[int], in_rows.tolist())
-    out_values = cast(list[int], out_rows.tolist())
-    kernel_values = cast(list[int], kernel_ids.tolist())
-    return [
-        (int(in_row), int(out_row), int(kernel_id))
-        for in_row, out_row, kernel_id in zip(
-            in_values,
-            out_values,
-            kernel_values,
-            strict=True,
-        )
-    ]
 
 
 def _offsets_from_array(values: mx.array) -> tuple[Triple, ...]:

@@ -48,7 +48,22 @@ nb::tuple map_tuple(const mlx_lattice::NativeKernelMap& map) {
         map.out_rows,
         map.kernel_ids,
         map.out_coords,
-        map.kernel_offsets
+        map.kernel_offsets,
+        nb::make_tuple(
+            map.output_csr.offsets,
+            map.output_csr.in_rows,
+            map.output_csr.kernel_ids
+        ),
+        nb::make_tuple(
+            map.kernel_buckets.offsets,
+            map.kernel_buckets.in_rows,
+            map.kernel_buckets.out_rows
+        ),
+        nb::make_tuple(
+            map.input_csr.offsets,
+            map.input_csr.out_rows,
+            map.input_csr.kernel_ids
+        )
     );
 }
 
@@ -147,7 +162,10 @@ NB_MODULE(_ext, m) {
             "padding: collections.abc.Sequence[int], "
             "dilation: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array], "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array], "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array]]"
         ),
         "Build a forward sparse kernel map."
     );
@@ -172,7 +190,10 @@ NB_MODULE(_ext, m) {
             "kernel_size: collections.abc.Sequence[int], "
             "stride: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array], "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array], "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array]]"
         ),
         "Build a generative sparse kernel map."
     );
@@ -205,7 +226,10 @@ NB_MODULE(_ext, m) {
             "padding: collections.abc.Sequence[int], "
             "dilation: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array], "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array], "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array]]"
         ),
         "Build a transposed sparse kernel map."
     );

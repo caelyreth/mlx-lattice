@@ -76,16 +76,51 @@ class GenerativeKernelMap : public mx::Primitive {
         auto& out_rows = outputs[1];
         auto& kernel_ids = outputs[2];
         auto& out_coords = outputs[3];
+        auto& output_csr_offsets = outputs[4];
+        auto& output_csr_in_rows = outputs[5];
+        auto& output_csr_kernel_ids = outputs[6];
+        auto& kernel_bucket_offsets = outputs[7];
+        auto& kernel_bucket_in_rows = outputs[8];
+        auto& kernel_bucket_out_rows = outputs[9];
+        auto& input_csr_offsets = outputs[10];
+        auto& input_csr_out_rows = outputs[11];
+        auto& input_csr_kernel_ids = outputs[12];
 
         in_rows.set_data(mx::allocator::malloc(in_rows.nbytes()));
         out_rows.set_data(mx::allocator::malloc(out_rows.nbytes()));
         kernel_ids.set_data(mx::allocator::malloc(kernel_ids.nbytes()));
         out_coords.set_data(mx::allocator::malloc(out_coords.nbytes()));
+        output_csr_offsets.set_data(
+            mx::allocator::malloc(output_csr_offsets.nbytes())
+        );
+        output_csr_in_rows.set_data(
+            mx::allocator::malloc(output_csr_in_rows.nbytes())
+        );
+        output_csr_kernel_ids.set_data(
+            mx::allocator::malloc(output_csr_kernel_ids.nbytes())
+        );
+        kernel_bucket_offsets.set_data(
+            mx::allocator::malloc(kernel_bucket_offsets.nbytes())
+        );
+        kernel_bucket_in_rows.set_data(
+            mx::allocator::malloc(kernel_bucket_in_rows.nbytes())
+        );
+        kernel_bucket_out_rows.set_data(
+            mx::allocator::malloc(kernel_bucket_out_rows.nbytes())
+        );
+        input_csr_offsets.set_data(
+            mx::allocator::malloc(input_csr_offsets.nbytes())
+        );
+        input_csr_out_rows.set_data(
+            mx::allocator::malloc(input_csr_out_rows.nbytes())
+        );
+        input_csr_kernel_ids.set_data(
+            mx::allocator::malloc(input_csr_kernel_ids.nbytes())
+        );
 
         auto pair_count = rows_ * kernel_count_;
-        if (pair_count == 0) {
-            return;
-        }
+        auto thread_count =
+            std::max({pair_count + 1, rows_ + 1, kernel_count_ + 1});
 
         auto& stream = this->stream();
         auto& device = mx::metal::device(stream.device);
@@ -94,7 +129,7 @@ class GenerativeKernelMap : public mx::Primitive {
         auto kernel =
             device.get_kernel("build_generative_kernel_map_i32", library);
         auto group = std::min(
-            static_cast<size_t>(pair_count),
+            static_cast<size_t>(thread_count),
             kernel->maxTotalThreadsPerThreadgroup()
         );
 
@@ -105,13 +140,22 @@ class GenerativeKernelMap : public mx::Primitive {
         encoder.set_output_array(out_rows, 3);
         encoder.set_output_array(kernel_ids, 4);
         encoder.set_output_array(out_coords, 5);
-        encoder.set_bytes(rows_, 6);
-        encoder.set_bytes(kernel_count_, 7);
-        encoder.set_bytes(stride_[0], 8);
-        encoder.set_bytes(stride_[1], 9);
-        encoder.set_bytes(stride_[2], 10);
+        encoder.set_output_array(output_csr_offsets, 6);
+        encoder.set_output_array(output_csr_in_rows, 7);
+        encoder.set_output_array(output_csr_kernel_ids, 8);
+        encoder.set_output_array(kernel_bucket_offsets, 9);
+        encoder.set_output_array(kernel_bucket_in_rows, 10);
+        encoder.set_output_array(kernel_bucket_out_rows, 11);
+        encoder.set_output_array(input_csr_offsets, 12);
+        encoder.set_output_array(input_csr_out_rows, 13);
+        encoder.set_output_array(input_csr_kernel_ids, 14);
+        encoder.set_bytes(rows_, 15);
+        encoder.set_bytes(kernel_count_, 16);
+        encoder.set_bytes(stride_[0], 17);
+        encoder.set_bytes(stride_[1], 18);
+        encoder.set_bytes(stride_[2], 19);
         encoder.dispatch_threads(
-            MTL::Size(static_cast<size_t>(pair_count), 1, 1),
+            MTL::Size(static_cast<size_t>(thread_count), 1, 1),
             MTL::Size(group, 1, 1)
         );
 #else
@@ -195,8 +239,29 @@ NativeKernelMap build_generative_map(
         {mx::Shape{pair_count},
          mx::Shape{pair_count},
          mx::Shape{pair_count},
-         mx::Shape{pair_count, 4}},
-        {mx::int32, mx::int32, mx::int32, mx::int32},
+         mx::Shape{pair_count, 4},
+         mx::Shape{pair_count + 1},
+         mx::Shape{pair_count},
+         mx::Shape{pair_count},
+         mx::Shape{kernel_count + 1},
+         mx::Shape{pair_count},
+         mx::Shape{pair_count},
+         mx::Shape{rows + 1},
+         mx::Shape{pair_count},
+         mx::Shape{pair_count}},
+        {mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32,
+         mx::int32},
         std::make_shared<GenerativeKernelMap>(
             mx::default_stream(mx::Device::gpu), rows, kernel_count, stride
         ),
@@ -210,6 +275,9 @@ NativeKernelMap build_generative_map(
         outputs[2],
         outputs[3],
         offset_values,
+        {outputs[4], outputs[5], outputs[6]},
+        {outputs[7], outputs[8], outputs[9]},
+        {outputs[10], outputs[11], outputs[12]},
     };
 }
 

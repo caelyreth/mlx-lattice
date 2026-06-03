@@ -11,12 +11,33 @@ namespace mx = mlx::core;
 
 using Triple = std::array<int, 3>;
 
+struct NativeOutputCsrView {
+    mx::array offsets;
+    mx::array in_rows;
+    mx::array kernel_ids;
+};
+
+struct NativeKernelBucketView {
+    mx::array offsets;
+    mx::array in_rows;
+    mx::array out_rows;
+};
+
+struct NativeInputCsrView {
+    mx::array offsets;
+    mx::array out_rows;
+    mx::array kernel_ids;
+};
+
 struct NativeKernelMap {
     mx::array in_rows;
     mx::array out_rows;
     mx::array kernel_ids;
     mx::array out_coords;
     mx::array kernel_offsets;
+    NativeOutputCsrView output_csr;
+    NativeKernelBucketView kernel_buckets;
+    NativeInputCsrView input_csr;
 };
 
 std::vector<Triple> kernel_offsets(Triple kernel_size);

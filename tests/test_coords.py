@@ -75,9 +75,21 @@ def test_build_kernel_map_emits_all_canonical_views() -> None:
     assert mapping.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
     assert mapping.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
     assert mapping.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
-    assert mapping.require_output_csr().offsets.tolist() == [0, 2, 5, 7]
-    assert mapping.require_kernel_buckets().offsets.tolist() == [0, 2, 5, 7]
-    assert mapping.require_input_csr().offsets.tolist() == [0, 2, 5, 7]
+
+    output_csr = mapping.require_output_csr()
+    assert output_csr.offsets.tolist() == [0, 2, 5, 7]
+    assert output_csr.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
+    assert output_csr.kernel_ids.tolist() == [1, 2, 0, 1, 2, 0, 1]
+
+    kernel_buckets = mapping.require_kernel_buckets()
+    assert kernel_buckets.offsets.tolist() == [0, 2, 5, 7]
+    assert kernel_buckets.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
+    assert kernel_buckets.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
+
+    input_csr = mapping.require_input_csr()
+    assert input_csr.offsets.tolist() == [0, 2, 5, 7]
+    assert input_csr.out_rows.tolist() == [1, 0, 2, 1, 0, 2, 1]
+    assert input_csr.kernel_ids.tolist() == [0, 1, 0, 1, 2, 1, 2]
 
 
 def test_build_strided_kernel_map_downsamples_output_coords() -> None:
@@ -135,24 +147,48 @@ def test_generative_map_runs_with_gpu_default_when_metal_is_available() -> (
     try:
         mx.set_default_device(mx.gpu)
         mapping = build_generative_map(
-            mx.array([[0, 1, 2, 3]], dtype=mx.int32),
-            kernel_size=3,
-            stride=2,
+            mx.array([[0, 1, 2, 3], [0, 4, 5, 6]], dtype=mx.int32),
+            kernel_size=(2, 1, 1),
+            stride=(2, 1, 1),
         )
         mx.eval(
             mapping.out_coords,
             mapping.in_rows,
             mapping.out_rows,
             mapping.kernel_ids,
+            mapping.require_output_csr().offsets,
+            mapping.require_output_csr().in_rows,
+            mapping.require_output_csr().kernel_ids,
+            mapping.require_kernel_buckets().offsets,
+            mapping.require_kernel_buckets().in_rows,
+            mapping.require_kernel_buckets().out_rows,
+            mapping.require_input_csr().offsets,
+            mapping.require_input_csr().out_rows,
+            mapping.require_input_csr().kernel_ids,
         )
     finally:
         mx.set_default_device(previous_device)
 
     assert mapping.out_coords is not None
-    assert mapping.out_coords.shape == (27, 4)
-    assert mapping.in_rows.tolist() == [0] * 27
-    assert mapping.out_rows.tolist() == list(range(27))
-    assert mapping.kernel_ids.tolist() == list(range(27))
+    assert mapping.out_coords.shape == (4, 4)
+    assert mapping.in_rows.tolist() == [0, 0, 1, 1]
+    assert mapping.out_rows.tolist() == [0, 1, 2, 3]
+    assert mapping.kernel_ids.tolist() == [0, 1, 0, 1]
+
+    output_csr = mapping.require_output_csr()
+    assert output_csr.offsets.tolist() == [0, 1, 2, 3, 4]
+    assert output_csr.in_rows.tolist() == [0, 0, 1, 1]
+    assert output_csr.kernel_ids.tolist() == [0, 1, 0, 1]
+
+    kernel_buckets = mapping.require_kernel_buckets()
+    assert kernel_buckets.offsets.tolist() == [0, 2, 4]
+    assert kernel_buckets.in_rows.tolist() == [0, 1, 0, 1]
+    assert kernel_buckets.out_rows.tolist() == [0, 2, 1, 3]
+
+    input_csr = mapping.require_input_csr()
+    assert input_csr.offsets.tolist() == [0, 2, 4]
+    assert input_csr.out_rows.tolist() == [0, 1, 2, 3]
+    assert input_csr.kernel_ids.tolist() == [0, 1, 0, 1]
 
 
 def test_coordinate_manager_caches_kernel_maps() -> None:

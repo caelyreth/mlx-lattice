@@ -101,6 +101,78 @@ mx::array make_offset_array(const std::vector<Triple>& offsets) {
     );
 }
 
+// MARK: - views
+
+template <typename Key>
+std::vector<int32_t>
+view_offsets(const std::vector<Edge>& edges, int rows, Key key) {
+    std::vector<int32_t> offsets(static_cast<size_t>(rows) + 1, 0);
+    for (auto edge : edges) {
+        offsets[static_cast<size_t>(key(edge)) + 1] += 1;
+    }
+    for (int row = 0; row < rows; ++row) {
+        offsets[static_cast<size_t>(row) + 1] += offsets[row];
+    }
+    return offsets;
+}
+
+NativeOutputCsrView
+output_csr_view(const std::vector<Edge>& edges, int n_out_rows) {
+    auto offsets =
+        view_offsets(edges, n_out_rows, [](Edge edge) { return edge[1]; });
+    auto cursor = offsets;
+    std::vector<int32_t> in_rows(edges.size());
+    std::vector<int32_t> kernel_ids(edges.size());
+    for (auto edge : edges) {
+        auto index = cursor[static_cast<size_t>(edge[1])]++;
+        in_rows[static_cast<size_t>(index)] = edge[0];
+        kernel_ids[static_cast<size_t>(index)] = edge[2];
+    }
+    return {
+        make_i32_array(offsets),
+        make_i32_array(in_rows),
+        make_i32_array(kernel_ids),
+    };
+}
+
+NativeKernelBucketView
+kernel_bucket_view(const std::vector<Edge>& edges, int n_kernels) {
+    auto offsets =
+        view_offsets(edges, n_kernels, [](Edge edge) { return edge[2]; });
+    auto cursor = offsets;
+    std::vector<int32_t> in_rows(edges.size());
+    std::vector<int32_t> out_rows(edges.size());
+    for (auto edge : edges) {
+        auto index = cursor[static_cast<size_t>(edge[2])]++;
+        in_rows[static_cast<size_t>(index)] = edge[0];
+        out_rows[static_cast<size_t>(index)] = edge[1];
+    }
+    return {
+        make_i32_array(offsets),
+        make_i32_array(in_rows),
+        make_i32_array(out_rows),
+    };
+}
+
+NativeInputCsrView
+input_csr_view(const std::vector<Edge>& edges, int n_in_rows) {
+    auto offsets =
+        view_offsets(edges, n_in_rows, [](Edge edge) { return edge[0]; });
+    auto cursor = offsets;
+    std::vector<int32_t> out_rows(edges.size());
+    std::vector<int32_t> kernel_ids(edges.size());
+    for (auto edge : edges) {
+        auto index = cursor[static_cast<size_t>(edge[0])]++;
+        out_rows[static_cast<size_t>(index)] = edge[1];
+        kernel_ids[static_cast<size_t>(index)] = edge[2];
+    }
+    return {
+        make_i32_array(offsets),
+        make_i32_array(out_rows),
+        make_i32_array(kernel_ids),
+    };
+}
+
 // MARK: - coords
 
 int64_t floor_div(int64_t value, int64_t divisor) {
@@ -161,6 +233,7 @@ NativeKernelMap make_map(
     const std::vector<Edge>& edges,
     const std::vector<Coord>& out_coords,
     const std::vector<Triple>& offsets,
+    int n_in_rows,
     mx::Dtype coord_dtype
 ) {
     std::vector<int32_t> in_rows;
@@ -181,6 +254,9 @@ NativeKernelMap make_map(
         make_i32_array(kernel_ids),
         make_coords_array(out_coords, coord_dtype),
         make_offset_array(offsets),
+        output_csr_view(edges, int(out_coords.size())),
+        kernel_bucket_view(edges, int(offsets.size())),
+        input_csr_view(edges, n_in_rows),
     };
 }
 
@@ -283,7 +359,9 @@ NativeKernelMap build_kernel_map(
         }
     }
 
-    return make_map(edges, out_values, offsets, coords.dtype());
+    return make_map(
+        edges, out_values, offsets, int(values.size()), coords.dtype()
+    );
 }
 
 NativeKernelMap build_generative_map(
@@ -317,7 +395,9 @@ NativeKernelMap build_generative_map(
         }
     }
 
-    return make_map(edges, out_values, offsets, coords.dtype());
+    return make_map(
+        edges, out_values, offsets, int(values.size()), coords.dtype()
+    );
 }
 
 NativeKernelMap build_transposed_kernel_map(
@@ -360,7 +440,9 @@ NativeKernelMap build_transposed_kernel_map(
         }
     }
 
-    return make_map(edges, out_values, offsets, coords.dtype());
+    return make_map(
+        edges, out_values, offsets, int(values.size()), coords.dtype()
+    );
 }
 
 } // namespace mlx_lattice::cpu
