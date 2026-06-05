@@ -1,5 +1,3 @@
-#pragma once
-
 inline bool coord_equal(
     device const int* lhs,
     int lhs_row,

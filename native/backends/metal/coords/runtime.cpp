@@ -3,14 +3,12 @@
 #include <dlfcn.h>
 
 #include <algorithm>
-#include <cstdint>
 #include <filesystem>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
 
 #include "mlx/device.h"
-#include "mlx/ops.h"
 #include "mlx/stream.h"
 
 #ifdef _METAL_

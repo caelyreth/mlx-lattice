@@ -10,7 +10,6 @@
 
 #include "mlx/device.h"
 #include "mlx/ops.h"
-#include "ops/coords.h"
 
 namespace mlx_lattice::coords::cpu {
 
