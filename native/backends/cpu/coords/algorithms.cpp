@@ -19,7 +19,6 @@ namespace {
 
 using Coord = std::array<int64_t, 4>;
 using Edge = std::array<int32_t, 3>;
-using ViewData = std::array<std::vector<int32_t>, 3>;
 
 struct CoordHash {
     size_t operator()(const Coord& coord) const {
@@ -128,42 +127,6 @@ void write_coords(
     }
 }
 
-// MARK: - views
-
-std::vector<int32_t> view_offsets(
-    const std::vector<Edge>& edges,
-    int rows, // NOLINT(bugprone-easily-swappable-parameters)
-    int key
-) {
-    std::vector<int32_t> offsets(static_cast<size_t>(rows) + 1, 0);
-    for (auto edge : edges) {
-        offsets[static_cast<size_t>(edge[key]) + 1] += 1;
-    }
-    for (int row = 0; row < rows; ++row) {
-        offsets[static_cast<size_t>(row) + 1] += offsets[row];
-    }
-    return offsets;
-}
-
-ViewData view_data(
-    const std::vector<Edge>& edges,
-    int rows,
-    int key,
-    int first,
-    int second
-) {
-    auto offsets = view_offsets(edges, rows, key);
-    auto cursor = offsets;
-    std::vector<int32_t> first_values(edges.size());
-    std::vector<int32_t> second_values(edges.size());
-    for (auto edge : edges) {
-        auto index = cursor[static_cast<size_t>(edge[key])]++;
-        first_values[static_cast<size_t>(index)] = edge[first];
-        second_values[static_cast<size_t>(index)] = edge[second];
-    }
-    return {offsets, first_values, second_values};
-}
-
 // MARK: - coords
 
 int64_t floor_div(int64_t value, int64_t divisor) {
@@ -241,34 +204,13 @@ void write_map_rows(
     write_i32(outputs[MapKernelIds], kernel_ids);
 }
 
-void write_map_views(
-    std::vector<mx::array>& outputs,
-    std::size_t base,
-    const ViewData& output_csr,
-    const ViewData& kernel_buckets,
-    const ViewData& input_csr
-) {
-    for (auto view : std::array{&output_csr, &kernel_buckets, &input_csr}) {
-        for (const auto& values : *view) {
-            write_i32(outputs[base++], values);
-        }
-    }
-}
-
 void write_map(
     std::vector<mx::array>& outputs,
     const std::vector<Edge>& edges,
     const std::vector<Coord>& out_coords,
-    const std::vector<Triple>& offsets,
-    int n_in_rows,
     mx::Dtype coord_dtype,
     bool compact
 ) {
-    auto output_csr = view_data(edges, int(out_coords.size()), 1, 0, 2);
-    auto kernel_buckets = view_data(edges, int(offsets.size()), 2, 0, 1);
-    auto input_csr = view_data(edges, n_in_rows, 0, 1, 2);
-    auto view_base = compact ? MapViewOutputBase : GenerativeMapViewOutputBase;
-
     write_map_rows(outputs, edges);
     write_coords(outputs[MapOutCoords], out_coords, coord_dtype);
     if (compact) {
@@ -276,7 +218,6 @@ void write_map(
             outputs[MapCounts], int(edges.size()), int(out_coords.size())
         );
     }
-    write_map_views(outputs, view_base, output_csr, kernel_buckets, input_csr);
 }
 
 // MARK: - set ops
@@ -371,15 +312,7 @@ void write_kernel_map(
         }
     }
 
-    write_map(
-        outputs,
-        edges,
-        out_values,
-        offsets,
-        int(values.size()),
-        coords.dtype(),
-        true
-    );
+    write_map(outputs, edges, out_values, coords.dtype(), true);
 }
 
 void write_generative_map(
@@ -413,15 +346,7 @@ void write_generative_map(
         }
     }
 
-    write_map(
-        outputs,
-        edges,
-        out_values,
-        offsets,
-        int(values.size()),
-        coords.dtype(),
-        false
-    );
+    write_map(outputs, edges, out_values, coords.dtype(), false);
 }
 
 void write_transposed_kernel_map(
@@ -463,15 +388,7 @@ void write_transposed_kernel_map(
         }
     }
 
-    write_map(
-        outputs,
-        edges,
-        out_values,
-        offsets,
-        int(values.size()),
-        coords.dtype(),
-        true
-    );
+    write_map(outputs, edges, out_values, coords.dtype(), true);
 }
 
 } // namespace

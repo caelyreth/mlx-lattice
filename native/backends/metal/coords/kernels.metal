@@ -163,32 +163,14 @@ using namespace metal;
     device int* out_rows [[buffer(3)]],
     device int* kernel_ids [[buffer(4)]],
     device int* out_coords [[buffer(5)]],
-    device int* output_csr_offsets [[buffer(6)]],
-    device int* output_csr_in_rows [[buffer(7)]],
-    device int* output_csr_kernel_ids [[buffer(8)]],
-    device int* kernel_bucket_offsets [[buffer(9)]],
-    device int* kernel_bucket_in_rows [[buffer(10)]],
-    device int* kernel_bucket_out_rows [[buffer(11)]],
-    device int* input_csr_offsets [[buffer(12)]],
-    device int* input_csr_out_rows [[buffer(13)]],
-    device int* input_csr_kernel_ids [[buffer(14)]],
-    constant const int& rows [[buffer(15)]],
-    constant const int& kernel_count [[buffer(16)]],
-    constant const int& stride_x [[buffer(17)]],
-    constant const int& stride_y [[buffer(18)]],
-    constant const int& stride_z [[buffer(19)]],
+    constant const int& rows [[buffer(6)]],
+    constant const int& kernel_count [[buffer(7)]],
+    constant const int& stride_x [[buffer(8)]],
+    constant const int& stride_y [[buffer(9)]],
+    constant const int& stride_z [[buffer(10)]],
     uint elem [[thread_position_in_grid]]
 ) {
     uint total = uint(rows * kernel_count);
-    if (elem <= total) {
-        output_csr_offsets[elem] = int(elem);
-    }
-    if (elem <= uint(rows)) {
-        input_csr_offsets[elem] = int(elem) * kernel_count;
-    }
-    if (elem <= uint(kernel_count)) {
-        kernel_bucket_offsets[elem] = int(elem) * rows;
-    }
     if (elem >= total) {
         return;
     }
@@ -199,17 +181,10 @@ using namespace metal;
     int in_base = in_row * 4;
     int out_base = out_row * 4;
     int offset_base = kernel_index * 3;
-    int bucket_row = kernel_index * rows + in_row;
 
     in_rows[out_row] = in_row;
     out_rows[out_row] = out_row;
     kernel_ids[out_row] = kernel_index;
-    output_csr_in_rows[out_row] = in_row;
-    output_csr_kernel_ids[out_row] = kernel_index;
-    kernel_bucket_in_rows[bucket_row] = in_row;
-    kernel_bucket_out_rows[bucket_row] = out_row;
-    input_csr_out_rows[out_row] = out_row;
-    input_csr_kernel_ids[out_row] = kernel_index;
     out_coords[out_base] = coords[in_base];
     out_coords[out_base + 1] =
         coords[in_base + 1] * stride_x + offsets[offset_base];
@@ -229,23 +204,14 @@ using namespace metal;
     device int* kernel_ids [[buffer(4)]],
     device int* out_coords [[buffer(5)]],
     device int* counts [[buffer(6)]],
-    device int* output_csr_offsets [[buffer(7)]],
-    device int* output_csr_in_rows [[buffer(8)]],
-    device int* output_csr_kernel_ids [[buffer(9)]],
-    device int* kernel_bucket_offsets [[buffer(10)]],
-    device int* kernel_bucket_in_rows [[buffer(11)]],
-    device int* kernel_bucket_out_rows [[buffer(12)]],
-    device int* input_csr_offsets [[buffer(13)]],
-    device int* input_csr_out_rows [[buffer(14)]],
-    device int* input_csr_kernel_ids [[buffer(15)]],
-    constant const int& rows [[buffer(16)]],
-    constant const int& kernel_count [[buffer(17)]],
-    constant const int& stride_x [[buffer(18)]],
-    constant const int& stride_y [[buffer(19)]],
-    constant const int& stride_z [[buffer(20)]],
-    constant const int& pad_x [[buffer(21)]],
-    constant const int& pad_y [[buffer(22)]],
-    constant const int& pad_z [[buffer(23)]],
+    constant const int& rows [[buffer(7)]],
+    constant const int& kernel_count [[buffer(8)]],
+    constant const int& stride_x [[buffer(9)]],
+    constant const int& stride_y [[buffer(10)]],
+    constant const int& stride_z [[buffer(11)]],
+    constant const int& pad_x [[buffer(12)]],
+    constant const int& pad_y [[buffer(13)]],
+    constant const int& pad_z [[buffer(14)]],
     uint elem [[thread_position_in_grid]]
 ) {
     if (elem != 0) {
@@ -314,24 +280,6 @@ using namespace metal;
 
     counts[0] = edge_count;
     counts[1] = out_count;
-    build_views(
-        in_rows,
-        out_rows,
-        kernel_ids,
-        edge_count,
-        out_count,
-        kernel_count,
-        rows,
-        output_csr_offsets,
-        output_csr_in_rows,
-        output_csr_kernel_ids,
-        kernel_bucket_offsets,
-        kernel_bucket_in_rows,
-        kernel_bucket_out_rows,
-        input_csr_offsets,
-        input_csr_out_rows,
-        input_csr_kernel_ids
-    );
 }
 
 [[kernel]] void build_transposed_kernel_map_i32(
@@ -342,23 +290,14 @@ using namespace metal;
     device int* kernel_ids [[buffer(4)]],
     device int* out_coords [[buffer(5)]],
     device int* counts [[buffer(6)]],
-    device int* output_csr_offsets [[buffer(7)]],
-    device int* output_csr_in_rows [[buffer(8)]],
-    device int* output_csr_kernel_ids [[buffer(9)]],
-    device int* kernel_bucket_offsets [[buffer(10)]],
-    device int* kernel_bucket_in_rows [[buffer(11)]],
-    device int* kernel_bucket_out_rows [[buffer(12)]],
-    device int* input_csr_offsets [[buffer(13)]],
-    device int* input_csr_out_rows [[buffer(14)]],
-    device int* input_csr_kernel_ids [[buffer(15)]],
-    constant const int& rows [[buffer(16)]],
-    constant const int& kernel_count [[buffer(17)]],
-    constant const int& stride_x [[buffer(18)]],
-    constant const int& stride_y [[buffer(19)]],
-    constant const int& stride_z [[buffer(20)]],
-    constant const int& pad_x [[buffer(21)]],
-    constant const int& pad_y [[buffer(22)]],
-    constant const int& pad_z [[buffer(23)]],
+    constant const int& rows [[buffer(7)]],
+    constant const int& kernel_count [[buffer(8)]],
+    constant const int& stride_x [[buffer(9)]],
+    constant const int& stride_y [[buffer(10)]],
+    constant const int& stride_z [[buffer(11)]],
+    constant const int& pad_x [[buffer(12)]],
+    constant const int& pad_y [[buffer(13)]],
+    constant const int& pad_z [[buffer(14)]],
     uint elem [[thread_position_in_grid]]
 ) {
     if (elem != 0) {
@@ -409,22 +348,4 @@ using namespace metal;
 
     counts[0] = edge_count;
     counts[1] = out_count;
-    build_views(
-        in_rows,
-        out_rows,
-        kernel_ids,
-        edge_count,
-        out_count,
-        kernel_count,
-        rows,
-        output_csr_offsets,
-        output_csr_in_rows,
-        output_csr_kernel_ids,
-        kernel_bucket_offsets,
-        kernel_bucket_in_rows,
-        kernel_bucket_out_rows,
-        input_csr_offsets,
-        input_csr_out_rows,
-        input_csr_kernel_ids
-    );
 }

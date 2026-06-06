@@ -29,89 +29,11 @@ class EdgeIndex:
         return int(self.in_rows.shape[0])
 
 
-@dataclass(frozen=True, slots=True)
-class OutputCsrView:
-    offsets: mx.array
-    in_rows: mx.array
-    kernel_ids: mx.array
-
-    def __post_init__(self) -> None:
-        _validate_offsets(self.offsets, name='out_offsets')
-        _validate_row_array(self.in_rows, name='out_csr.in_rows')
-        _validate_row_array(self.kernel_ids, name='out_csr.kernel_ids')
-        _require_same_rows(
-            self.in_rows,
-            self.kernel_ids,
-            names=('out_csr.in_rows', 'out_csr.kernel_ids'),
-        )
-
-    @property
-    def n_edges(self) -> int:
-        return int(self.in_rows.shape[0])
-
-    @property
-    def n_rows(self) -> int:
-        return max(int(self.offsets.shape[0]) - 1, 0)
-
-
-@dataclass(frozen=True, slots=True)
-class KernelBucketView:
-    offsets: mx.array
-    in_rows: mx.array
-    out_rows: mx.array
-
-    def __post_init__(self) -> None:
-        _validate_offsets(self.offsets, name='kernel_offsets')
-        _validate_row_array(self.in_rows, name='kernel_buckets.in_rows')
-        _validate_row_array(self.out_rows, name='kernel_buckets.out_rows')
-        _require_same_rows(
-            self.in_rows,
-            self.out_rows,
-            names=('kernel_buckets.in_rows', 'kernel_buckets.out_rows'),
-        )
-
-    @property
-    def n_edges(self) -> int:
-        return int(self.in_rows.shape[0])
-
-    @property
-    def n_kernels(self) -> int:
-        return max(int(self.offsets.shape[0]) - 1, 0)
-
-
-@dataclass(frozen=True, slots=True)
-class InputCsrView:
-    offsets: mx.array
-    out_rows: mx.array
-    kernel_ids: mx.array
-
-    def __post_init__(self) -> None:
-        _validate_offsets(self.offsets, name='in_offsets')
-        _validate_row_array(self.out_rows, name='input_csr.out_rows')
-        _validate_row_array(self.kernel_ids, name='input_csr.kernel_ids')
-        _require_same_rows(
-            self.out_rows,
-            self.kernel_ids,
-            names=('input_csr.out_rows', 'input_csr.kernel_ids'),
-        )
-
-    @property
-    def n_edges(self) -> int:
-        return int(self.out_rows.shape[0])
-
-    @property
-    def n_rows(self) -> int:
-        return max(int(self.offsets.shape[0]) - 1, 0)
-
-
 @dataclass(frozen=True, slots=True, init=False)
 class KernelMap:
     edges: EdgeIndex
     kernel_offsets: tuple[Triple, ...]
     out_coords: mx.array | None = None
-    output_csr: OutputCsrView | None = None
-    kernel_buckets: KernelBucketView | None = None
-    input_csr: InputCsrView | None = None
     n_in_rows: int | None = None
     n_out_rows: int | None = None
     n_kernels: int | None = None
@@ -124,9 +46,6 @@ class KernelMap:
         *,
         kernel_offsets: tuple[Triple, ...] = (),
         out_coords: mx.array | None = None,
-        output_csr: OutputCsrView | None = None,
-        kernel_buckets: KernelBucketView | None = None,
-        input_csr: InputCsrView | None = None,
         n_in_rows: int | None = None,
         n_out_rows: int | None = None,
         n_kernels: int | None = None,
@@ -158,36 +77,11 @@ class KernelMap:
                 raise ValueError('n_out_rows must match out_coords rows.')
             normalized_n_out_rows = out_coord_rows
 
-        _validate_optional_view(edges, output_csr, 'output_csr')
-        _validate_optional_view(edges, kernel_buckets, 'kernel_buckets')
-        _validate_optional_view(edges, input_csr, 'input_csr')
-        if (
-            output_csr is not None
-            and normalized_n_out_rows is not None
-            and output_csr.n_rows != normalized_n_out_rows
-        ):
-            raise ValueError('n_out_rows must match output CSR rows.')
-        if (
-            input_csr is not None
-            and normalized_n_in_rows is not None
-            and input_csr.n_rows != normalized_n_in_rows
-        ):
-            raise ValueError('n_in_rows must match input CSR rows.')
-        if (
-            kernel_buckets is not None
-            and normalized_n_kernels is not None
-            and kernel_buckets.n_kernels != normalized_n_kernels
-        ):
-            raise ValueError('n_kernels must match kernel buckets.')
-
         object.__setattr__(self, 'edges', edges)
         object.__setattr__(
             self, 'kernel_offsets', normalized_kernel_offsets
         )
         object.__setattr__(self, 'out_coords', out_coords)
-        object.__setattr__(self, 'output_csr', output_csr)
-        object.__setattr__(self, 'kernel_buckets', kernel_buckets)
-        object.__setattr__(self, 'input_csr', input_csr)
         object.__setattr__(self, 'n_in_rows', normalized_n_in_rows)
         object.__setattr__(self, 'n_out_rows', normalized_n_out_rows)
         object.__setattr__(self, 'n_kernels', normalized_n_kernels)
@@ -208,39 +102,6 @@ class KernelMap:
     def n_edges(self) -> int:
         return self.edges.n_edges
 
-    @property
-    def has_output_csr(self) -> bool:
-        return self.output_csr is not None
-
-    @property
-    def has_kernel_buckets(self) -> bool:
-        return self.kernel_buckets is not None
-
-    @property
-    def has_input_csr(self) -> bool:
-        return self.input_csr is not None
-
-    def require_output_csr(self) -> OutputCsrView:
-        if self.output_csr is None:
-            raise ValueError(
-                'kernel map does not include an output CSR view.'
-            )
-        return self.output_csr
-
-    def require_kernel_buckets(self) -> KernelBucketView:
-        if self.kernel_buckets is None:
-            raise ValueError(
-                'kernel map does not include a kernel-bucket view.'
-            )
-        return self.kernel_buckets
-
-    def require_input_csr(self) -> InputCsrView:
-        if self.input_csr is None:
-            raise ValueError(
-                'kernel map does not include an input CSR view.'
-            )
-        return self.input_csr
-
 
 # MARK: - helpers
 
@@ -248,13 +109,6 @@ class KernelMap:
 def _validate_row_array(value: mx.array, *, name: str) -> None:
     if value.ndim != 1:
         raise ValueError(f'{name} must have shape (E,).')
-    if value.dtype not in (mx.int32, mx.int64):
-        raise ValueError(f'{name} must be int32 or int64.')
-
-
-def _validate_offsets(value: mx.array, *, name: str) -> None:
-    if value.ndim != 1:
-        raise ValueError(f'{name} must have shape (N + 1,).')
     if value.dtype not in (mx.int32, mx.int64):
         raise ValueError(f'{name} must be int32 or int64.')
 
@@ -286,12 +140,3 @@ def _optional_count(value: int | None, name: str) -> int | None:
     if normalized < 0:
         raise ValueError(f'{name} must be non-negative.')
     return normalized
-
-
-def _validate_optional_view(
-    edges: EdgeIndex,
-    view: OutputCsrView | KernelBucketView | InputCsrView | None,
-    name: str,
-) -> None:
-    if view is not None and view.n_edges != edges.n_edges:
-        raise ValueError(f'{name} edge count must match edge COO.')

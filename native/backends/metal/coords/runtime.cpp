@@ -215,14 +215,14 @@ void eval_generic_kernel_map(
     for (int i = 0; i < int(outputs.size()); ++i) {
         encoder.set_output_array(outputs[i], i + 2);
     }
-    encoder.set_bytes(rows, 16);
-    encoder.set_bytes(kernel_count, 17);
-    encoder.set_bytes(stride[0], 18);
-    encoder.set_bytes(stride[1], 19);
-    encoder.set_bytes(stride[2], 20);
-    encoder.set_bytes(padding[0], 21);
-    encoder.set_bytes(padding[1], 22);
-    encoder.set_bytes(padding[2], 23);
+    encoder.set_bytes(rows, 7);
+    encoder.set_bytes(kernel_count, 8);
+    encoder.set_bytes(stride[0], 9);
+    encoder.set_bytes(stride[1], 10);
+    encoder.set_bytes(stride[2], 11);
+    encoder.set_bytes(padding[0], 12);
+    encoder.set_bytes(padding[1], 13);
+    encoder.set_bytes(padding[2], 14);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 #else
     (void)op;
@@ -250,8 +250,7 @@ void eval_generative_kernel_map(
 #ifdef _METAL_
     allocate_all(outputs);
 
-    auto pair_count = rows * kernel_count;
-    auto thread_count = std::max({pair_count + 1, rows + 1, kernel_count + 1});
+    auto thread_count = std::max(rows * kernel_count, 1);
 
     auto& device = mx::metal::device(stream.device);
     auto library = device.get_library("mlx_lattice", binary_dir());
@@ -268,11 +267,11 @@ void eval_generative_kernel_map(
     for (int i = 0; i < int(outputs.size()); ++i) {
         encoder.set_output_array(outputs[i], i + 2);
     }
-    encoder.set_bytes(rows, 15);
-    encoder.set_bytes(kernel_count, 16);
-    encoder.set_bytes(stride[0], 17);
-    encoder.set_bytes(stride[1], 18);
-    encoder.set_bytes(stride[2], 19);
+    encoder.set_bytes(rows, 6);
+    encoder.set_bytes(kernel_count, 7);
+    encoder.set_bytes(stride[0], 8);
+    encoder.set_bytes(stride[1], 9);
+    encoder.set_bytes(stride[2], 10);
     encoder.dispatch_threads(
         MTL::Size(static_cast<size_t>(thread_count), 1, 1),
         MTL::Size(group, 1, 1)

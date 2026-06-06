@@ -15,33 +15,19 @@ from mlx_lattice.core.coords import (
     union_coords,
 )
 from mlx_lattice.core.maps import (
-    ConvSpec,
     EdgeIndex,
-    InputCsrView,
-    KernelBucketView,
     KernelMap,
     KernelSpec,
-    MapAlgorithm,
-    OutputCsrView,
-    PoolMode,
-    PoolSpec,
 )
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import Triple, triple
 
 __all__ = [
-    'ConvSpec',
     'CoordinateManager',
     'CoordinateMapKey',
     'EdgeIndex',
-    'InputCsrView',
-    'KernelBucketView',
     'KernelMap',
     'KernelSpec',
-    'MapAlgorithm',
-    'OutputCsrView',
-    'PoolMode',
-    'PoolSpec',
     'SparseTensor',
     'Triple',
     'build_generative_map',

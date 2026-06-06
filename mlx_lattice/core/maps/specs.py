@@ -1,26 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from enum import StrEnum
+from dataclasses import dataclass
 
 from mlx_lattice.core.types import Triple, triple
-
-
-class MapAlgorithm(StrEnum):
-    AUTO = 'auto'
-    DENSE_POINTWISE = 'dense_pointwise'
-    SUBM_CENTER_RESIDUAL = 'subm_center_residual'
-    KERNEL_BUCKETED = 'kernel_bucketed'
-    OUTPUT_CSR = 'output_csr'
-    IMPLICIT_GEMM = 'implicit_gemm'
-    GENERIC_EDGES = 'generic_edges'
-
-
-class PoolMode(StrEnum):
-    SUM = 'sum'
-    MAX = 'max'
-    AVG = 'avg'
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -72,27 +55,6 @@ class KernelSpec:
             and self.dilation == (1, 1, 1)
             and all(value % 2 == 1 for value in self.size)
         )
-
-
-@dataclass(frozen=True, slots=True)
-class ConvSpec:
-    kernel: KernelSpec = field(default_factory=KernelSpec)
-    transposed: bool = False
-    generative: bool = False
-    algorithm: MapAlgorithm = MapAlgorithm.AUTO
-
-    def __post_init__(self) -> None:
-        if self.generative and not self.transposed:
-            raise ValueError('generative convolution must be transposed.')
-
-
-@dataclass(frozen=True, slots=True)
-class PoolSpec:
-    kernel: KernelSpec = field(
-        default_factory=lambda: KernelSpec(size=2, stride=2)
-    )
-    mode: PoolMode = PoolMode.SUM
-    algorithm: MapAlgorithm = MapAlgorithm.AUTO
 
 
 # MARK: - helpers

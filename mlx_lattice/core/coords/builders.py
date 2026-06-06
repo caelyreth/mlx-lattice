@@ -1,18 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import cast
 
 import mlx.core as mx
 
 from mlx_lattice._native import ext
 from mlx_lattice.core.coords.validation import validate_coords
 from mlx_lattice.core.maps import (
-    InputCsrView,
-    KernelBucketView,
     KernelMap,
     KernelSpec,
-    OutputCsrView,
 )
 from mlx_lattice.core.types import Triple, triple
 
@@ -21,10 +17,6 @@ type NativeKernelMap = tuple[
     mx.array,
     mx.array,
     mx.array,
-    mx.array,
-    tuple[mx.array, mx.array, mx.array],
-    tuple[mx.array, mx.array, mx.array],
-    tuple[mx.array, mx.array, mx.array],
 ]
 
 
@@ -67,14 +59,17 @@ def build_kernel_map(
         padding=padding,
         dilation=dilation,
     )
+    offsets = kernel_offsets(spec.size, spec.dilation)
+    native = ext.build_kernel_map(
+        coords,
+        spec.size,
+        spec.stride,
+        spec.padding,
+        spec.dilation,
+    )
     return _kernel_map_from_native(
-        ext.build_kernel_map(
-            coords,
-            spec.size,
-            spec.stride,
-            spec.padding,
-            spec.dilation,
-        ),
+        native,
+        offsets=offsets,
         n_in_rows=int(coords.shape[0]),
     )
 
@@ -90,12 +85,15 @@ def build_generative_map(
     _require_positive(kernel, 'kernel_size')
     _require_positive(step, 'stride')
 
+    offsets = kernel_offsets(kernel)
+    native = ext.build_generative_map(
+        coords,
+        kernel,
+        step,
+    )
     return _kernel_map_from_native(
-        ext.build_generative_map(
-            coords,
-            kernel,
-            step,
-        ),
+        native,
+        offsets=offsets,
         n_in_rows=int(coords.shape[0]),
     )
 
@@ -117,14 +115,17 @@ def build_transposed_kernel_map(
     _require_nonnegative(pad, 'padding')
     _require_positive(rate, 'dilation')
 
+    offsets = kernel_offsets(kernel, rate)
+    native = ext.build_transposed_kernel_map(
+        coords,
+        kernel,
+        step,
+        pad,
+        rate,
+    )
     return _kernel_map_from_native(
-        ext.build_transposed_kernel_map(
-            coords,
-            kernel,
-            step,
-            pad,
-            rate,
-        ),
+        native,
+        offsets=offsets,
         n_in_rows=int(coords.shape[0]),
     )
 
@@ -135,6 +136,7 @@ def build_transposed_kernel_map(
 def _kernel_map_from_native(
     native: NativeKernelMap,
     *,
+    offsets: tuple[Triple, ...],
     n_in_rows: int,
 ) -> KernelMap:
     (
@@ -142,33 +144,17 @@ def _kernel_map_from_native(
         out_rows,
         kernel_ids,
         out_coords,
-        offset_values,
-        output_csr,
-        kernel_buckets,
-        input_csr,
     ) = native
-    offsets = _offsets_from_array(offset_values)
     return KernelMap(
         in_rows,
         out_rows,
         kernel_ids,
         kernel_offsets=offsets,
         out_coords=out_coords,
-        output_csr=OutputCsrView(*output_csr),
-        kernel_buckets=KernelBucketView(*kernel_buckets),
-        input_csr=InputCsrView(*input_csr),
         n_in_rows=n_in_rows,
         n_out_rows=int(out_coords.shape[0]),
         n_kernels=len(offsets),
     )
-
-
-# MARK: - arrays
-
-
-def _offsets_from_array(values: mx.array) -> tuple[Triple, ...]:
-    rows = cast(list[list[int]], values.tolist())
-    return tuple((int(row[0]), int(row[1]), int(row[2])) for row in rows)
 
 
 # MARK: - helpers

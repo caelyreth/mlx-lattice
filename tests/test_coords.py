@@ -57,7 +57,7 @@ def test_coordinate_set_ops_preserve_first_seen_order() -> None:
     assert lookup_coords(lhs, rhs).tolist() == [1, -1]
 
 
-def test_build_kernel_map_emits_all_canonical_views() -> None:
+def test_build_kernel_map_emits_compact_edge_contract() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
@@ -75,21 +75,6 @@ def test_build_kernel_map_emits_all_canonical_views() -> None:
     assert mapping.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
     assert mapping.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
     assert mapping.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
-
-    output_csr = mapping.require_output_csr()
-    assert output_csr.offsets.tolist() == [0, 2, 5, 7]
-    assert output_csr.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
-    assert output_csr.kernel_ids.tolist() == [1, 2, 0, 1, 2, 0, 1]
-
-    kernel_buckets = mapping.require_kernel_buckets()
-    assert kernel_buckets.offsets.tolist() == [0, 2, 5, 7]
-    assert kernel_buckets.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
-    assert kernel_buckets.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
-
-    input_csr = mapping.require_input_csr()
-    assert input_csr.offsets.tolist() == [0, 2, 5, 7]
-    assert input_csr.out_rows.tolist() == [1, 0, 2, 1, 0, 2, 1]
-    assert input_csr.kernel_ids.tolist() == [0, 1, 0, 1, 2, 1, 2]
 
 
 def test_build_strided_kernel_map_downsamples_output_coords() -> None:
@@ -156,15 +141,6 @@ def test_generative_map_runs_with_gpu_default_when_metal_is_available() -> (
             mapping.in_rows,
             mapping.out_rows,
             mapping.kernel_ids,
-            mapping.require_output_csr().offsets,
-            mapping.require_output_csr().in_rows,
-            mapping.require_output_csr().kernel_ids,
-            mapping.require_kernel_buckets().offsets,
-            mapping.require_kernel_buckets().in_rows,
-            mapping.require_kernel_buckets().out_rows,
-            mapping.require_input_csr().offsets,
-            mapping.require_input_csr().out_rows,
-            mapping.require_input_csr().kernel_ids,
         )
     finally:
         mx.set_default_device(previous_device)
@@ -174,21 +150,6 @@ def test_generative_map_runs_with_gpu_default_when_metal_is_available() -> (
     assert mapping.in_rows.tolist() == [0, 0, 1, 1]
     assert mapping.out_rows.tolist() == [0, 1, 2, 3]
     assert mapping.kernel_ids.tolist() == [0, 1, 0, 1]
-
-    output_csr = mapping.require_output_csr()
-    assert output_csr.offsets.tolist() == [0, 1, 2, 3, 4]
-    assert output_csr.in_rows.tolist() == [0, 0, 1, 1]
-    assert output_csr.kernel_ids.tolist() == [0, 1, 0, 1]
-
-    kernel_buckets = mapping.require_kernel_buckets()
-    assert kernel_buckets.offsets.tolist() == [0, 2, 4]
-    assert kernel_buckets.in_rows.tolist() == [0, 1, 0, 1]
-    assert kernel_buckets.out_rows.tolist() == [0, 2, 1, 3]
-
-    input_csr = mapping.require_input_csr()
-    assert input_csr.offsets.tolist() == [0, 2, 4]
-    assert input_csr.out_rows.tolist() == [0, 1, 2, 3]
-    assert input_csr.kernel_ids.tolist() == [0, 1, 0, 1]
 
 
 def test_coordinate_primitives_run_with_gpu_default_when_metal_is_available() -> (
@@ -235,7 +196,6 @@ def test_coordinate_primitives_run_with_gpu_default_when_metal_is_available() ->
             forward.in_rows,
             forward.out_rows,
             forward.kernel_ids,
-            forward.require_output_csr().offsets,
             transposed.out_coords,
             transposed.in_rows,
             transposed.out_rows,
@@ -255,7 +215,6 @@ def test_coordinate_primitives_run_with_gpu_default_when_metal_is_available() ->
     assert forward.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
     assert forward.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
     assert forward.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
-    assert forward.require_output_csr().offsets.tolist() == [0, 2, 5, 7]
     assert transposed.out_coords is not None
     assert transposed.out_coords.tolist() == [
         [0, 2, 0, 0],
