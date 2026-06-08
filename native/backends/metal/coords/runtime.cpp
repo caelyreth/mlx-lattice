@@ -43,12 +43,12 @@ const char* set_kernel_name(CoordSetOp op) {
     }
 }
 
-const char* map_kernel_name(CoordMapOp op) {
+const char* relation_kernel_name(CoordRelationOp op) {
     switch (op) {
-    case CoordMapOp::Forward:
-        return "build_forward_kernel_map_i32";
-    case CoordMapOp::Transposed:
-        return "build_transposed_kernel_map_i32";
+    case CoordRelationOp::Forward:
+        return "build_forward_kernel_relation_i32";
+    case CoordRelationOp::Transposed:
+        return "build_transposed_kernel_relation_i32";
     }
 }
 
@@ -187,10 +187,10 @@ void eval_lookup_coords(
 #endif
 }
 
-// MARK: - maps
+// MARK: - relations
 
-void eval_generic_kernel_map(
-    CoordMapOp op,
+void eval_generic_kernel_relation(
+    CoordRelationOp op,
     int rows, // NOLINT(bugprone-easily-swappable-parameters)
     int kernel_count,
     Triple stride, // NOLINT(bugprone-easily-swappable-parameters)
@@ -207,7 +207,7 @@ void eval_generic_kernel_map(
     auto& device = mx::metal::device(stream.device);
     auto library = device.get_library("mlx_lattice", binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel(map_kernel_name(op), library);
+    auto kernel = device.get_kernel(relation_kernel_name(op), library);
 
     encoder.set_compute_pipeline_state(kernel);
     encoder.set_input_array(inputs[0], 0);
@@ -237,7 +237,7 @@ void eval_generic_kernel_map(
 #endif
 }
 
-void eval_generative_kernel_map(
+void eval_generative_kernel_relation(
     int rows, // NOLINT(bugprone-easily-swappable-parameters)
     int kernel_count,
     Triple stride,
@@ -255,7 +255,8 @@ void eval_generative_kernel_map(
     auto& device = mx::metal::device(stream.device);
     auto library = device.get_library("mlx_lattice", binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("build_generative_kernel_map_i32", library);
+    auto kernel =
+        device.get_kernel("build_generative_kernel_relation_i32", library);
     auto group = std::min(
         static_cast<size_t>(thread_count),
         kernel->maxTotalThreadsPerThreadgroup()

@@ -13,7 +13,7 @@ from mlx_lattice.core.coords.builders import (
 )
 from mlx_lattice.core.coords.set_ops import inverse_map
 from mlx_lattice.core.coords.validation import validate_coords
-from mlx_lattice.core.maps import KernelRelation, KernelSpec
+from mlx_lattice.core.relations import KernelRelation, KernelSpec
 from mlx_lattice.core.types import Triple, triple
 
 _manager_ids = count()

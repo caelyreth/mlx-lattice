@@ -7,8 +7,8 @@ import mlx.core as mx
 
 from mlx_lattice.core import KernelRelation, KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
-from mlx_lattice.ops.exec import execute_pool_max, execute_pool_sum
-from mlx_lattice.ops.maps import kernel_relation
+from mlx_lattice.ops._exec import execute_pool_max, execute_pool_sum
+from mlx_lattice.ops.relations import kernel_relation
 
 PoolMode = Literal['sum', 'max', 'avg']
 

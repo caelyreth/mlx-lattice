@@ -4,7 +4,7 @@ from mlx_lattice.core.coords import (
     CoordinateManager,
     CoordinateMapKey,
 )
-from mlx_lattice.core.maps import (
+from mlx_lattice.core.relations import (
     EdgeCoo,
     EdgeCooPlan,
     KernelRelation,

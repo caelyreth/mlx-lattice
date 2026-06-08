@@ -18,15 +18,15 @@ void eval_lookup_coords(
     std::vector<mx::array>& outputs
 );
 
-void eval_generic_kernel_map(
-    CoordMapOp op,
+void eval_generic_kernel_relation(
+    CoordRelationOp op,
     Triple stride,
     Triple padding,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 );
 
-void eval_generative_kernel_map(
+void eval_generative_kernel_relation(
     Triple stride,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs

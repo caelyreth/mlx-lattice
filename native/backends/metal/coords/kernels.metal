@@ -154,9 +154,9 @@ using namespace metal;
     out_rows[query_row] = out;
 }
 
-// MARK: - generative maps
+// MARK: - generative relations
 
-[[kernel]] void build_generative_kernel_map_i32(
+[[kernel]] void build_generative_kernel_relation_i32(
     device const int* coords [[buffer(0)]],
     device const int* offsets [[buffer(1)]],
     device int* in_rows [[buffer(2)]],
@@ -194,9 +194,9 @@ using namespace metal;
         coords[in_base + 3] * stride_z + offsets[offset_base + 2];
 }
 
-// MARK: - generic maps
+// MARK: - generic relations
 
-[[kernel]] void build_forward_kernel_map_i32(
+[[kernel]] void build_forward_kernel_relation_i32(
     device const int* coords [[buffer(0)]],
     device const int* kernel_offsets [[buffer(1)]],
     device int* in_rows [[buffer(2)]],
@@ -282,7 +282,7 @@ using namespace metal;
     counts[1] = out_count;
 }
 
-[[kernel]] void build_transposed_kernel_map_i32(
+[[kernel]] void build_transposed_kernel_relation_i32(
     device const int* coords [[buffer(0)]],
     device const int* kernel_offsets [[buffer(1)]],
     device int* in_rows [[buffer(2)]],

@@ -40,22 +40,22 @@ def test_coordinate_set_primitives_preserve_first_seen_order() -> None:
     assert lookup_coords(lhs, rhs).tolist() == [1, -1]
 
 
-def test_kernel_offsets_and_map_builders_emit_expected_edges() -> None:
+def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
     )
-    mapping = build_kernel_relation(coords, kernel_size=(3, 1, 1))
+    relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
 
     assert kernel_offsets((3, 1, 1)) == ((-1, 0, 0), (0, 0, 0), (1, 0, 0))
-    assert mapping.out_coords is not None
-    assert mapping.out_coords.tolist() == coords.tolist()
-    assert mapping.edge_coo.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
-    assert mapping.edge_coo.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
-    assert mapping.edge_coo.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
+    assert relation.out_coords is not None
+    assert relation.out_coords.tolist() == coords.tolist()
+    assert relation.edge_coo.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
+    assert relation.edge_coo.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
+    assert relation.edge_coo.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
 
 
-def test_strided_and_transposed_maps_define_output_policy() -> None:
+def test_strided_and_transposed_relations_define_output_policy() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 0, 0]],
         dtype=mx.int32,
@@ -104,19 +104,19 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
             [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
             dtype=mx.int32,
         )
-        mapping = build_kernel_relation(coords, kernel_size=(3, 1, 1))
+        relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
         mx.eval(
-            mapping.out_coords,
-            mapping.edge_coo.in_rows,
-            mapping.edge_coo.out_rows,
-            mapping.edge_coo.kernel_ids,
+            relation.out_coords,
+            relation.edge_coo.in_rows,
+            relation.edge_coo.out_rows,
+            relation.edge_coo.kernel_ids,
         )
-        assert mapping.out_coords is not None
+        assert relation.out_coords is not None
         return (
-            cast('list[list[int]]', mapping.out_coords.tolist()),
-            cast('list[int]', mapping.edge_coo.in_rows.tolist()),
-            cast('list[int]', mapping.edge_coo.out_rows.tolist()),
-            cast('list[int]', mapping.edge_coo.kernel_ids.tolist()),
+            cast('list[list[int]]', relation.out_coords.tolist()),
+            cast('list[int]', relation.edge_coo.in_rows.tolist()),
+            cast('list[int]', relation.edge_coo.out_rows.tolist()),
+            cast('list[int]', relation.edge_coo.kernel_ids.tolist()),
         )
 
     assert run_with_gpu_default(run) == (

@@ -3,7 +3,11 @@ from __future__ import annotations
 import mlx.core as mx
 
 from mlx_lattice._native import ext
-from mlx_lattice.core.maps import EdgeCooPlan, KernelRelation, edge_coo_plan
+from mlx_lattice.core.relations import (
+    EdgeCooPlan,
+    KernelRelation,
+    edge_coo_plan,
+)
 
 __all__ = [
     'execute_pool_max',

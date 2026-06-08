@@ -6,8 +6,8 @@ import mlx.core as mx
 
 from mlx_lattice.core import KernelRelation, KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
-from mlx_lattice.ops.exec import execute_spmm
-from mlx_lattice.ops.maps import (
+from mlx_lattice.ops._exec import execute_spmm
+from mlx_lattice.ops.relations import (
     generative_kernel_relation,
     kernel_relation,
     transposed_kernel_relation,

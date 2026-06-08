@@ -199,9 +199,9 @@ void write_map_rows(
         kernel_ids.push_back(edge[2]);
     }
 
-    write_i32(outputs[MapInRows], in_rows);
-    write_i32(outputs[MapOutRows], out_rows);
-    write_i32(outputs[MapKernelIds], kernel_ids);
+    write_i32(outputs[RelationInRows], in_rows);
+    write_i32(outputs[RelationOutRows], out_rows);
+    write_i32(outputs[RelationKernelIds], kernel_ids);
 }
 
 void write_map(
@@ -212,10 +212,10 @@ void write_map(
     bool compact
 ) {
     write_map_rows(outputs, edges);
-    write_coords(outputs[MapOutCoords], out_coords, coord_dtype);
+    write_coords(outputs[RelationOutCoords], out_coords, coord_dtype);
     if (compact) {
         write_count(
-            outputs[MapCounts], int(edges.size()), int(out_coords.size())
+            outputs[RelationCounts], int(edges.size()), int(out_coords.size())
         );
     }
 }
@@ -279,9 +279,9 @@ lookup_values(const mx::array& coords, const mx::array& queries) {
     return out;
 }
 
-// MARK: - maps
+// MARK: - relations
 
-void write_kernel_map(
+void write_kernel_relation(
     std::vector<mx::array>& outputs,
     const mx::array& coords,
     const std::vector<Triple>& offsets,
@@ -315,7 +315,7 @@ void write_kernel_map(
     write_map(outputs, edges, out_values, coords.dtype(), true);
 }
 
-void write_generative_map(
+void write_generative_relation(
     std::vector<mx::array>& outputs,
     const mx::array& coords,
     const std::vector<Triple>& offsets,
@@ -349,7 +349,7 @@ void write_generative_map(
     write_map(outputs, edges, out_values, coords.dtype(), false);
 }
 
-void write_transposed_kernel_map(
+void write_transposed_kernel_relation(
     std::vector<mx::array>& outputs,
     const mx::array& coords,
     const std::vector<Triple>& offsets,
@@ -425,8 +425,8 @@ void eval_lookup_coords(
     write_i32(outputs[0], lookup_values(inputs[0], inputs[1]));
 }
 
-void eval_generic_kernel_map(
-    CoordMapOp op,
+void eval_generic_kernel_relation(
+    CoordRelationOp op,
     Triple stride,
     Triple padding,
     const std::vector<mx::array>& inputs,
@@ -435,23 +435,25 @@ void eval_generic_kernel_map(
     auto offsets = read_offsets(inputs[1]);
 
     switch (op) {
-    case CoordMapOp::Forward:
-        write_kernel_map(outputs, inputs[0], offsets, stride, padding);
+    case CoordRelationOp::Forward:
+        write_kernel_relation(outputs, inputs[0], offsets, stride, padding);
         break;
-    case CoordMapOp::Transposed:
-        write_transposed_kernel_map(
+    case CoordRelationOp::Transposed:
+        write_transposed_kernel_relation(
             outputs, inputs[0], offsets, stride, padding
         );
         break;
     }
 }
 
-void eval_generative_kernel_map(
+void eval_generative_kernel_relation(
     Triple stride,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    write_generative_map(outputs, inputs[0], read_offsets(inputs[1]), stride);
+    write_generative_relation(
+        outputs, inputs[0], read_offsets(inputs[1]), stride
+    );
 }
 
 } // namespace mlx_lattice::coords::cpu

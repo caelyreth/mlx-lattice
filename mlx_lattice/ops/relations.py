@@ -8,7 +8,7 @@ from mlx_lattice.core.coords.builders import (
     build_transposed_kernel_relation,
     kernel_offsets,
 )
-from mlx_lattice.core.maps import KernelRelation
+from mlx_lattice.core.relations import KernelRelation
 from mlx_lattice.core.tensor import SparseTensor
 
 __all__ = [

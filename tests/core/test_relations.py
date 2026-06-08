@@ -38,7 +38,7 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
         dtype=mx.int32,
     )
 
-    mapping = KernelRelation(
+    relation = KernelRelation(
         rows,
         rows,
         rows,
@@ -47,12 +47,12 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
         n_in_rows=2,
     )
 
-    assert mapping.n_edges == 2
-    assert mapping.n_out_rows == 2
-    assert mapping.n_in_rows == 2
-    assert mapping.n_kernels == 2
-    assert edge_coo_plan(mapping).edge_coo is mapping.edge_coo
-    assert edge_coo_plan(mapping).n_out_rows == 2
+    assert relation.n_edges == 2
+    assert relation.n_out_rows == 2
+    assert relation.n_in_rows == 2
+    assert relation.n_kernels == 2
+    assert edge_coo_plan(relation).edge_coo is relation.edge_coo
+    assert edge_coo_plan(relation).n_out_rows == 2
 
     with pytest.raises(ValueError, match='same row count'):
         KernelRelation(rows, short, rows)

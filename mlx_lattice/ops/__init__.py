@@ -28,15 +28,6 @@ from mlx_lattice.ops.feature import (
     softplus,
     tanh,
 )
-from mlx_lattice.ops.maps import (
-    build_generative_relation,
-    build_kernel_relation,
-    build_transposed_kernel_relation,
-    generative_kernel_relation,
-    kernel_offsets,
-    kernel_relation,
-    transposed_kernel_relation,
-)
 from mlx_lattice.ops.pool import (
     avg_pool3d,
     global_avg_pool,
@@ -45,6 +36,15 @@ from mlx_lattice.ops.pool import (
     max_pool3d,
     pool3d,
     sum_pool3d,
+)
+from mlx_lattice.ops.relations import (
+    build_generative_relation,
+    build_kernel_relation,
+    build_transposed_kernel_relation,
+    generative_kernel_relation,
+    kernel_offsets,
+    kernel_relation,
+    transposed_kernel_relation,
 )
 from mlx_lattice.ops.tensor import cat, prune, sparse_collate, topk_rows
 

@@ -7,7 +7,7 @@ target_sources(
   PRIVATE
     api.cpp
     dispatch.cpp
-    maps.cpp
+    relations.cpp
     validation.cpp)
 
 target_include_directories(

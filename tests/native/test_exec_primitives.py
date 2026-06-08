@@ -6,7 +6,7 @@ from mlx_lattice.core import KernelRelation
 from mlx_lattice.ops import (
     build_kernel_relation,
 )
-from mlx_lattice.ops.exec import (
+from mlx_lattice.ops._exec import (
     execute_pool_max,
     execute_pool_sum,
     execute_spmm,
@@ -36,7 +36,7 @@ def _manual_spmm(
 def test_execute_spmm_matches_manual_reference_with_repeated_outputs() -> (
     None
 ):
-    mapping = KernelRelation(
+    relation = KernelRelation(
         mx.array([0, 1, 2, 0], dtype=mx.int32),
         mx.array([0, 0, 1, 1], dtype=mx.int32),
         mx.array([0, 1, 0, 1], dtype=mx.int32),
@@ -57,14 +57,14 @@ def test_execute_spmm_matches_manual_reference_with_repeated_outputs() -> (
         dtype=mx.float32,
     )
 
-    out = execute_spmm(feats, weights, mapping)
+    out = execute_spmm(feats, weights, relation)
 
     assert out.tolist() == _manual_spmm(
         cast('list[list[float]]', feats.tolist()),
         cast('list[list[list[float]]]', weights.tolist()),
-        cast('list[int]', mapping.edge_coo.in_rows.tolist()),
-        cast('list[int]', mapping.edge_coo.out_rows.tolist()),
-        cast('list[int]', mapping.edge_coo.kernel_ids.tolist()),
+        cast('list[int]', relation.edge_coo.in_rows.tolist()),
+        cast('list[int]', relation.edge_coo.out_rows.tolist()),
+        cast('list[int]', relation.edge_coo.kernel_ids.tolist()),
         2,
     )
 
@@ -74,11 +74,11 @@ def test_execute_spmm_consumes_lazy_kernel_relation_outputs() -> None:
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
     )
-    mapping = build_kernel_relation(coords, kernel_size=(3, 1, 1))
+    relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
     feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
     weights = mx.ones((3, 1, 1), dtype=mx.float32)
 
-    assert execute_spmm(feats, weights, mapping).tolist() == [
+    assert execute_spmm(feats, weights, relation).tolist() == [
         [3.0],
         [6.0],
         [5.0],
@@ -86,7 +86,7 @@ def test_execute_spmm_consumes_lazy_kernel_relation_outputs() -> None:
 
 
 def test_pool_edge_reductions_match_manual_reference() -> None:
-    mapping = KernelRelation(
+    relation = KernelRelation(
         mx.array([0, 1, 2, 0], dtype=mx.int32),
         mx.array([0, 0, 1, 1], dtype=mx.int32),
         mx.array([0, 0, 0, 0], dtype=mx.int32),
@@ -99,11 +99,11 @@ def test_pool_edge_reductions_match_manual_reference() -> None:
         dtype=mx.float32,
     )
 
-    assert execute_pool_sum(feats, mapping).tolist() == [
+    assert execute_pool_sum(feats, relation).tolist() == [
         [4.0, -2.0],
         [6.0, 8.0],
     ]
-    assert execute_pool_max(feats, mapping).tolist() == [
+    assert execute_pool_max(feats, relation).tolist() == [
         [3.0, 2.0],
         [5.0, 6.0],
     ]
@@ -111,7 +111,7 @@ def test_pool_edge_reductions_match_manual_reference() -> None:
 
 def test_metal_exec_primitives_match_cpu_contract_when_available() -> None:
     def run() -> tuple[list[list[float]], list[list[float]]]:
-        mapping = KernelRelation(
+        relation = KernelRelation(
             mx.array([0, 1, 2, 0], dtype=mx.int32),
             mx.array([0, 0, 1, 1], dtype=mx.int32),
             mx.array([0, 1, 0, 1], dtype=mx.int32),
@@ -130,8 +130,8 @@ def test_metal_exec_primitives_match_cpu_contract_when_available() -> None:
             ],
             dtype=mx.float32,
         )
-        spmm = execute_spmm(feats, weights, mapping)
-        pooled = execute_pool_sum(feats, mapping)
+        spmm = execute_spmm(feats, weights, relation)
+        pooled = execute_pool_sum(feats, relation)
         mx.eval(spmm, pooled)
         return (
             cast('list[list[float]]', spmm.tolist()),

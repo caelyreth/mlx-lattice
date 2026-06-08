@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from mlx_lattice.core.maps.specs import KernelSpec
-from mlx_lattice.core.maps.views import (
+from mlx_lattice.core.relations.specs import KernelSpec
+from mlx_lattice.core.relations.views import (
     EdgeCoo,
     EdgeCooPlan,
     KernelRelation,

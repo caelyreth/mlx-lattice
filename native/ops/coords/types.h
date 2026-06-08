@@ -18,21 +18,21 @@ enum class CoordSetOp : std::uint8_t {
     Intersection,
 };
 
-enum class CoordMapOp : std::uint8_t {
+enum class CoordRelationOp : std::uint8_t {
     Forward,
     Transposed,
 };
 
-enum CoordMapOutputSlot : std::size_t {
-    MapInRows = 0,
-    MapOutRows,
-    MapKernelIds,
-    MapOutCoords,
-    MapCounts,
-    MapOutputCount,
+enum CoordRelationOutputSlot : std::size_t {
+    RelationInRows = 0,
+    RelationOutRows,
+    RelationKernelIds,
+    RelationOutCoords,
+    RelationCounts,
+    RelationOutputCount,
 };
 
-constexpr std::size_t DirectMapOutputCount = MapOutputCount - 1;
+constexpr std::size_t DirectRelationOutputCount = RelationOutputCount - 1;
 
 struct NativeKernelRelation {
     // Baseline edge-COO view of a logical relation. Future native execution

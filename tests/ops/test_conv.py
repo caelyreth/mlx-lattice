@@ -10,7 +10,7 @@ from mlx_lattice.ops import (
     generative_conv_transpose3d,
     subm_conv3d,
 )
-from mlx_lattice.ops.exec import execute_spmm
+from mlx_lattice.ops._exec import execute_spmm
 from tests.support import assert_same_sparse_identity, mx
 
 

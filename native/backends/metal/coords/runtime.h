@@ -25,8 +25,8 @@ void eval_lookup_coords(
     std::vector<mx::array>& outputs
 );
 
-void eval_generic_kernel_map(
-    CoordMapOp op,
+void eval_generic_kernel_relation(
+    CoordRelationOp op,
     int rows,
     int kernel_count,
     Triple stride, // NOLINT(bugprone-easily-swappable-parameters)
@@ -36,7 +36,7 @@ void eval_generic_kernel_map(
     std::vector<mx::array>& outputs
 );
 
-void eval_generative_kernel_map(
+void eval_generative_kernel_relation(
     int rows,
     int kernel_count,
     Triple stride,

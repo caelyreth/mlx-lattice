@@ -6,7 +6,7 @@ import mlx.core as mx
 
 from mlx_lattice._native import ext
 from mlx_lattice.core.coords.validation import validate_coords
-from mlx_lattice.core.maps import (
+from mlx_lattice.core.relations import (
     KernelRelation,
     KernelSpec,
 )
