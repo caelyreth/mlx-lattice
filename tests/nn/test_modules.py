@@ -1,15 +1,10 @@
 from __future__ import annotations
 
-# ruff: noqa: E402, I001
-
-import pytest
-
-mx = pytest.importorskip('mlx.core')
-
 import mlx_lattice
 from mlx_lattice import SparseTensor
 from mlx_lattice import nn as lnn
-from mlx_lattice.ops import sparse_collate
+from mlx_lattice.ops import conv3d, sparse_collate
+from tests.support import assert_same_sparse_identity, mx
 
 
 def _tensor() -> SparseTensor:
@@ -30,8 +25,7 @@ def test_feature_modules_preserve_sparse_identity_and_own_parameters() -> (
     out = lnn.ReLU()(layer(x))
 
     assert out.feats.tolist() == [[9.0, 18.0], [19.0, 42.0]]
-    assert out.coord_key == x.coord_key
-    assert out.coord_manager is x.coord_manager
+    assert_same_sparse_identity(out, x)
     assert 'weight' in layer
     assert 'bias' in layer
 
@@ -45,15 +39,15 @@ def test_normalization_and_dropout_modules_delegate_feature_state() -> None:
     normalized = norm(x)
     dropped = lnn.Dropout(p=0.5)(x)
 
-    assert normalized.coord_key == x.coord_key
     assert normalized.feats.shape == x.feats.shape
-    assert dropped.coord_key == x.coord_key
     assert dropped.feats.shape == x.feats.shape
+    assert_same_sparse_identity(normalized, x)
+    assert_same_sparse_identity(dropped, x)
     assert lnn.LayerNorm(2)(x).shape == x.shape
     assert lnn.RMSNorm(2)(x).shape == x.shape
 
 
-def test_convolution_modules_wrap_public_sparse_ops() -> None:
+def test_convolution_modules_use_mlx_weight_layout_and_public_ops() -> None:
     x = SparseTensor(
         mx.array(
             [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
@@ -62,14 +56,16 @@ def test_convolution_modules_wrap_public_sparse_ops() -> None:
         mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32),
     )
     conv = lnn.Conv3d(1, 1, kernel_size=(3, 1, 1), bias=False)
-    assert conv.weight.shape == (1, 3, 1, 1, 1)
     conv.weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
     subm = lnn.SubmConv3d(1, 1, kernel_size=(3, 1, 1), bias=False)
     subm.weight = conv.weight
 
     out = conv(x)
+    functional = conv3d(x, conv.weight, kernel_size=(3, 1, 1))
     subm_out = subm(x)
 
+    assert conv.weight.shape == (1, 3, 1, 1, 1)
+    assert out.feats.tolist() == functional.feats.tolist()
     assert out.feats.tolist() == [[3.0], [6.0], [5.0]]
     assert out.coord_manager is x.coord_manager
     assert subm_out.coord_key == x.coord_key
@@ -89,7 +85,6 @@ def test_transpose_and_pool_modules_wrap_sparse_policies() -> None:
         stride=(2, 1, 1),
         bias=False,
     )
-    assert transposed.weight.shape == (1, 2, 1, 1, 1)
     transposed.weight = mx.array([2.0, 3.0], dtype=mx.float32).reshape(
         1, 2, 1, 1, 1
     )
@@ -97,6 +92,7 @@ def test_transpose_and_pool_modules_wrap_sparse_policies() -> None:
     out = transposed(x)
     pooled = lnn.SumPool3d(kernel_size=1, stride=1)(out)
 
+    assert transposed.weight.shape == (1, 2, 1, 1, 1)
     assert out.coords.tolist() == [[0, 2, 0, 0], [0, 3, 0, 0]]
     assert out.feats.tolist() == [[8.0], [12.0]]
     assert pooled.feats.tolist() == out.feats.tolist()

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-# ruff: noqa: E402, I001
-
-import pytest
 from typing import Any, cast
 
-mx = pytest.importorskip('mlx.core')
+import pytest
 
 from mlx_lattice import SparseTensor
 from mlx_lattice.ops import (
@@ -18,6 +15,7 @@ from mlx_lattice.ops import (
     sparse_collate,
     sum_pool3d,
 )
+from tests.support import mx
 
 
 def test_local_pooling_uses_kernel_map_edge_reductions() -> None:
@@ -25,7 +23,10 @@ def test_local_pooling_uses_kernel_map_edge_reductions() -> None:
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
     )
-    feats = mx.array([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]])
+    feats = mx.array(
+        [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]],
+        dtype=mx.float32,
+    )
     x = SparseTensor(coords, feats)
 
     summed = sum_pool3d(x, kernel_size=(3, 1, 1), stride=1)
@@ -62,7 +63,7 @@ def test_strided_pooling_updates_output_stride_and_manager_context() -> (
     assert out.coord_manager.owns(out.coord_key)
 
 
-def test_global_pooling_reduces_each_batch() -> None:
+def test_global_pooling_reduces_each_batch_independently() -> None:
     x = sparse_collate(
         [
             mx.array([[0, 0, 0], [1, 0, 0]], dtype=mx.int32),

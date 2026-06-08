@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-mx = pytest.importorskip('mlx.core')
-
-from mlx_lattice.core import (  # noqa: E402
-    KernelMap,
-    KernelSpec,
-)
+from mlx_lattice.core import KernelMap, KernelSpec
+from tests.support import mx
 
 
 def test_kernel_spec_normalizes_and_classifies_common_paths() -> None:
@@ -34,44 +30,31 @@ def test_kernel_spec_rejects_invalid_values() -> None:
         KernelSpec(dilation=0)
 
 
-def test_kernel_map_accepts_edge_contract() -> None:
-    in_rows = mx.array([0, 1, 0], dtype=mx.int32)
-    out_rows = mx.array([0, 0, 1], dtype=mx.int32)
-    kernel_ids = mx.array([0, 1, 0], dtype=mx.int32)
+def test_kernel_map_accepts_and_validates_edge_contract() -> None:
+    rows = mx.array([0, 1], dtype=mx.int32)
+    short = mx.array([0], dtype=mx.int32)
     out_coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0]],
         dtype=mx.int32,
     )
 
     mapping = KernelMap(
-        in_rows,
-        out_rows,
-        kernel_ids,
+        rows,
+        rows,
+        rows,
         kernel_offsets=((0, 0, 0), (1, 0, 0)),
         out_coords=out_coords,
         n_in_rows=2,
-        n_kernels=2,
     )
 
-    assert mapping.n_edges == 3
+    assert mapping.n_edges == 2
     assert mapping.n_out_rows == 2
     assert mapping.n_in_rows == 2
     assert mapping.n_kernels == 2
-    assert mapping.kernel_offsets == ((0, 0, 0), (1, 0, 0))
-
-
-def test_kernel_map_rejects_shape_and_count_mismatches() -> None:
-    rows = mx.array([0, 1], dtype=mx.int32)
-    short = mx.array([0], dtype=mx.int32)
 
     with pytest.raises(ValueError, match='same row count'):
         KernelMap(rows, short, rows)
-
     with pytest.raises(ValueError, match='n_kernels'):
         KernelMap(
-            rows,
-            rows,
-            rows,
-            kernel_offsets=((0, 0, 0),),
-            n_kernels=2,
+            rows, rows, rows, kernel_offsets=((0, 0, 0),), n_kernels=2
         )

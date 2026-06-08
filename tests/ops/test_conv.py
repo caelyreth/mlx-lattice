@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-# ruff: noqa: E402, I001
-
 import pytest
-
-mx = pytest.importorskip('mlx.core')
 
 from mlx_lattice import SparseTensor
 from mlx_lattice.ops import (
+    build_kernel_map,
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    spmm_edges,
     subm_conv3d,
 )
+from tests.support import assert_same_sparse_identity, mx
 
 
-def test_conv3d_pointwise_reuses_coordinate_identity() -> None:
+def test_conv3d_pointwise_matches_dense_linear_contract() -> None:
     coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
     feats = mx.array([[1.0, 2.0], [3.0, 4.0]], dtype=mx.float32)
     x = SparseTensor(coords, feats)
@@ -25,31 +24,39 @@ def test_conv3d_pointwise_reuses_coordinate_identity() -> None:
     out = conv3d(x, weight, bias, kernel_size=1)
 
     assert out.feats.tolist() == [[9.0, 18.0], [19.0, 42.0]]
-    assert out.coord_key == x.coord_key
-    assert out.coord_manager is x.coord_manager
-    assert out.coords is x.coords
+    assert_same_sparse_identity(out, x)
 
 
-def test_conv3d_generic_uses_kernel_map_edges() -> None:
+def test_conv3d_generic_matches_native_edge_spmm_reference() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
     )
     feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
     x = SparseTensor(coords, feats)
-    weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1, 3, 1, 1, 1
+    )
 
     out = conv3d(x, weight, kernel_size=(3, 1, 1))
+    mapping = build_kernel_map(coords, kernel_size=(3, 1, 1))
+    native_weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        3, 1, 1
+    )
 
     assert out.coords.tolist() == coords.tolist()
-    assert out.feats.tolist() == [[3.0], [6.0], [5.0]]
+    assert (
+        out.feats.tolist()
+        == spmm_edges(feats, native_weight, mapping).tolist()
+    )
+    assert out.feats.tolist() == [[8.0], [14.0], [8.0]]
     assert out.stride == (1, 1, 1)
     assert out.coord_manager is x.coord_manager
     assert out.coord_key != x.coord_key
     assert out.coord_manager.owns(out.coord_key)
 
 
-def test_conv3d_strided_updates_output_stride_and_coords() -> None:
+def test_conv3d_strided_updates_output_stride_and_coordinates() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 0, 0]],
         dtype=mx.int32,
@@ -65,7 +72,7 @@ def test_conv3d_strided_updates_output_stride_and_coords() -> None:
     assert out.stride == (2, 2, 2)
 
 
-def test_subm_conv3d_reuses_input_coordinates() -> None:
+def test_subm_conv3d_reuses_input_coordinate_identity() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
@@ -77,11 +84,10 @@ def test_subm_conv3d_reuses_input_coordinates() -> None:
     out = subm_conv3d(x, weight, kernel_size=(3, 1, 1))
 
     assert out.feats.tolist() == [[3.0], [6.0], [5.0]]
-    assert out.coord_key == x.coord_key
-    assert out.coords is x.coords
+    assert_same_sparse_identity(out, x)
 
 
-def test_transpose_convs_use_generated_output_coords() -> None:
+def test_transpose_convs_generate_the_same_output_contract() -> None:
     x = SparseTensor(
         mx.array([[0, 1, 0, 0]], dtype=mx.int32),
         mx.array([[4.0]], dtype=mx.float32),
@@ -110,7 +116,7 @@ def test_transpose_convs_use_generated_output_coords() -> None:
     assert generated.stride == out.stride
 
 
-def test_conv_rejects_ambiguous_contracts() -> None:
+def test_conv_ops_reject_ambiguous_contracts() -> None:
     x = SparseTensor(
         mx.array([[0, 0, 0, 0]], dtype=mx.int32),
         mx.ones((1, 1), dtype=mx.float32),

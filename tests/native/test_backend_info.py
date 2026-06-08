@@ -5,7 +5,7 @@ from typing import cast
 import mlx_lattice
 
 
-def test_native_backend_info() -> None:
+def test_native_backend_info_contract() -> None:
     info = mlx_lattice.backend_info()
     capabilities = cast(dict[str, bool], info['capabilities'])
 
