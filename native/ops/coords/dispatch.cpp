@@ -55,7 +55,7 @@ mx::array compact_rows(const mx::array& rows, int count) {
     return mx::slice(rows, {0}, {count});
 }
 
-NativeKernelMap compact_map(const std::vector<mx::array>& outputs) {
+NativeKernelRelation compact_map(const std::vector<mx::array>& outputs) {
     auto count_values =
         mx::contiguous(outputs[MapCounts], false, mx::Device::cpu);
     count_values.eval();
@@ -71,7 +71,7 @@ NativeKernelMap compact_map(const std::vector<mx::array>& outputs) {
     };
 }
 
-NativeKernelMap direct_map(const std::vector<mx::array>& outputs) {
+NativeKernelRelation direct_map(const std::vector<mx::array>& outputs) {
     return {
         outputs[MapInRows],
         outputs[MapOutRows],
@@ -187,9 +187,9 @@ class LookupCoords final : public mx::Primitive {
     CoordLookupShape shape_;
 };
 
-class GenericKernelMap final : public mx::Primitive {
+class GenericKernelRelation final : public mx::Primitive {
   public:
-    GenericKernelMap(
+    GenericKernelRelation(
         mx::Stream stream,
         CoordMapOp op,
         int rows, // NOLINT(bugprone-easily-swappable-parameters)
@@ -225,13 +225,15 @@ class GenericKernelMap final : public mx::Primitive {
         );
     }
 
-    const char* name() const override { return "lattice::GenericKernelMap"; }
+    const char* name() const override {
+        return "lattice::GenericKernelRelation";
+    }
 
     bool is_equivalent(const mx::Primitive& other) const override {
-        const auto& map = static_cast<const GenericKernelMap&>(other);
-        return op_ == map.op_ && rows_ == map.rows_ &&
-               kernel_count_ == map.kernel_count_ && stride_ == map.stride_ &&
-               padding_ == map.padding_;
+        const auto& relation = static_cast<const GenericKernelRelation&>(other);
+        return op_ == relation.op_ && rows_ == relation.rows_ &&
+               kernel_count_ == relation.kernel_count_ &&
+               stride_ == relation.stride_ && padding_ == relation.padding_;
     }
 
   private:
@@ -242,9 +244,9 @@ class GenericKernelMap final : public mx::Primitive {
     Triple padding_;
 };
 
-class GenerativeKernelMap final : public mx::Primitive {
+class GenerativeKernelRelation final : public mx::Primitive {
   public:
-    GenerativeKernelMap(
+    GenerativeKernelRelation(
         mx::Stream stream,
         int rows, // NOLINT(bugprone-easily-swappable-parameters)
         int kernel_count,
@@ -269,12 +271,16 @@ class GenerativeKernelMap final : public mx::Primitive {
         );
     }
 
-    const char* name() const override { return "lattice::GenerativeKernelMap"; }
+    const char* name() const override {
+        return "lattice::GenerativeKernelRelation";
+    }
 
     bool is_equivalent(const mx::Primitive& other) const override {
-        const auto& map = static_cast<const GenerativeKernelMap&>(other);
-        return rows_ == map.rows_ && kernel_count_ == map.kernel_count_ &&
-               stride_ == map.stride_;
+        const auto& relation =
+            static_cast<const GenerativeKernelRelation&>(other);
+        return rows_ == relation.rows_ &&
+               kernel_count_ == relation.kernel_count_ &&
+               stride_ == relation.stride_;
     }
 
   private:
@@ -357,9 +363,9 @@ dispatch_lookup_coords(const mx::array& coords, const mx::array& queries) {
     return outputs[0];
 }
 
-// MARK: - maps
+// MARK: - relations
 
-NativeKernelMap dispatch_build_kernel_map(
+NativeKernelRelation dispatch_build_kernel_relation(
     const mx::array& coords,
     Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
     Triple stride,
@@ -375,7 +381,7 @@ NativeKernelMap dispatch_build_kernel_map(
     auto device = device_for(coords);
     auto outputs = make_map_outputs(
         map_output_spec(max_edges, max_out_rows, coords.dtype(), true),
-        std::make_shared<GenericKernelMap>(
+        std::make_shared<GenericKernelRelation>(
             mx::default_stream(device),
             CoordMapOp::Forward,
             rows,
@@ -390,7 +396,7 @@ NativeKernelMap dispatch_build_kernel_map(
     return compact_map(outputs);
 }
 
-NativeKernelMap dispatch_build_generative_map(
+NativeKernelRelation dispatch_build_generative_relation(
     const mx::array& coords,
     Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
     Triple stride
@@ -403,7 +409,7 @@ NativeKernelMap dispatch_build_generative_map(
     auto device = device_for(coords);
     auto outputs = make_map_outputs(
         map_output_spec(pair_count, pair_count, coords.dtype(), false),
-        std::make_shared<GenerativeKernelMap>(
+        std::make_shared<GenerativeKernelRelation>(
             mx::default_stream(device), rows, kernel_count, stride
         ),
         coords,
@@ -413,7 +419,7 @@ NativeKernelMap dispatch_build_generative_map(
     return direct_map(outputs);
 }
 
-NativeKernelMap dispatch_build_transposed_kernel_map(
+NativeKernelRelation dispatch_build_transposed_kernel_relation(
     const mx::array& coords,
     Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
     Triple stride,
@@ -428,7 +434,7 @@ NativeKernelMap dispatch_build_transposed_kernel_map(
     auto device = device_for(coords);
     auto outputs = make_map_outputs(
         map_output_spec(max_edges, max_edges, coords.dtype(), true),
-        std::make_shared<GenericKernelMap>(
+        std::make_shared<GenericKernelRelation>(
             mx::default_stream(device),
             CoordMapOp::Transposed,
             rows,

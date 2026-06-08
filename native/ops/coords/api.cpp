@@ -28,9 +28,9 @@ mx::array lookup_coords(const mx::array& coords, const mx::array& queries) {
     return dispatch_lookup_coords(coords, queries);
 }
 
-// MARK: - maps
+// MARK: - relations
 
-NativeKernelMap build_kernel_map(
+NativeKernelRelation build_kernel_relation(
     const mx::array& coords,
     Triple kernel_size,
     Triple stride,
@@ -42,12 +42,12 @@ NativeKernelMap build_kernel_map(
     validate_positive(stride, "stride");
     validate_nonnegative(padding, "padding");
     validate_positive(dilation, "dilation");
-    return dispatch_build_kernel_map(
+    return dispatch_build_kernel_relation(
         coords, kernel_size, stride, padding, dilation
     );
 }
 
-NativeKernelMap build_generative_map(
+NativeKernelRelation build_generative_relation(
     const mx::array& coords,
     Triple kernel_size,
     Triple stride
@@ -55,10 +55,10 @@ NativeKernelMap build_generative_map(
     validate_coords(coords);
     validate_positive(kernel_size, "kernel_size");
     validate_positive(stride, "stride");
-    return dispatch_build_generative_map(coords, kernel_size, stride);
+    return dispatch_build_generative_relation(coords, kernel_size, stride);
 }
 
-NativeKernelMap build_transposed_kernel_map(
+NativeKernelRelation build_transposed_kernel_relation(
     const mx::array& coords,
     Triple kernel_size,
     Triple stride,
@@ -70,7 +70,7 @@ NativeKernelMap build_transposed_kernel_map(
     validate_positive(stride, "stride");
     validate_nonnegative(padding, "padding");
     validate_positive(dilation, "dilation");
-    return dispatch_build_transposed_kernel_map(
+    return dispatch_build_transposed_kernel_relation(
         coords, kernel_size, stride, padding, dilation
     );
 }

@@ -4,13 +4,13 @@ from collections.abc import Sequence
 
 import mlx.core as mx
 
-from mlx_lattice.core import KernelMap, KernelSpec, SparseTensor
+from mlx_lattice.core import KernelRelation, KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
-from mlx_lattice.ops.exec import spmm_edges
+from mlx_lattice.ops.exec import execute_spmm
 from mlx_lattice.ops.maps import (
-    generative_kernel_map,
-    kernel_map,
-    transposed_kernel_map,
+    generative_kernel_relation,
+    kernel_relation,
+    transposed_kernel_relation,
 )
 
 __all__ = [
@@ -42,7 +42,7 @@ def conv3d(
             feats=_with_bias(_pointwise_features(x, weight), bias)
         )
 
-    mapping = kernel_map(
+    relation = kernel_relation(
         x,
         kernel_size=spec.size,
         stride=spec.stride,
@@ -53,7 +53,7 @@ def conv3d(
         x,
         weight,
         bias,
-        mapping,
+        relation,
         output_stride=_mul_stride(x.stride, spec.stride),
     )
 
@@ -78,14 +78,14 @@ def subm_conv3d(
             feats=_with_bias(_pointwise_features(x, weight), bias)
         )
 
-    mapping = kernel_map(
+    relation = kernel_relation(
         x,
         kernel_size=spec.size,
         stride=1,
         padding=0,
         dilation=spec.dilation,
     )
-    feats = _spmm_features(x, weight, bias, mapping)
+    feats = _spmm_features(x, weight, bias, relation)
     return x.replace(feats=feats)
 
 
@@ -105,7 +105,7 @@ def conv_transpose3d(
         padding=padding,
         dilation=dilation,
     )
-    mapping = transposed_kernel_map(
+    relation = transposed_kernel_relation(
         x,
         kernel_size=spec.size,
         stride=spec.stride,
@@ -116,7 +116,7 @@ def conv_transpose3d(
         x,
         weight,
         bias,
-        mapping,
+        relation,
         output_stride=_div_stride(x.stride, spec.stride),
     )
 
@@ -130,7 +130,7 @@ def generative_conv_transpose3d(
     stride: int | Sequence[int] = 2,
 ) -> SparseTensor:
     spec = KernelSpec(size=kernel_size, stride=stride)
-    mapping = generative_kernel_map(
+    relation = generative_kernel_relation(
         x,
         kernel_size=spec.size,
         stride=spec.stride,
@@ -139,7 +139,7 @@ def generative_conv_transpose3d(
         x,
         weight,
         bias,
-        mapping,
+        relation,
         output_stride=_div_stride(x.stride, spec.stride),
     )
 
@@ -151,15 +151,17 @@ def _mapped_conv(
     x: SparseTensor,
     weight: mx.array,
     bias: mx.array | None,
-    mapping: KernelMap,
+    relation: KernelRelation,
     *,
     output_stride: Triple,
 ) -> SparseTensor:
-    if mapping.out_coords is None:
-        raise ValueError('convolution maps must define output coordinates.')
-    feats = _spmm_features(x, weight, bias, mapping)
+    if relation.out_coords is None:
+        raise ValueError(
+            'convolution relations must define output coordinates.'
+        )
+    feats = _spmm_features(x, weight, bias, relation)
     return SparseTensor(
-        mapping.out_coords,
+        relation.out_coords,
         feats,
         stride=output_stride,
         coord_manager=x.coord_manager,
@@ -170,11 +172,11 @@ def _spmm_features(
     x: SparseTensor,
     weight: mx.array,
     bias: mx.array | None,
-    mapping: KernelMap,
+    relation: KernelRelation,
 ) -> mx.array:
     _validate_feature_dtype(x.feats, weight)
-    mapped_weight = _mapped_weight(x, weight, mapping)
-    return _with_bias(spmm_edges(x.feats, mapped_weight, mapping), bias)
+    mapped_weight = _mapped_weight(x, weight, relation)
+    return _with_bias(execute_spmm(x.feats, mapped_weight, relation), bias)
 
 
 def _pointwise_features(x: SparseTensor, weight: mx.array) -> mx.array:
@@ -218,17 +220,17 @@ def _pointwise_weight_matrix(x: SparseTensor, weight: mx.array) -> mx.array:
 def _mapped_weight(
     x: SparseTensor,
     weight: mx.array,
-    mapping: KernelMap,
+    relation: KernelRelation,
 ) -> mx.array:
     if weight.ndim == 3:
         if weight.shape[1] != x.channels:
             raise ValueError('weight input channels must match x.channels.')
         if (
-            mapping.n_kernels is not None
-            and weight.shape[0] != mapping.n_kernels
+            relation.n_kernels is not None
+            and weight.shape[0] != relation.n_kernels
         ):
             raise ValueError(
-                'weight kernel rows must match the kernel map.'
+                'weight kernel rows must match the kernel relation.'
             )
         return weight
 
@@ -240,8 +242,10 @@ def _mapped_weight(
     if weight.shape[4] != x.channels:
         raise ValueError('weight input channels must match x.channels.')
     kernel_rows = int(weight.shape[1] * weight.shape[2] * weight.shape[3])
-    if mapping.n_kernels is not None and kernel_rows != mapping.n_kernels:
-        raise ValueError('weight kernel rows must match the kernel map.')
+    if relation.n_kernels is not None and kernel_rows != relation.n_kernels:
+        raise ValueError(
+            'weight kernel rows must match the kernel relation.'
+        )
     out_channels = int(weight.shape[0])
     return weight.reshape(out_channels, kernel_rows, x.channels).transpose(
         1, 2, 0

@@ -18,7 +18,7 @@ from mlx_lattice.ops import (
 from tests.support import mx
 
 
-def test_local_pooling_uses_kernel_map_edge_reductions() -> None:
+def test_local_pooling_uses_kernel_relation_edge_reductions() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,

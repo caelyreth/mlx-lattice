@@ -4,13 +4,13 @@ from typing import cast
 
 from mlx_lattice.core import CoordinateManager, SparseTensor
 from mlx_lattice.ops import (
-    build_generative_map,
-    build_kernel_map,
-    build_transposed_kernel_map,
+    build_generative_relation,
+    build_kernel_relation,
+    build_transposed_kernel_relation,
     downsample_coords,
     intersection_coords,
-    kernel_map,
     kernel_offsets,
+    kernel_relation,
     lookup_coords,
     union_coords,
 )
@@ -45,14 +45,14 @@ def test_kernel_offsets_and_map_builders_emit_expected_edges() -> None:
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
     )
-    mapping = build_kernel_map(coords, kernel_size=(3, 1, 1))
+    mapping = build_kernel_relation(coords, kernel_size=(3, 1, 1))
 
     assert kernel_offsets((3, 1, 1)) == ((-1, 0, 0), (0, 0, 0), (1, 0, 0))
     assert mapping.out_coords is not None
     assert mapping.out_coords.tolist() == coords.tolist()
-    assert mapping.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
-    assert mapping.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
-    assert mapping.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
+    assert mapping.edge_coo.in_rows.tolist() == [0, 1, 0, 1, 2, 1, 2]
+    assert mapping.edge_coo.out_rows.tolist() == [1, 2, 0, 1, 2, 0, 1]
+    assert mapping.edge_coo.kernel_ids.tolist() == [0, 0, 1, 1, 1, 2, 2]
 
 
 def test_strided_and_transposed_maps_define_output_policy() -> None:
@@ -60,13 +60,13 @@ def test_strided_and_transposed_maps_define_output_policy() -> None:
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 0, 0]],
         dtype=mx.int32,
     )
-    strided = build_kernel_map(coords, kernel_size=1, stride=2)
-    generated = build_generative_map(
+    strided = build_kernel_relation(coords, kernel_size=1, stride=2)
+    generated = build_generative_relation(
         mx.array([[0, 1, 0, 0]], dtype=mx.int32),
         kernel_size=(2, 1, 1),
         stride=(2, 1, 1),
     )
-    transposed = build_transposed_kernel_map(
+    transposed = build_transposed_kernel_relation(
         mx.array([[0, 1, 0, 0]], dtype=mx.int32),
         kernel_size=(2, 1, 1),
         stride=(2, 1, 1),
@@ -74,26 +74,26 @@ def test_strided_and_transposed_maps_define_output_policy() -> None:
 
     assert strided.out_coords is not None
     assert strided.out_coords.tolist() == [[0, 0, 0, 0], [0, 1, 0, 0]]
-    assert strided.in_rows.tolist() == [0, 2]
+    assert strided.edge_coo.in_rows.tolist() == [0, 2]
     assert generated.out_coords is not None
     assert generated.out_coords.tolist() == [[0, 2, 0, 0], [0, 3, 0, 0]]
     assert transposed.out_coords is not None
     assert transposed.out_coords.tolist() == generated.out_coords.tolist()
 
 
-def test_coordinate_manager_caches_tensor_kernel_maps() -> None:
+def test_coordinate_manager_caches_tensor_kernel_relations() -> None:
     coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
     manager = CoordinateManager()
     key = manager.insert_coords(coords)
 
-    first = manager.kernel_map(key, kernel_size=(3, 1, 1))
-    second = manager.kernel_map(key, kernel_size=(3, 1, 1))
-    tensor_map = kernel_map(
+    first = manager.kernel_relation(key, kernel_size=(3, 1, 1))
+    second = manager.kernel_relation(key, kernel_size=(3, 1, 1))
+    tensor_relation = kernel_relation(
         SparseTensor(coords, mx.ones((2, 1))), kernel_size=(3, 1, 1)
     )
 
     assert first is second
-    assert tensor_map.kernel_offsets == first.kernel_offsets
+    assert tensor_relation.kernel_offsets == first.kernel_offsets
 
 
 def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
@@ -104,19 +104,19 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
             [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
             dtype=mx.int32,
         )
-        mapping = build_kernel_map(coords, kernel_size=(3, 1, 1))
+        mapping = build_kernel_relation(coords, kernel_size=(3, 1, 1))
         mx.eval(
             mapping.out_coords,
-            mapping.in_rows,
-            mapping.out_rows,
-            mapping.kernel_ids,
+            mapping.edge_coo.in_rows,
+            mapping.edge_coo.out_rows,
+            mapping.edge_coo.kernel_ids,
         )
         assert mapping.out_coords is not None
         return (
             cast('list[list[int]]', mapping.out_coords.tolist()),
-            cast('list[int]', mapping.in_rows.tolist()),
-            cast('list[int]', mapping.out_rows.tolist()),
-            cast('list[int]', mapping.kernel_ids.tolist()),
+            cast('list[int]', mapping.edge_coo.in_rows.tolist()),
+            cast('list[int]', mapping.edge_coo.out_rows.tolist()),
+            cast('list[int]', mapping.edge_coo.kernel_ids.tolist()),
         )
 
     assert run_with_gpu_default(run) == (

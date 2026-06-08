@@ -23,9 +23,12 @@ Triple triple_from_values(const std::vector<int>& values, const char* name) {
     return {values[0], values[1], values[2]};
 }
 
-nb::tuple map_tuple(const NativeKernelMap& map) {
+nb::tuple relation_tuple(const NativeKernelRelation& relation) {
     return nb::make_tuple(
-        map.in_rows, map.out_rows, map.kernel_ids, map.out_coords
+        relation.in_rows,
+        relation.out_rows,
+        relation.kernel_ids,
+        relation.out_coords
     );
 }
 
@@ -81,13 +84,13 @@ void register_coords(nb::module_& module) {
         "Return row indices of queries in coords, or -1."
     );
     module.def(
-        "build_kernel_map",
+        "build_kernel_relation",
         [](const mx::array& coords,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride,
            const std::vector<int>& padding,
            const std::vector<int>& dilation) {
-            return map_tuple(build_kernel_map(
+            return relation_tuple(build_kernel_relation(
                 coords,
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride"),
@@ -101,7 +104,7 @@ void register_coords(nb::module_& module) {
         "padding"_a,
         "dilation"_a,
         nb::sig(
-            "def build_kernel_map(coords: mlx.core.array, "
+            "def build_kernel_relation(coords: mlx.core.array, "
             "kernel_size: collections.abc.Sequence[int], "
             "stride: collections.abc.Sequence[int], "
             "padding: collections.abc.Sequence[int], "
@@ -109,14 +112,14 @@ void register_coords(nb::module_& module) {
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
             "mlx.core.array]"
         ),
-        "Build a forward sparse kernel map."
+        "Build a forward sparse kernel relation."
     );
     module.def(
-        "build_generative_map",
+        "build_generative_relation",
         [](const mx::array& coords,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride) {
-            return map_tuple(build_generative_map(
+            return relation_tuple(build_generative_relation(
                 coords,
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride")
@@ -126,22 +129,22 @@ void register_coords(nb::module_& module) {
         "kernel_size"_a,
         "stride"_a,
         nb::sig(
-            "def build_generative_map(coords: mlx.core.array, "
+            "def build_generative_relation(coords: mlx.core.array, "
             "kernel_size: collections.abc.Sequence[int], "
             "stride: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
             "mlx.core.array]"
         ),
-        "Build a generative sparse kernel map."
+        "Build a generative sparse kernel relation."
     );
     module.def(
-        "build_transposed_kernel_map",
+        "build_transposed_kernel_relation",
         [](const mx::array& coords,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride,
            const std::vector<int>& padding,
            const std::vector<int>& dilation) {
-            return map_tuple(build_transposed_kernel_map(
+            return relation_tuple(build_transposed_kernel_relation(
                 coords,
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride"),
@@ -155,7 +158,7 @@ void register_coords(nb::module_& module) {
         "padding"_a,
         "dilation"_a,
         nb::sig(
-            "def build_transposed_kernel_map(coords: mlx.core.array, "
+            "def build_transposed_kernel_relation(coords: mlx.core.array, "
             "kernel_size: collections.abc.Sequence[int], "
             "stride: collections.abc.Sequence[int], "
             "padding: collections.abc.Sequence[int], "
@@ -163,7 +166,7 @@ void register_coords(nb::module_& module) {
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
             "mlx.core.array]"
         ),
-        "Build a transposed sparse kernel map."
+        "Build a transposed sparse kernel relation."
     );
 }
 

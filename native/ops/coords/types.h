@@ -34,7 +34,9 @@ enum CoordMapOutputSlot : std::size_t {
 
 constexpr std::size_t DirectMapOutputCount = MapOutputCount - 1;
 
-struct NativeKernelMap {
+struct NativeKernelRelation {
+    // Baseline edge-COO view of a logical relation. Future native execution
+    // plans can lower the same relation into CSR, buckets, or implicit GEMM.
     mx::array in_rows;
     mx::array out_rows;
     mx::array kernel_ids;

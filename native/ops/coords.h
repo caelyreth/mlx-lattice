@@ -14,7 +14,7 @@ mx::array union_coords(const mx::array& lhs, const mx::array& rhs);
 mx::array intersection_coords(const mx::array& lhs, const mx::array& rhs);
 mx::array lookup_coords(const mx::array& coords, const mx::array& queries);
 
-NativeKernelMap build_kernel_map(
+NativeKernelRelation build_kernel_relation(
     const mx::array& coords,
     Triple kernel_size,
     Triple stride,
@@ -22,13 +22,13 @@ NativeKernelMap build_kernel_map(
     Triple dilation
 );
 
-NativeKernelMap build_generative_map(
+NativeKernelRelation build_generative_relation(
     const mx::array& coords,
     Triple kernel_size,
     Triple stride
 );
 
-NativeKernelMap build_transposed_kernel_map(
+NativeKernelRelation build_transposed_kernel_relation(
     const mx::array& coords,
     Triple kernel_size,
     Triple stride,

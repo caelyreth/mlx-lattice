@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mlx_lattice.core import KernelMap, KernelSpec
+from mlx_lattice.core import KernelRelation, KernelSpec, edge_coo_plan
 from tests.support import mx
 
 
@@ -30,7 +30,7 @@ def test_kernel_spec_rejects_invalid_values() -> None:
         KernelSpec(dilation=0)
 
 
-def test_kernel_map_accepts_and_validates_edge_contract() -> None:
+def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
     rows = mx.array([0, 1], dtype=mx.int32)
     short = mx.array([0], dtype=mx.int32)
     out_coords = mx.array(
@@ -38,7 +38,7 @@ def test_kernel_map_accepts_and_validates_edge_contract() -> None:
         dtype=mx.int32,
     )
 
-    mapping = KernelMap(
+    mapping = KernelRelation(
         rows,
         rows,
         rows,
@@ -51,10 +51,14 @@ def test_kernel_map_accepts_and_validates_edge_contract() -> None:
     assert mapping.n_out_rows == 2
     assert mapping.n_in_rows == 2
     assert mapping.n_kernels == 2
+    assert edge_coo_plan(mapping).edge_coo is mapping.edge_coo
+    assert edge_coo_plan(mapping).n_out_rows == 2
 
     with pytest.raises(ValueError, match='same row count'):
-        KernelMap(rows, short, rows)
+        KernelRelation(rows, short, rows)
     with pytest.raises(ValueError, match='n_kernels'):
-        KernelMap(
+        KernelRelation(
             rows, rows, rows, kernel_offsets=((0, 0, 0),), n_kernels=2
         )
+    with pytest.raises(ValueError, match='n_out_rows'):
+        edge_coo_plan(KernelRelation(rows, rows, rows))

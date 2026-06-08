@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from mlx_lattice.core.coords.builders import (
-    build_generative_map,
-    build_kernel_map,
-    build_transposed_kernel_map,
+    build_generative_relation,
+    build_kernel_relation,
+    build_transposed_kernel_relation,
     kernel_offsets,
 )
 from mlx_lattice.core.coords.manager import (
@@ -24,9 +24,9 @@ from mlx_lattice.core.coords.validation import validate_coords
 __all__ = [
     'CoordinateManager',
     'CoordinateMapKey',
-    'build_generative_map',
-    'build_kernel_map',
-    'build_transposed_kernel_map',
+    'build_generative_relation',
+    'build_kernel_relation',
+    'build_transposed_kernel_relation',
     'contains_coords',
     'downsample_coords',
     'intersection_coords',

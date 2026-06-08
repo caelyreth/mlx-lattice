@@ -5,9 +5,11 @@ from mlx_lattice.core.coords import (
     CoordinateMapKey,
 )
 from mlx_lattice.core.maps import (
-    EdgeIndex,
-    KernelMap,
+    EdgeCoo,
+    EdgeCooPlan,
+    KernelRelation,
     KernelSpec,
+    edge_coo_plan,
 )
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import Triple, triple
@@ -15,10 +17,12 @@ from mlx_lattice.core.types import Triple, triple
 __all__ = [
     'CoordinateManager',
     'CoordinateMapKey',
-    'EdgeIndex',
-    'KernelMap',
+    'EdgeCoo',
+    'EdgeCooPlan',
+    'KernelRelation',
     'KernelSpec',
     'SparseTensor',
     'Triple',
+    'edge_coo_plan',
     'triple',
 ]

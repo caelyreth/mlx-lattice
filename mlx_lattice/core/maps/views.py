@@ -8,7 +8,9 @@ from mlx_lattice.core.types import Triple
 
 
 @dataclass(frozen=True, slots=True)
-class EdgeIndex:
+class EdgeCoo:
+    """Concrete edge-COO view of a logical sparse neighborhood relation."""
+
     in_rows: mx.array
     out_rows: mx.array
     kernel_ids: mx.array
@@ -30,8 +32,8 @@ class EdgeIndex:
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class KernelMap:
-    edges: EdgeIndex
+class KernelRelation:
+    edge_coo: EdgeCoo
     kernel_offsets: tuple[Triple, ...]
     out_coords: mx.array | None = None
     n_in_rows: int | None = None
@@ -53,7 +55,7 @@ class KernelMap:
         if out_coords is not None:
             _validate_coords(out_coords, name='out_coords')
 
-        edges = EdgeIndex(in_rows, out_rows, kernel_ids)
+        edge_coo = EdgeCoo(in_rows, out_rows, kernel_ids)
         normalized_kernel_offsets = tuple(
             (int(x), int(y), int(z)) for x, y, z in kernel_offsets
         )
@@ -77,7 +79,7 @@ class KernelMap:
                 raise ValueError('n_out_rows must match out_coords rows.')
             normalized_n_out_rows = out_coord_rows
 
-        object.__setattr__(self, 'edges', edges)
+        object.__setattr__(self, 'edge_coo', edge_coo)
         object.__setattr__(
             self, 'kernel_offsets', normalized_kernel_offsets
         )
@@ -87,20 +89,27 @@ class KernelMap:
         object.__setattr__(self, 'n_kernels', normalized_n_kernels)
 
     @property
-    def in_rows(self) -> mx.array:
-        return self.edges.in_rows
-
-    @property
-    def out_rows(self) -> mx.array:
-        return self.edges.out_rows
-
-    @property
-    def kernel_ids(self) -> mx.array:
-        return self.edges.kernel_ids
-
-    @property
     def n_edges(self) -> int:
-        return self.edges.n_edges
+        return self.edge_coo.n_edges
+
+
+@dataclass(frozen=True, slots=True)
+class EdgeCooPlan:
+    """Current baseline execution plan lowered from a kernel relation.
+
+    The plan is intentionally internal-facing: operators ask for a plan, not a
+    sparse format. Future native lowerings can return CSR, kernel-bucketed, or
+    implicit-GEMM plans without changing tensor/module semantics.
+    """
+
+    edge_coo: EdgeCoo
+    n_out_rows: int
+
+
+def edge_coo_plan(relation: KernelRelation) -> EdgeCooPlan:
+    if relation.n_out_rows is None:
+        raise ValueError('kernel relation must define n_out_rows.')
+    return EdgeCooPlan(relation.edge_coo, relation.n_out_rows)
 
 
 # MARK: - helpers

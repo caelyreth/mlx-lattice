@@ -7,13 +7,13 @@ from itertools import count
 import mlx.core as mx
 
 from mlx_lattice.core.coords.builders import (
-    build_generative_map,
-    build_kernel_map,
-    build_transposed_kernel_map,
+    build_generative_relation,
+    build_kernel_relation,
+    build_transposed_kernel_relation,
 )
 from mlx_lattice.core.coords.set_ops import inverse_map
 from mlx_lattice.core.coords.validation import validate_coords
-from mlx_lattice.core.maps import KernelMap, KernelSpec
+from mlx_lattice.core.maps import KernelRelation, KernelSpec
 from mlx_lattice.core.types import Triple, triple
 
 _manager_ids = count()
@@ -38,8 +38,8 @@ class CoordinateManager:
     _identity_keys: dict[tuple[int, Triple], CoordinateMapKey] = field(
         default_factory=dict
     )
-    _kernel_maps: dict[
-        tuple[CoordinateMapKey, KernelSpec, str], KernelMap
+    _kernel_relations: dict[
+        tuple[CoordinateMapKey, KernelSpec, str], KernelRelation
     ] = field(default_factory=dict)
 
     def insert_coords(
@@ -77,7 +77,7 @@ class CoordinateManager:
     ) -> mx.array:
         return inverse_map(self.coords(source), self.coords(target))
 
-    def kernel_map(
+    def kernel_relation(
         self,
         key: CoordinateMapKey,
         *,
@@ -85,7 +85,7 @@ class CoordinateManager:
         stride: int | Sequence[int] = 1,
         padding: int | Sequence[int] = 0,
         dilation: int | Sequence[int] = 1,
-    ) -> KernelMap:
+    ) -> KernelRelation:
         spec = KernelSpec(
             size=kernel_size,
             stride=stride,
@@ -93,34 +93,34 @@ class CoordinateManager:
             dilation=dilation,
         )
         cache_key = (key, spec, 'forward')
-        if cache_key not in self._kernel_maps:
-            self._kernel_maps[cache_key] = build_kernel_map(
+        if cache_key not in self._kernel_relations:
+            self._kernel_relations[cache_key] = build_kernel_relation(
                 self.coords(key),
                 kernel_size=spec.size,
                 stride=spec.stride,
                 padding=spec.padding,
                 dilation=spec.dilation,
             )
-        return self._kernel_maps[cache_key]
+        return self._kernel_relations[cache_key]
 
-    def generative_map(
+    def generative_relation(
         self,
         key: CoordinateMapKey,
         *,
         kernel_size: int | Sequence[int] = 2,
         stride: int | Sequence[int] = 2,
-    ) -> KernelMap:
+    ) -> KernelRelation:
         spec = KernelSpec(size=kernel_size, stride=stride)
         cache_key = (key, spec, 'generative')
-        if cache_key not in self._kernel_maps:
-            self._kernel_maps[cache_key] = build_generative_map(
+        if cache_key not in self._kernel_relations:
+            self._kernel_relations[cache_key] = build_generative_relation(
                 self.coords(key),
                 kernel_size=spec.size,
                 stride=spec.stride,
             )
-        return self._kernel_maps[cache_key]
+        return self._kernel_relations[cache_key]
 
-    def transposed_kernel_map(
+    def transposed_kernel_relation(
         self,
         key: CoordinateMapKey,
         *,
@@ -128,7 +128,7 @@ class CoordinateManager:
         stride: int | Sequence[int] = 2,
         padding: int | Sequence[int] = 0,
         dilation: int | Sequence[int] = 1,
-    ) -> KernelMap:
+    ) -> KernelRelation:
         spec = KernelSpec(
             size=kernel_size,
             stride=stride,
@@ -136,12 +136,14 @@ class CoordinateManager:
             dilation=dilation,
         )
         cache_key = (key, spec, 'transpose')
-        if cache_key not in self._kernel_maps:
-            self._kernel_maps[cache_key] = build_transposed_kernel_map(
-                self.coords(key),
-                kernel_size=spec.size,
-                stride=spec.stride,
-                padding=spec.padding,
-                dilation=spec.dilation,
+        if cache_key not in self._kernel_relations:
+            self._kernel_relations[cache_key] = (
+                build_transposed_kernel_relation(
+                    self.coords(key),
+                    kernel_size=spec.size,
+                    stride=spec.stride,
+                    padding=spec.padding,
+                    dilation=spec.dilation,
+                )
             )
-        return self._kernel_maps[cache_key]
+        return self._kernel_relations[cache_key]

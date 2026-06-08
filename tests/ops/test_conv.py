@@ -4,13 +4,13 @@ import pytest
 
 from mlx_lattice import SparseTensor
 from mlx_lattice.ops import (
-    build_kernel_map,
+    build_kernel_relation,
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
-    spmm_edges,
     subm_conv3d,
 )
+from mlx_lattice.ops.exec import execute_spmm
 from tests.support import assert_same_sparse_identity, mx
 
 
@@ -39,7 +39,7 @@ def test_conv3d_generic_matches_native_edge_spmm_reference() -> None:
     )
 
     out = conv3d(x, weight, kernel_size=(3, 1, 1))
-    mapping = build_kernel_map(coords, kernel_size=(3, 1, 1))
+    relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
     native_weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
         3, 1, 1
     )
@@ -47,7 +47,7 @@ def test_conv3d_generic_matches_native_edge_spmm_reference() -> None:
     assert out.coords.tolist() == coords.tolist()
     assert (
         out.feats.tolist()
-        == spmm_edges(feats, native_weight, mapping).tolist()
+        == execute_spmm(feats, native_weight, relation).tolist()
     )
     assert out.feats.tolist() == [[8.0], [14.0], [8.0]]
     assert out.stride == (1, 1, 1)

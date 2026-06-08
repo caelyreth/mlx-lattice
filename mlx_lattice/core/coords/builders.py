@@ -7,12 +7,12 @@ import mlx.core as mx
 from mlx_lattice._native import ext
 from mlx_lattice.core.coords.validation import validate_coords
 from mlx_lattice.core.maps import (
-    KernelMap,
+    KernelRelation,
     KernelSpec,
 )
 from mlx_lattice.core.types import Triple, triple
 
-type NativeKernelMap = tuple[
+type NativeKernelRelation = tuple[
     mx.array,
     mx.array,
     mx.array,
@@ -45,13 +45,13 @@ def kernel_offsets(
     )
 
 
-def build_kernel_map(
+def build_kernel_relation(
     coords: mx.array,
     kernel_size: int | Sequence[int] = 3,
     stride: int | Sequence[int] = 1,
     padding: int | Sequence[int] = 0,
     dilation: int | Sequence[int] = 1,
-) -> KernelMap:
+) -> KernelRelation:
     validate_coords(coords)
     spec = KernelSpec(
         size=kernel_size,
@@ -60,25 +60,25 @@ def build_kernel_map(
         dilation=dilation,
     )
     offsets = kernel_offsets(spec.size, spec.dilation)
-    native = ext.build_kernel_map(
+    native = ext.build_kernel_relation(
         coords,
         spec.size,
         spec.stride,
         spec.padding,
         spec.dilation,
     )
-    return _kernel_map_from_native(
+    return _kernel_relation_from_native(
         native,
         offsets=offsets,
         n_in_rows=int(coords.shape[0]),
     )
 
 
-def build_generative_map(
+def build_generative_relation(
     coords: mx.array,
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
-) -> KernelMap:
+) -> KernelRelation:
     validate_coords(coords)
     kernel = triple(kernel_size, name='kernel_size')
     step = triple(stride, name='stride')
@@ -86,25 +86,25 @@ def build_generative_map(
     _require_positive(step, 'stride')
 
     offsets = kernel_offsets(kernel)
-    native = ext.build_generative_map(
+    native = ext.build_generative_relation(
         coords,
         kernel,
         step,
     )
-    return _kernel_map_from_native(
+    return _kernel_relation_from_native(
         native,
         offsets=offsets,
         n_in_rows=int(coords.shape[0]),
     )
 
 
-def build_transposed_kernel_map(
+def build_transposed_kernel_relation(
     coords: mx.array,
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
     padding: int | Sequence[int] = 0,
     dilation: int | Sequence[int] = 1,
-) -> KernelMap:
+) -> KernelRelation:
     validate_coords(coords)
     kernel = triple(kernel_size, name='kernel_size')
     step = triple(stride, name='stride')
@@ -116,14 +116,14 @@ def build_transposed_kernel_map(
     _require_positive(rate, 'dilation')
 
     offsets = kernel_offsets(kernel, rate)
-    native = ext.build_transposed_kernel_map(
+    native = ext.build_transposed_kernel_relation(
         coords,
         kernel,
         step,
         pad,
         rate,
     )
-    return _kernel_map_from_native(
+    return _kernel_relation_from_native(
         native,
         offsets=offsets,
         n_in_rows=int(coords.shape[0]),
@@ -133,19 +133,19 @@ def build_transposed_kernel_map(
 # MARK: - views
 
 
-def _kernel_map_from_native(
-    native: NativeKernelMap,
+def _kernel_relation_from_native(
+    native: NativeKernelRelation,
     *,
     offsets: tuple[Triple, ...],
     n_in_rows: int,
-) -> KernelMap:
+) -> KernelRelation:
     (
         in_rows,
         out_rows,
         kernel_ids,
         out_coords,
     ) = native
-    return KernelMap(
+    return KernelRelation(
         in_rows,
         out_rows,
         kernel_ids,

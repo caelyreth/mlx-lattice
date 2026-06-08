@@ -5,10 +5,10 @@ from typing import Literal
 
 import mlx.core as mx
 
-from mlx_lattice.core import KernelMap, KernelSpec, SparseTensor
+from mlx_lattice.core import KernelRelation, KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
-from mlx_lattice.ops.exec import pool_max_edges, pool_sum_edges
-from mlx_lattice.ops.maps import kernel_map
+from mlx_lattice.ops.exec import execute_pool_max, execute_pool_sum
+from mlx_lattice.ops.maps import kernel_relation
 
 PoolMode = Literal['sum', 'max', 'avg']
 
@@ -38,17 +38,17 @@ def pool3d(
         padding=padding,
         dilation=dilation,
     )
-    mapping = kernel_map(
+    relation = kernel_relation(
         x,
         kernel_size=spec.size,
         stride=spec.stride,
         padding=spec.padding,
         dilation=spec.dilation,
     )
-    feats = _pool_features(x, mapping, mode)
+    feats = _pool_features(x, relation, mode)
     return _pooled_tensor(
         x,
-        mapping,
+        relation,
         feats,
         output_stride=_mul_stride(x.stride, spec.stride),
     )
@@ -125,32 +125,34 @@ def global_max_pool(x: SparseTensor) -> mx.array:
 
 def _pool_features(
     x: SparseTensor,
-    mapping: KernelMap,
+    relation: KernelRelation,
     mode: PoolMode,
 ) -> mx.array:
     _validate_pool_dtype(x.feats)
     if mode == 'sum':
-        return pool_sum_edges(x.feats, mapping)
+        return execute_pool_sum(x.feats, relation)
     if mode == 'max':
-        return pool_max_edges(x.feats, mapping)
+        return execute_pool_max(x.feats, relation)
     if mode == 'avg':
-        sums = pool_sum_edges(x.feats, mapping)
-        counts = pool_sum_edges(_ones_like_rows(x), mapping)
+        sums = execute_pool_sum(x.feats, relation)
+        counts = execute_pool_sum(_ones_like_rows(x), relation)
         return sums / counts
     raise ValueError("mode must be 'sum', 'max', or 'avg'.")
 
 
 def _pooled_tensor(
     x: SparseTensor,
-    mapping: KernelMap,
+    relation: KernelRelation,
     feats: mx.array,
     *,
     output_stride: Triple,
 ) -> SparseTensor:
-    if mapping.out_coords is None:
-        raise ValueError('pooling maps must define output coordinates.')
+    if relation.out_coords is None:
+        raise ValueError(
+            'pooling relations must define output coordinates.'
+        )
     return SparseTensor(
-        mapping.out_coords,
+        relation.out_coords,
         feats,
         stride=output_stride,
         coord_manager=x.coord_manager,

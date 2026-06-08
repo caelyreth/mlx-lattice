@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import cast
 
-from mlx_lattice.core import KernelMap
+from mlx_lattice.core import KernelRelation
 from mlx_lattice.ops import (
-    build_kernel_map,
-    pool_max_edges,
-    pool_sum_edges,
-    spmm_edges,
+    build_kernel_relation,
+)
+from mlx_lattice.ops.exec import (
+    execute_pool_max,
+    execute_pool_sum,
+    execute_spmm,
 )
 from tests.support import mx, run_with_gpu_default
 
@@ -31,10 +33,10 @@ def _manual_spmm(
     return out
 
 
-def test_spmm_edges_matches_manual_reference_with_repeated_outputs() -> (
+def test_execute_spmm_matches_manual_reference_with_repeated_outputs() -> (
     None
 ):
-    mapping = KernelMap(
+    mapping = KernelRelation(
         mx.array([0, 1, 2, 0], dtype=mx.int32),
         mx.array([0, 0, 1, 1], dtype=mx.int32),
         mx.array([0, 1, 0, 1], dtype=mx.int32),
@@ -55,28 +57,28 @@ def test_spmm_edges_matches_manual_reference_with_repeated_outputs() -> (
         dtype=mx.float32,
     )
 
-    out = spmm_edges(feats, weights, mapping)
+    out = execute_spmm(feats, weights, mapping)
 
     assert out.tolist() == _manual_spmm(
         cast('list[list[float]]', feats.tolist()),
         cast('list[list[list[float]]]', weights.tolist()),
-        cast('list[int]', mapping.in_rows.tolist()),
-        cast('list[int]', mapping.out_rows.tolist()),
-        cast('list[int]', mapping.kernel_ids.tolist()),
+        cast('list[int]', mapping.edge_coo.in_rows.tolist()),
+        cast('list[int]', mapping.edge_coo.out_rows.tolist()),
+        cast('list[int]', mapping.edge_coo.kernel_ids.tolist()),
         2,
     )
 
 
-def test_spmm_edges_consumes_lazy_kernel_map_outputs() -> None:
+def test_execute_spmm_consumes_lazy_kernel_relation_outputs() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
     )
-    mapping = build_kernel_map(coords, kernel_size=(3, 1, 1))
+    mapping = build_kernel_relation(coords, kernel_size=(3, 1, 1))
     feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
     weights = mx.ones((3, 1, 1), dtype=mx.float32)
 
-    assert spmm_edges(feats, weights, mapping).tolist() == [
+    assert execute_spmm(feats, weights, mapping).tolist() == [
         [3.0],
         [6.0],
         [5.0],
@@ -84,7 +86,7 @@ def test_spmm_edges_consumes_lazy_kernel_map_outputs() -> None:
 
 
 def test_pool_edge_reductions_match_manual_reference() -> None:
-    mapping = KernelMap(
+    mapping = KernelRelation(
         mx.array([0, 1, 2, 0], dtype=mx.int32),
         mx.array([0, 0, 1, 1], dtype=mx.int32),
         mx.array([0, 0, 0, 0], dtype=mx.int32),
@@ -97,11 +99,11 @@ def test_pool_edge_reductions_match_manual_reference() -> None:
         dtype=mx.float32,
     )
 
-    assert pool_sum_edges(feats, mapping).tolist() == [
+    assert execute_pool_sum(feats, mapping).tolist() == [
         [4.0, -2.0],
         [6.0, 8.0],
     ]
-    assert pool_max_edges(feats, mapping).tolist() == [
+    assert execute_pool_max(feats, mapping).tolist() == [
         [3.0, 2.0],
         [5.0, 6.0],
     ]
@@ -109,7 +111,7 @@ def test_pool_edge_reductions_match_manual_reference() -> None:
 
 def test_metal_exec_primitives_match_cpu_contract_when_available() -> None:
     def run() -> tuple[list[list[float]], list[list[float]]]:
-        mapping = KernelMap(
+        mapping = KernelRelation(
             mx.array([0, 1, 2, 0], dtype=mx.int32),
             mx.array([0, 0, 1, 1], dtype=mx.int32),
             mx.array([0, 1, 0, 1], dtype=mx.int32),
@@ -128,8 +130,8 @@ def test_metal_exec_primitives_match_cpu_contract_when_available() -> None:
             ],
             dtype=mx.float32,
         )
-        spmm = spmm_edges(feats, weights, mapping)
-        pooled = pool_sum_edges(feats, mapping)
+        spmm = execute_spmm(feats, weights, mapping)
+        pooled = execute_pool_sum(feats, mapping)
         mx.eval(spmm, pooled)
         return (
             cast('list[list[float]]', spmm.tolist()),
