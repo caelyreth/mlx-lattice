@@ -10,7 +10,9 @@ struct SpmmEdgesShape {
     int edge_count;
     int in_channels;
     int out_channels;
+    int n_in_rows;
     int n_out_rows;
+    int n_kernels;
 };
 
 enum class PoolReduceOp {
@@ -21,6 +23,7 @@ enum class PoolReduceOp {
 struct PoolEdgesShape {
     int edge_count;
     int channels;
+    int n_in_rows;
     int n_out_rows;
 };
 

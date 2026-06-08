@@ -118,6 +118,32 @@ def test_convolution_modules_use_mlx_weight_layout_and_public_ops() -> None:
     assert subm_out.feats.tolist() == out.feats.tolist()
 
 
+def test_sparse_operator_modules_are_autogradable() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    conv = lnn.Conv3d(1, 1, kernel_size=(3, 1, 1), bias=False)
+    conv.weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        3,
+        1,
+        1,
+        1,
+    )
+    pool = lnn.SumPool3d(kernel_size=(3, 1, 1), stride=1)
+
+    def conv_loss(feats_arg: mx.array) -> mx.array:
+        return mx.sum(conv(SparseTensor(coords, feats_arg)).feats)
+
+    def pool_loss(feats_arg: mx.array) -> mx.array:
+        return mx.sum(pool(SparseTensor(coords, feats_arg)).feats)
+
+    assert mx.grad(conv_loss)(feats).tolist() == [[3.0], [6.0], [5.0]]
+    assert mx.grad(pool_loss)(feats).tolist() == [[2.0], [3.0], [2.0]]
+
+
 def test_transpose_and_pool_modules_wrap_sparse_policies() -> None:
     x = SparseTensor(
         mx.array([[0, 1, 0, 0]], dtype=mx.int32),

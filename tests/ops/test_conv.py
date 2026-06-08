@@ -56,6 +56,32 @@ def test_conv3d_generic_matches_native_edge_spmm_reference() -> None:
     assert out.coord_manager.owns(out.coord_key)
 
 
+def test_conv3d_generic_path_is_autogradable_for_features_and_weights() -> (
+    None
+):
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        3,
+        1,
+        1,
+        1,
+    )
+
+    def loss(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return mx.sum(conv3d(x, weight_arg, kernel_size=(3, 1, 1)).feats)
+
+    grad_feats, grad_weight = mx.grad(loss, argnums=(0, 1))(feats, weight)
+
+    assert grad_feats.tolist() == [[3.0], [6.0], [5.0]]
+    assert grad_weight.tolist() == [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]]
+
+
 def test_conv3d_strided_updates_output_stride_and_coordinates() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 0, 0]],

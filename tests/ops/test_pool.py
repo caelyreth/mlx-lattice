@@ -15,7 +15,7 @@ from mlx_lattice.ops import (
     sparse_collate,
     sum_pool3d,
 )
-from tests.support import mx
+from tests.support import assert_nested_close, mx
 
 
 def test_local_pooling_uses_kernel_relation_edge_reductions() -> None:
@@ -41,6 +41,33 @@ def test_local_pooling_uses_kernel_relation_edge_reductions() -> None:
         [2.0, 20.0],
         [2.5, 25.0],
     ]
+
+
+def test_local_pooling_modes_are_autogradable() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+
+    def sum_loss(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return mx.sum(sum_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats)
+
+    def avg_loss(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return mx.sum(avg_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats)
+
+    def max_loss(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return mx.sum(max_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats)
+
+    assert mx.grad(sum_loss)(feats).tolist() == [[2.0], [3.0], [2.0]]
+    assert_nested_close(
+        mx.grad(avg_loss)(feats).tolist(),
+        [[0.8333333730697632], [1.3333333730697632], [0.8333333730697632]],
+    )
+    assert mx.grad(max_loss)(feats).tolist() == [[0.0], [1.0], [2.0]]
 
 
 def test_strided_pooling_updates_output_stride_and_manager_context() -> (
