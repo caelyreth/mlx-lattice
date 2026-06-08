@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from mlx_lattice.ops.conv import (
+    conv3d,
+    conv_transpose3d,
+    generative_conv_transpose3d,
+    subm_conv3d,
+)
 from mlx_lattice.ops.coords import (
     contains_coords,
     downsample_coords,
@@ -26,7 +32,10 @@ __all__ = [
     'build_transposed_kernel_map',
     'cat',
     'contains_coords',
+    'conv3d',
+    'conv_transpose3d',
     'downsample_coords',
+    'generative_conv_transpose3d',
     'generative_kernel_map',
     'intersection_coords',
     'inverse_map',
@@ -36,6 +45,7 @@ __all__ = [
     'prune',
     'sparse_collate',
     'spmm_edges',
+    'subm_conv3d',
     'topk_rows',
     'transposed_kernel_map',
     'union_coords',
