@@ -10,9 +10,12 @@ from mlx_lattice.core import (
     CoordinateManager,
     SparseTensor as CoreSparseTensor,
 )
-from mlx_lattice import (
-    SparseTensor,
+from mlx_lattice import SparseTensor
+from mlx_lattice.ops import (
     cat,
+    contains_coords,
+    inverse_map,
+    lookup_coords,
     prune,
     sparse_collate,
     topk_rows,
@@ -46,7 +49,7 @@ def test_sparse_tensor_reuses_explicit_coordinates() -> None:
     assert reused.coord_key == x.coord_key
     assert reused.coord_manager is x.coord_manager
     assert reused.coords is x.coords
-    assert reused.inverse_map(x).tolist() == [0, 1]
+    assert inverse_map(reused.coords, x.coords).tolist() == [0, 1]
 
 
 def test_sparse_tensor_rejects_invalid_coordinate_key_ownership() -> None:
@@ -97,8 +100,12 @@ def test_sparse_tensor_queries_coordinate_rows() -> None:
         dtype=mx.int32,
     )
 
-    assert x.lookup_coords(queries).tolist() == [1, -1, 2]
-    assert x.contains_coords(queries).tolist() == [True, False, True]
+    assert lookup_coords(x.coords, queries).tolist() == [1, -1, 2]
+    assert contains_coords(x.coords, queries).tolist() == [
+        True,
+        False,
+        True,
+    ]
 
 
 def test_sparse_tensor_replace_and_astype() -> None:

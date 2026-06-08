@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+# ruff: noqa: E402, I001
+
 from typing import Any, cast
 
 import pytest
 
 mx = pytest.importorskip('mlx.core')
 
-from mlx_lattice import backend_info  # noqa: E402
-from mlx_lattice.core import (  # noqa: E402
+from mlx_lattice import backend_info
+from mlx_lattice.core import (
     CoordinateManager,
     SparseTensor,
+)
+from mlx_lattice.ops import (
     build_generative_map,
     build_kernel_map,
     build_transposed_kernel_map,
     downsample_coords,
+    kernel_map,
     intersection_coords,
     kernel_offsets,
     lookup_coords,
@@ -232,8 +237,8 @@ def test_coordinate_manager_caches_kernel_maps() -> None:
 
     first = manager.kernel_map(key, kernel_size=(3, 1, 1))
     second = manager.kernel_map(key, kernel_size=(3, 1, 1))
-    tensor_map = SparseTensor(coords, mx.ones((2, 1))).kernel_map(
-        kernel_size=(3, 1, 1)
+    tensor_map = kernel_map(
+        SparseTensor(coords, mx.ones((2, 1))), kernel_size=(3, 1, 1)
     )
 
     assert first is second

@@ -9,13 +9,9 @@ import mlx.core as mx
 from mlx_lattice.core.coords import (
     CoordinateManager,
     CoordinateMapKey,
-    contains_coords,
-    inverse_map,
-    lookup_coords,
     same_coords,
     validate_coords,
 )
-from mlx_lattice.core.maps import KernelMap
 from mlx_lattice.core.types import Triple, triple
 
 
@@ -161,63 +157,6 @@ class SparseTensor:
             return True
         return self.stride == other.stride and same_coords(
             self.coords, other.coords
-        )
-
-    def lookup_coords(self, queries: mx.array) -> mx.array:
-        return lookup_coords(self.coords, queries)
-
-    def contains_coords(self, queries: mx.array) -> mx.array:
-        return contains_coords(self.coords, queries)
-
-    def inverse_map(self, other: SparseTensor) -> mx.array:
-        if self.coord_manager is other.coord_manager:
-            return self.coord_manager.inverse_map(
-                self.coord_key, other.coord_key
-            )
-        return inverse_map(self.coords, other.coords)
-
-    def kernel_map(
-        self,
-        *,
-        kernel_size: int | Sequence[int] = 3,
-        stride: int | Sequence[int] = 1,
-        padding: int | Sequence[int] = 0,
-        dilation: int | Sequence[int] = 1,
-    ) -> KernelMap:
-        return self.coord_manager.kernel_map(
-            self.coord_key,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
-        )
-
-    def generative_map(
-        self,
-        *,
-        kernel_size: int | Sequence[int] = 2,
-        stride: int | Sequence[int] = 2,
-    ) -> KernelMap:
-        return self.coord_manager.generative_map(
-            self.coord_key,
-            kernel_size=kernel_size,
-            stride=stride,
-        )
-
-    def transposed_kernel_map(
-        self,
-        *,
-        kernel_size: int | Sequence[int] = 2,
-        stride: int | Sequence[int] = 2,
-        padding: int | Sequence[int] = 0,
-        dilation: int | Sequence[int] = 1,
-    ) -> KernelMap:
-        return self.coord_manager.transposed_kernel_map(
-            self.coord_key,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
         )
 
     def __add__(self, other: SparseTensor) -> SparseTensor:

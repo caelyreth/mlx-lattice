@@ -7,11 +7,7 @@ from .core import (
     CoordinateManager,
     CoordinateMapKey,
     SparseTensor,
-    contains_coords,
-    inverse_map,
-    lookup_coords,
 )
-from .ops import cat, prune, sparse_collate, topk_rows
 
 __all__ = [
     'CoordinateManager',
@@ -19,15 +15,8 @@ __all__ = [
     'SparseTensor',
     '__version__',
     'backend_info',
-    'cat',
-    'contains_coords',
     'core',
-    'inverse_map',
-    'lookup_coords',
     'ops',
-    'prune',
-    'sparse_collate',
-    'topk_rows',
 ]
 
 __version__ = backend_info()['version']
