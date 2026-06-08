@@ -3,7 +3,7 @@
 Sparse convolution library for Apple [MLX](https://github.com/ml-explore/mlx) designed for point cloud operations.
 
 > [!WARNING]
-> The current `dev` branch is mainly used for refactoring for version 0.2.0; if you are finding the previous version for an experiment, you may need to check the `main` branches.
+> Current branch is mainly used for refactoring for version 0.2.0; if you are finding the previous version for an experiment.
 
 ### Acknowledgement
 
