@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import cast
 
 import mlx.core as mx
 
 from mlx_lattice.core.coords import (
     CoordinateManager,
     CoordinateMapKey,
-    same_coords,
     validate_coords,
 )
 from mlx_lattice.core.types import Triple, triple
@@ -65,12 +63,14 @@ class SparseTensor:
         object.__setattr__(self, 'active_rows', normalized_active)
 
     @property
-    def n_points(self) -> int:
+    def capacity(self) -> int:
+        """Static row capacity of the sparse buffers."""
         return int(self.coords.shape[0])
 
     @property
-    def capacity(self) -> int:
-        return int(self.coords.shape[0])
+    def active_count(self) -> mx.array:
+        """Lazy MLX scalar array containing the number of active sparse rows."""
+        return self.active_rows
 
     @property
     def channels(self) -> int:
@@ -78,7 +78,7 @@ class SparseTensor:
 
     @property
     def shape(self) -> tuple[int, int]:
-        return (self.n_points, self.channels)
+        return (self.capacity, self.channels)
 
     @property
     def dtype(self) -> mx.Dtype:
@@ -90,23 +90,14 @@ class SparseTensor:
 
     @property
     def batch_rows(self) -> tuple[mx.array, ...]:
-        if self.batch_counts is not None:
-            start = 0
-            batches = []
-            for count in self.batch_counts:
-                stop = start + count
-                batches.append(mx.arange(start, stop, dtype=mx.int32))
-                start = stop
-            return tuple(batches)
-
-        rows: dict[int, list[int]] = {}
-        values = cast(list[list[int]], self.coords.tolist())
-        for row, coord in enumerate(values):
-            rows.setdefault(int(coord[0]), []).append(row)
-        return tuple(
-            mx.array(values, dtype=mx.int32)
-            for _, values in sorted(rows.items())
-        )
+        counts = self._require_batch_counts()
+        start = 0
+        batches = []
+        for count in counts:
+            stop = start + count
+            batches.append(mx.arange(start, stop, dtype=mx.int32))
+            start = stop
+        return tuple(batches)
 
     @property
     def decomposed_coordinates(self) -> tuple[mx.array, ...]:
@@ -161,19 +152,23 @@ class SparseTensor:
         )
 
     def same_coords(self, other: SparseTensor) -> bool:
-        if (
+        return (
             self.coord_manager is other.coord_manager
             and self.coord_key == other.coord_key
-        ):
-            return True
-        return self.stride == other.stride and same_coords(
-            self.coords, other.coords
         )
 
     def __add__(self, other: SparseTensor) -> SparseTensor:
         if not self.same_coords(other):
             raise ValueError('sparse tensor coordinates must match.')
         return self.replace(feats=self.feats + other.feats)
+
+    def _require_batch_counts(self) -> tuple[int, ...]:
+        if self.batch_counts is None:
+            raise ValueError(
+                'batch_counts metadata is required for batch-partitioned '
+                'sparse tensor operations.'
+            )
+        return self.batch_counts
 
 
 def _resolve_coordinate_identity(

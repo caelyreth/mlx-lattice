@@ -23,49 +23,6 @@ mx::array make_offsets_array(const std::vector<Triple>& offsets) {
 
 } // namespace
 
-mx::array spmm_edges(
-    const mx::array& feats,
-    const mx::array& weights,
-    const mx::array& in_rows,
-    const mx::array& out_rows,
-    const mx::array& kernel_ids,
-    const mx::array& edge_count,
-    int n_out_rows
-) {
-    validate_spmm_edges(
-        feats, weights, in_rows, out_rows, kernel_ids, edge_count, n_out_rows
-    );
-    return dispatch_spmm_edges(
-        feats, weights, in_rows, out_rows, kernel_ids, edge_count, n_out_rows
-    );
-}
-
-mx::array pool_sum_edges(
-    const mx::array& feats,
-    const mx::array& in_rows,
-    const mx::array& out_rows,
-    const mx::array& edge_count,
-    int n_out_rows
-) {
-    validate_pool_edges(feats, in_rows, out_rows, edge_count, n_out_rows);
-    return dispatch_pool_edges(
-        PoolReduceOp::Sum, feats, in_rows, out_rows, edge_count, n_out_rows
-    );
-}
-
-mx::array pool_max_edges(
-    const mx::array& feats,
-    const mx::array& in_rows,
-    const mx::array& out_rows,
-    const mx::array& edge_count,
-    int n_out_rows
-) {
-    validate_pool_edges(feats, in_rows, out_rows, edge_count, n_out_rows);
-    return dispatch_pool_edges(
-        PoolReduceOp::Max, feats, in_rows, out_rows, edge_count, n_out_rows
-    );
-}
-
 NativeSparseTensorOutput sparse_conv(
     SparseMapOp op,
     const mx::array& coords,

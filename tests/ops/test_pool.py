@@ -120,6 +120,24 @@ def test_global_pooling_reduces_each_batch_independently() -> None:
     assert global_max_pool(x).tolist() == [[2.0, 20.0], [5.0, 50.0]]
 
 
+def test_global_pooling_uses_explicit_empty_batch_metadata() -> None:
+    x = sparse_collate(
+        [
+            mx.array([], dtype=mx.int32).reshape((0, 3)),
+            mx.array([[2, 0, 0]], dtype=mx.int32),
+        ],
+        [
+            mx.array([], dtype=mx.float32).reshape((0, 2)),
+            mx.array([[3.0, 30.0]], dtype=mx.float32),
+        ],
+    )
+
+    assert global_sum_pool(x).tolist() == [[0.0, 0.0], [3.0, 30.0]]
+    assert global_avg_pool(x).tolist() == [[0.0, 0.0], [3.0, 30.0]]
+    with pytest.raises(ValueError, match='empty batches'):
+        global_max_pool(x)
+
+
 def test_pool3d_rejects_invalid_mode_and_dtype() -> None:
     x = SparseTensor(
         mx.array([[0, 0, 0, 0]], dtype=mx.int32),

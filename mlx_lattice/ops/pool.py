@@ -148,29 +148,50 @@ def _fused_pool(
 
 def _stack_batch_reductions(x: SparseTensor, *, mode: PoolMode) -> mx.array:
     _validate_pool_dtype(x.feats)
-    values = []
-    for rows in x.batch_rows:
-        if int(rows.shape[0]) == 0:
-            values.append(_empty_global_value(x, mode=mode))
-            continue
-        feats = mx.take(x.feats, rows, axis=0)
-        if mode == 'sum':
-            values.append(mx.sum(feats, axis=0))
-        elif mode == 'max':
-            values.append(mx.max(feats, axis=0))
-        elif mode == 'avg':
-            values.append(mx.sum(feats, axis=0) / int(rows.shape[0]))
-        else:
-            raise ValueError("mode must be 'sum', 'max', or 'avg'.")
-    if not values:
-        return mx.zeros((0, x.channels), dtype=x.feats.dtype)
-    return mx.stack(values, axis=0)
+    counts = _require_batch_counts(x)
+    batch_ids = _batch_ids(counts)
+    shape = (len(counts), x.channels)
 
-
-def _empty_global_value(x: SparseTensor, *, mode: PoolMode) -> mx.array:
+    if mode == 'sum':
+        return (
+            mx.zeros(shape, dtype=x.feats.dtype).at[batch_ids].add(x.feats)
+        )
+    if mode == 'avg':
+        sums = (
+            mx.zeros(shape, dtype=x.feats.dtype).at[batch_ids].add(x.feats)
+        )
+        denom = mx.array(counts, dtype=x.feats.dtype).reshape((-1, 1))
+        return mx.where(denom > 0, sums / mx.maximum(denom, 1), sums)
     if mode == 'max':
-        raise ValueError('global_max_pool does not support empty batches.')
-    return mx.zeros((x.channels,), dtype=x.feats.dtype)
+        if any(count == 0 for count in counts):
+            raise ValueError(
+                'global_max_pool does not support empty batches.'
+            )
+        return (
+            mx.full(shape, -float('inf'), dtype=x.feats.dtype)
+            .at[batch_ids]
+            .maximum(x.feats)
+        )
+    raise ValueError("mode must be 'sum', 'max', or 'avg'.")
+
+
+def _require_batch_counts(x: SparseTensor) -> tuple[int, ...]:
+    if x.batch_counts is None:
+        raise ValueError(
+            'batch_counts metadata is required for global pooling.'
+        )
+    return x.batch_counts
+
+
+def _batch_ids(counts: tuple[int, ...]) -> mx.array:
+    ids = [
+        mx.full((count,), batch, dtype=mx.int32)
+        for batch, count in enumerate(counts)
+        if count > 0
+    ]
+    if not ids:
+        return mx.array([], dtype=mx.int32)
+    return mx.concatenate(ids, axis=0)
 
 
 # MARK: - validation

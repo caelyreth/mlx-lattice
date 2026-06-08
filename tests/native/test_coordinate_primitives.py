@@ -27,6 +27,12 @@ def _active_coords(values: mx.array, count: mx.array) -> list[list[int]]:
     )
 
 
+def _coord_set_rows(value: object) -> list[list[int]]:
+    coords = value.coords
+    count = value.active_rows
+    return _active_coords(coords, count)
+
+
 def test_coordinate_set_primitives_preserve_first_seen_order() -> None:
     lhs = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]],
@@ -37,16 +43,19 @@ def test_coordinate_set_primitives_preserve_first_seen_order() -> None:
         dtype=mx.int32,
     )
 
-    assert downsample_coords(rhs, stride=2).tolist() == [
+    downsampled = downsample_coords(rhs, stride=2)
+    assert downsampled.capacity == 2
+    assert downsampled.active_count is downsampled.active_rows
+    assert _coord_set_rows(downsampled) == [
         [0, 0, 0, 0],
         [0, 1, 0, 0],
     ]
-    assert union_coords(lhs, rhs).tolist() == [
+    assert _coord_set_rows(union_coords(lhs, rhs)) == [
         [0, 0, 0, 0],
         [0, 1, 0, 0],
         [0, 2, 0, 0],
     ]
-    assert intersection_coords(lhs, rhs).tolist() == [[0, 1, 0, 0]]
+    assert _coord_set_rows(intersection_coords(lhs, rhs)) == [[0, 1, 0, 0]]
     assert lookup_coords(lhs, rhs).tolist() == [1, -1]
 
 
@@ -64,7 +73,7 @@ def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
         _active_coords(relation.out_coords, relation.out_count)
         == coords.tolist()
     )
-    assert _active_rows(relation.edge_coo.in_rows, relation.edge_count) == [
+    assert _active_rows(relation.edges.in_rows, relation.edge_count) == [
         0,
         1,
         0,
@@ -73,9 +82,7 @@ def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
         1,
         2,
     ]
-    assert _active_rows(
-        relation.edge_coo.out_rows, relation.edge_count
-    ) == [
+    assert _active_rows(relation.edges.out_rows, relation.edge_count) == [
         1,
         2,
         0,
@@ -84,9 +91,7 @@ def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
         0,
         1,
     ]
-    assert _active_rows(
-        relation.edge_coo.kernel_ids, relation.edge_count
-    ) == [
+    assert _active_rows(relation.edges.kernel_ids, relation.edge_count) == [
         0,
         0,
         1,
@@ -120,7 +125,7 @@ def test_strided_and_transposed_relations_define_output_policy() -> None:
         [0, 0, 0, 0],
         [0, 1, 0, 0],
     ]
-    assert _active_rows(strided.edge_coo.in_rows, strided.edge_count) == [
+    assert _active_rows(strided.edges.in_rows, strided.edge_count) == [
         0,
         2,
     ]
@@ -168,17 +173,17 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
         relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
         mx.eval(
             relation.out_coords,
-            relation.edge_coo.in_rows,
-            relation.edge_coo.out_rows,
-            relation.edge_coo.kernel_ids,
+            relation.edges.in_rows,
+            relation.edges.out_rows,
+            relation.edges.kernel_ids,
             relation.counts,
         )
         assert relation.out_coords is not None
         return (
             _active_coords(relation.out_coords, relation.out_count),
-            _active_rows(relation.edge_coo.in_rows, relation.edge_count),
-            _active_rows(relation.edge_coo.out_rows, relation.edge_count),
-            _active_rows(relation.edge_coo.kernel_ids, relation.edge_count),
+            _active_rows(relation.edges.in_rows, relation.edge_count),
+            _active_rows(relation.edges.out_rows, relation.edge_count),
+            _active_rows(relation.edges.kernel_ids, relation.edge_count),
             cast('list[int]', relation.counts.tolist()),
         )
 

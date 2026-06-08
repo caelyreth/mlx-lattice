@@ -4,9 +4,11 @@
 
 namespace mlx_lattice {
 
-mx::array dispatch_downsample_coords(const mx::array& coords, Triple stride);
-mx::array dispatch_union_coords(const mx::array& lhs, const mx::array& rhs);
-mx::array
+NativeCoordSet
+dispatch_downsample_coords(const mx::array& coords, Triple stride);
+NativeCoordSet
+dispatch_union_coords(const mx::array& lhs, const mx::array& rhs);
+NativeCoordSet
 dispatch_intersection_coords(const mx::array& lhs, const mx::array& rhs);
 mx::array
 dispatch_lookup_coords(const mx::array& coords, const mx::array& queries);

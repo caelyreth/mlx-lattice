@@ -7,18 +7,18 @@ namespace mlx_lattice {
 
 // MARK: - set ops
 
-mx::array downsample_coords(const mx::array& coords, Triple stride) {
+NativeCoordSet downsample_coords(const mx::array& coords, Triple stride) {
     validate_coords(coords);
     validate_positive(stride, "stride");
     return dispatch_downsample_coords(coords, stride);
 }
 
-mx::array union_coords(const mx::array& lhs, const mx::array& rhs) {
+NativeCoordSet union_coords(const mx::array& lhs, const mx::array& rhs) {
     validate_coord_pair(lhs, rhs);
     return dispatch_union_coords(lhs, rhs);
 }
 
-mx::array intersection_coords(const mx::array& lhs, const mx::array& rhs) {
+NativeCoordSet intersection_coords(const mx::array& lhs, const mx::array& rhs) {
     validate_coord_pair(lhs, rhs);
     return dispatch_intersection_coords(lhs, rhs);
 }

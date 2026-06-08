@@ -7,6 +7,7 @@ from mlx_lattice.ops.conv import (
     subm_conv3d,
 )
 from mlx_lattice.ops.coords import (
+    CoordinateSet,
     contains_coords,
     downsample_coords,
     intersection_coords,
@@ -49,6 +50,7 @@ from mlx_lattice.ops.relations import (
 from mlx_lattice.ops.tensor import cat, prune, sparse_collate, topk_rows
 
 __all__ = [
+    'CoordinateSet',
     'avg_pool3d',
     'batch_norm',
     'build_generative_relation',

@@ -9,11 +9,13 @@ namespace mlx_lattice::coords::cpu {
 void eval_set_coords(
     CoordSetOp op,
     Triple stride,
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 );
 
 void eval_lookup_coords(
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 );
@@ -22,12 +24,14 @@ void eval_generic_kernel_relation(
     CoordRelationOp op,
     Triple stride,
     Triple padding,
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 );
 
 void eval_generative_kernel_relation(
     Triple stride,
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 );

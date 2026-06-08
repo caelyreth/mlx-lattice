@@ -7,26 +7,10 @@ namespace mlx_lattice {
 
 namespace mx = mlx::core;
 
-struct SpmmEdgesShape {
-    int edge_count;
-    int in_channels;
-    int out_channels;
-    int n_in_rows;
-    int n_out_rows;
-    int n_kernels;
-};
-
 enum class PoolReduceOp {
     Sum,
     Max,
     Avg,
-};
-
-struct PoolEdgesShape {
-    int edge_count;
-    int channels;
-    int n_in_rows;
-    int n_out_rows;
 };
 
 enum class SparseMapOp {
@@ -49,8 +33,8 @@ struct NativeSparseTensorOutput {
 };
 
 struct SparseConvShape {
-    int n_in_rows;
-    int n_out_rows;
+    int in_capacity;
+    int out_capacity;
     int n_kernels;
     int in_channels;
     int out_channels;
@@ -61,8 +45,8 @@ struct SparseConvShape {
 };
 
 struct SparsePoolShape {
-    int n_in_rows;
-    int n_out_rows;
+    int in_capacity;
+    int out_capacity;
     int n_kernels;
     int channels;
 };

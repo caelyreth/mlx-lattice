@@ -28,6 +28,6 @@ Plan build_plan(
 void write_coords(mx::array& out, const std::vector<Coord>& coords);
 void write_counts(mx::array& out, const Plan& plan);
 
-std::vector<int32_t> pool_degrees(const Plan& plan, int n_out_rows);
+std::vector<int32_t> pool_degrees(const Plan& plan, int out_capacity);
 
 } // namespace mlx_lattice::exec::cpu

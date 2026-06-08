@@ -90,7 +90,7 @@ def topk_rows(
 
     row_counts = x.batch_counts
     if row_counts is None:
-        row_counts = tuple(int(rows.shape[0]) for rows in x.batch_rows)
+        raise ValueError('batch_counts metadata is required for topk_rows.')
     if len(counts) != len(row_counts):
         raise ValueError('counts must match the batch count.')
 
@@ -98,7 +98,7 @@ def topk_rows(
     start = 0
     for keep, row_count in zip(counts, row_counts, strict=True):
         stop = start + int(row_count)
-        if stop > x.n_points:
+        if stop > x.capacity:
             raise ValueError(
                 'batch row counts exceed sparse tensor row count.'
             )
@@ -112,7 +112,7 @@ def topk_rows(
         order = mx.argsort(scores)
         selected.append(mx.take(rows, order[-k:], axis=0))
 
-    if start != x.n_points:
+    if start != x.capacity:
         raise ValueError('counts must cover all sparse tensor rows.')
     if not selected:
         return mx.array([], dtype=mx.int32)

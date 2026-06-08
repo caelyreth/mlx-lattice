@@ -8,8 +8,8 @@ from mlx_lattice.core.types import Triple
 
 
 @dataclass(frozen=True, slots=True)
-class EdgeCoo:
-    """Concrete edge-COO view of a logical sparse neighborhood relation."""
+class RelationEdges:
+    """Diagnostic edge arrays for a logical sparse neighborhood relation."""
 
     in_rows: mx.array
     out_rows: mx.array
@@ -27,18 +27,18 @@ class EdgeCoo:
         )
 
     @property
-    def n_edges(self) -> int:
+    def capacity(self) -> int:
         return int(self.in_rows.shape[0])
 
 
 @dataclass(frozen=True, slots=True, init=False)
 class KernelRelation:
-    edge_coo: EdgeCoo
+    edges: RelationEdges
     counts: mx.array
     kernel_offsets: tuple[Triple, ...]
     out_coords: mx.array | None = None
-    n_in_rows: int | None = None
-    n_out_rows: int | None = None
+    n_in_capacity: int | None = None
+    n_out_capacity: int | None = None
     n_kernels: int | None = None
 
     def __init__(
@@ -50,8 +50,8 @@ class KernelRelation:
         counts: mx.array | None = None,
         kernel_offsets: tuple[Triple, ...] = (),
         out_coords: mx.array | None = None,
-        n_in_rows: int | None = None,
-        n_out_rows: int | None = None,
+        n_in_capacity: int | None = None,
+        n_out_capacity: int | None = None,
         n_kernels: int | None = None,
     ) -> None:
         if out_coords is not None:
@@ -66,12 +66,16 @@ class KernelRelation:
             )
         _validate_counts(counts)
 
-        edge_coo = EdgeCoo(in_rows, out_rows, kernel_ids)
+        edges = RelationEdges(in_rows, out_rows, kernel_ids)
         normalized_kernel_offsets = tuple(
             (int(x), int(y), int(z)) for x, y, z in kernel_offsets
         )
-        normalized_n_in_rows = _optional_count(n_in_rows, 'n_in_rows')
-        normalized_n_out_rows = _optional_count(n_out_rows, 'n_out_rows')
+        normalized_n_in_capacity = _optional_count(
+            n_in_capacity, 'n_in_capacity'
+        )
+        normalized_n_out_capacity = _optional_count(
+            n_out_capacity, 'n_out_capacity'
+        )
         normalized_n_kernels = _optional_count(n_kernels, 'n_kernels')
         if (
             normalized_kernel_offsets
@@ -82,27 +86,31 @@ class KernelRelation:
         if normalized_kernel_offsets:
             normalized_n_kernels = len(normalized_kernel_offsets)
         if out_coords is not None:
-            out_coord_rows = int(out_coords.shape[0])
+            out_coord_capacity = int(out_coords.shape[0])
             if (
-                normalized_n_out_rows is not None
-                and normalized_n_out_rows != out_coord_rows
+                normalized_n_out_capacity is not None
+                and normalized_n_out_capacity != out_coord_capacity
             ):
-                raise ValueError('n_out_rows must match out_coords rows.')
-            normalized_n_out_rows = out_coord_rows
+                raise ValueError(
+                    'n_out_capacity must match out_coords capacity.'
+                )
+            normalized_n_out_capacity = out_coord_capacity
 
-        object.__setattr__(self, 'edge_coo', edge_coo)
+        object.__setattr__(self, 'edges', edges)
         object.__setattr__(self, 'counts', counts)
         object.__setattr__(
             self, 'kernel_offsets', normalized_kernel_offsets
         )
         object.__setattr__(self, 'out_coords', out_coords)
-        object.__setattr__(self, 'n_in_rows', normalized_n_in_rows)
-        object.__setattr__(self, 'n_out_rows', normalized_n_out_rows)
+        object.__setattr__(self, 'n_in_capacity', normalized_n_in_capacity)
+        object.__setattr__(
+            self, 'n_out_capacity', normalized_n_out_capacity
+        )
         object.__setattr__(self, 'n_kernels', normalized_n_kernels)
 
     @property
-    def n_edges(self) -> int:
-        return self.edge_coo.n_edges
+    def edge_capacity(self) -> int:
+        return self.edges.capacity
 
     @property
     def edge_count(self) -> mx.array:
@@ -111,28 +119,6 @@ class KernelRelation:
     @property
     def out_count(self) -> mx.array:
         return self.counts[1:2]
-
-
-@dataclass(frozen=True, slots=True)
-class EdgeCooPlan:
-    """Current baseline execution plan lowered from a kernel relation.
-
-    The plan is intentionally internal-facing: operators ask for a plan, not a
-    sparse format. Future native lowerings can return CSR, kernel-bucketed, or
-    implicit-GEMM plans without changing tensor/module semantics.
-    """
-
-    edge_coo: EdgeCoo
-    n_out_rows: int
-    edge_count: mx.array
-
-
-def edge_coo_plan(relation: KernelRelation) -> EdgeCooPlan:
-    if relation.n_out_rows is None:
-        raise ValueError('kernel relation must define n_out_rows.')
-    return EdgeCooPlan(
-        relation.edge_coo, relation.n_out_rows, relation.edge_count
-    )
 
 
 # MARK: - helpers

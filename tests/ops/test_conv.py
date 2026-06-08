@@ -4,18 +4,17 @@ import pytest
 
 from mlx_lattice import SparseTensor
 from mlx_lattice.ops import (
-    build_kernel_relation,
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
     subm_conv3d,
 )
-from mlx_lattice.ops._exec import execute_spmm
 from tests.support import (
     active_coords,
     active_feats,
     assert_same_sparse_identity,
     mx,
+    run_with_gpu_default,
 )
 
 
@@ -44,16 +43,8 @@ def test_conv3d_generic_matches_native_edge_spmm_reference() -> None:
     )
 
     out = conv3d(x, weight, kernel_size=(3, 1, 1))
-    relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
-    native_weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
-        3, 1, 1
-    )
 
     assert active_coords(out) == coords.tolist()
-    assert (
-        active_feats(out).tolist()
-        == execute_spmm(feats, native_weight, relation).tolist()
-    )
     assert active_feats(out).tolist() == [[8.0], [14.0], [8.0]]
     assert out.stride == (1, 1, 1)
     assert out.coord_manager is x.coord_manager
@@ -101,6 +92,23 @@ def test_conv3d_strided_updates_output_stride_and_coordinates() -> None:
     assert active_coords(out) == [[0, 0, 0, 0], [0, 1, 0, 0]]
     assert active_feats(out).tolist() == [[1.0], [3.0]]
     assert out.stride == (2, 2, 2)
+
+
+def test_subm_conv3d_consumes_lazy_gpu_default_weight() -> None:
+    def run() -> None:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+        x = SparseTensor(coords, feats)
+        weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
+
+        out = subm_conv3d(x, weight, kernel_size=(3, 1, 1))
+
+        assert active_feats(out).tolist() == [[3.0], [6.0], [5.0]]
+
+    run_with_gpu_default(run)
 
 
 def test_subm_conv3d_reuses_input_coordinate_identity() -> None:

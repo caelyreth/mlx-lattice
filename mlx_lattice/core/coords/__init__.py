@@ -11,12 +11,12 @@ from mlx_lattice.core.coords.manager import (
     CoordinateMapKey,
 )
 from mlx_lattice.core.coords.set_ops import (
+    CoordinateSet,
     contains_coords,
     downsample_coords,
     intersection_coords,
     inverse_map,
     lookup_coords,
-    same_coords,
     union_coords,
 )
 from mlx_lattice.core.coords.validation import validate_coords
@@ -24,6 +24,7 @@ from mlx_lattice.core.coords.validation import validate_coords
 __all__ = [
     'CoordinateManager',
     'CoordinateMapKey',
+    'CoordinateSet',
     'build_generative_relation',
     'build_kernel_relation',
     'build_transposed_kernel_relation',
@@ -33,7 +34,6 @@ __all__ = [
     'inverse_map',
     'kernel_offsets',
     'lookup_coords',
-    'same_coords',
     'union_coords',
     'validate_coords',
 ]

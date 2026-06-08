@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mlx_lattice.core import KernelRelation, KernelSpec, edge_coo_plan
+from mlx_lattice.core import KernelRelation, KernelSpec, RelationEdges
 from tests.support import mx
 
 
@@ -44,15 +44,14 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
         rows,
         kernel_offsets=((0, 0, 0), (1, 0, 0)),
         out_coords=out_coords,
-        n_in_rows=2,
+        n_in_capacity=2,
     )
 
-    assert relation.n_edges == 2
-    assert relation.n_out_rows == 2
-    assert relation.n_in_rows == 2
+    assert relation.edge_capacity == 2
+    assert isinstance(relation.edges, RelationEdges)
+    assert relation.n_out_capacity == 2
+    assert relation.n_in_capacity == 2
     assert relation.n_kernels == 2
-    assert edge_coo_plan(relation).edge_coo is relation.edge_coo
-    assert edge_coo_plan(relation).n_out_rows == 2
 
     with pytest.raises(ValueError, match='same row count'):
         KernelRelation(rows, short, rows)
@@ -60,5 +59,3 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
         KernelRelation(
             rows, rows, rows, kernel_offsets=((0, 0, 0),), n_kernels=2
         )
-    with pytest.raises(ValueError, match='n_out_rows'):
-        edge_coo_plan(KernelRelation(rows, rows, rows))

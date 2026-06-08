@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from mlx_lattice.core.coords.set_ops import (
+    CoordinateSet,
     contains_coords,
     downsample_coords,
     intersection_coords,
@@ -10,6 +11,7 @@ from mlx_lattice.core.coords.set_ops import (
 )
 
 __all__ = [
+    'CoordinateSet',
     'contains_coords',
     'downsample_coords',
     'intersection_coords',

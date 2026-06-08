@@ -6,10 +6,10 @@
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
-#include "mlx/device.h"
-#include "mlx/ops.h"
+#include "mlx/backend/cpu/encoder.h"
 
 namespace mlx_lattice::coords::cpu {
 
@@ -33,16 +33,43 @@ struct CoordHash {
 
 // MARK: - arrays
 
-std::vector<Coord> read_coords(const mx::array& coords) {
-    auto cpu_coords = mx::contiguous(coords, false, mx::Device::cpu);
-    cpu_coords.eval();
-    cpu_coords.wait();
+void allocate(mx::array& out) {
+    out.set_data(mx::allocator::malloc(out.nbytes()));
+}
 
+void allocate_all(std::vector<mx::array>& outputs) {
+    for (auto& output : outputs) {
+        allocate(output);
+    }
+}
+
+template <typename Fn>
+void schedule(
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs,
+    Fn fn
+) {
+    auto& encoder = mx::cpu::get_command_encoder(stream);
+    for (const auto& input : inputs) {
+        encoder.set_input_array(input);
+    }
+    for (auto& output : outputs) {
+        encoder.set_output_array(output);
+    }
+    encoder.dispatch([task_inputs = inputs,
+                      task_outputs = outputs,
+                      fn = std::move(fn)]() mutable {
+        fn(task_inputs, task_outputs);
+    });
+}
+
+std::vector<Coord> read_coords(const mx::array& coords) {
     std::vector<Coord> out;
-    out.reserve(cpu_coords.shape(0));
-    if (cpu_coords.dtype() == mx::int32) {
-        auto data = cpu_coords.data<int32_t>();
-        for (int row = 0; row < cpu_coords.shape(0); ++row) {
+    out.reserve(coords.shape(0));
+    if (coords.dtype() == mx::int32) {
+        auto data = coords.data<int32_t>();
+        for (int row = 0; row < coords.shape(0); ++row) {
             auto base = static_cast<ptrdiff_t>(row) * 4;
             out.push_back({
                 data[base],
@@ -54,8 +81,8 @@ std::vector<Coord> read_coords(const mx::array& coords) {
         return out;
     }
 
-    auto data = cpu_coords.data<int64_t>();
-    for (int row = 0; row < cpu_coords.shape(0); ++row) {
+    auto data = coords.data<int64_t>();
+    for (int row = 0; row < coords.shape(0); ++row) {
         auto base = static_cast<ptrdiff_t>(row) * 4;
         out.push_back({
             data[base],
@@ -68,36 +95,25 @@ std::vector<Coord> read_coords(const mx::array& coords) {
 }
 
 std::vector<Triple> read_offsets(const mx::array& offsets) {
-    auto cpu_offsets = mx::contiguous(offsets, false, mx::Device::cpu);
-    cpu_offsets.eval();
-    cpu_offsets.wait();
-
     std::vector<Triple> out;
-    out.reserve(cpu_offsets.shape(0));
-    auto data = cpu_offsets.data<int32_t>();
-    for (int row = 0; row < cpu_offsets.shape(0); ++row) {
+    out.reserve(offsets.shape(0));
+    auto data = offsets.data<int32_t>();
+    for (int row = 0; row < offsets.shape(0); ++row) {
         auto base = static_cast<ptrdiff_t>(row) * 3;
         out.push_back({data[base], data[base + 1], data[base + 2]});
     }
     return out;
 }
 
-int read_scalar_i32(const mx::array& value) {
-    auto cpu_value = mx::contiguous(value, false, mx::Device::cpu);
-    cpu_value.eval();
-    cpu_value.wait();
-    return cpu_value.data<int32_t>()[0];
-}
+int read_scalar_i32(const mx::array& value) { return value.data<int32_t>()[0]; }
 
 void write_i32(mx::array& out, const std::vector<int32_t>& values) {
-    out.set_data(mx::allocator::malloc(out.nbytes()));
     auto data = out.data<int32_t>();
     std::fill(data, data + out.size(), 0);
     std::copy(values.begin(), values.end(), data);
 }
 
 void write_count(mx::array& out, int first, int second = 0) {
-    out.set_data(mx::allocator::malloc(out.nbytes()));
     auto data = out.data<int32_t>();
     std::fill(data, data + out.size(), 0);
     data[0] = first;
@@ -111,7 +127,6 @@ void write_coords(
     const std::vector<Coord>& coords,
     mx::Dtype dtype
 ) {
-    out.set_data(mx::allocator::malloc(out.nbytes()));
     if (dtype == mx::int32) {
         auto data = out.data<int32_t>();
         std::fill(data, data + out.size(), 0);
@@ -411,65 +426,127 @@ void write_transposed_kernel_relation(
 void eval_set_coords(
     CoordSetOp op,
     Triple stride,
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    std::vector<Coord> values;
-    switch (op) {
-    case CoordSetOp::Downsample:
-        values = downsample_values(read_coords(inputs[0]), stride);
-        break;
-    case CoordSetOp::Union:
-        values = union_values(inputs[0], inputs[1]);
-        break;
-    case CoordSetOp::Intersection:
-        values = intersection_values(inputs[0], inputs[1]);
-        break;
-    }
+    allocate_all(outputs);
+    schedule(
+        stream,
+        inputs,
+        outputs,
+        [op, stride](
+            const std::vector<mx::array>& task_inputs,
+            std::vector<mx::array>& task_outputs
+        ) {
+            std::vector<Coord> values;
+            switch (op) {
+            case CoordSetOp::Downsample:
+                values = downsample_values(read_coords(task_inputs[0]), stride);
+                break;
+            case CoordSetOp::Union:
+                values = union_values(task_inputs[0], task_inputs[1]);
+                break;
+            case CoordSetOp::Intersection:
+                values = intersection_values(task_inputs[0], task_inputs[1]);
+                break;
+            }
 
-    write_coords(outputs[0], values, inputs[0].dtype());
-    write_count(outputs[1], int(values.size()));
+            write_coords(task_outputs[0], values, task_inputs[0].dtype());
+            write_count(task_outputs[1], int(values.size()));
+        }
+    );
 }
 
 void eval_lookup_coords(
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    write_i32(outputs[0], lookup_values(inputs[0], inputs[1]));
+    allocate_all(outputs);
+    schedule(
+        stream,
+        inputs,
+        outputs,
+        [](const std::vector<mx::array>& task_inputs,
+           std::vector<mx::array>& task_outputs) {
+            write_i32(
+                task_outputs[0], lookup_values(task_inputs[0], task_inputs[1])
+            );
+        }
+    );
 }
 
 void eval_generic_kernel_relation(
     CoordRelationOp op,
     Triple stride,
     Triple padding,
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    auto offsets = read_offsets(inputs[1]);
-    auto active_rows = read_scalar_i32(inputs[2]);
+    allocate_all(outputs);
+    schedule(
+        stream,
+        inputs,
+        outputs,
+        [op, stride, padding](
+            const std::vector<mx::array>& task_inputs,
+            std::vector<mx::array>& task_outputs
+        ) {
+            auto offsets = read_offsets(task_inputs[1]);
+            auto active_rows = read_scalar_i32(task_inputs[2]);
 
-    switch (op) {
-    case CoordRelationOp::Forward:
-        write_kernel_relation(
-            outputs, inputs[0], active_rows, offsets, stride, padding
-        );
-        break;
-    case CoordRelationOp::Transposed:
-        write_transposed_kernel_relation(
-            outputs, inputs[0], active_rows, offsets, stride, padding
-        );
-        break;
-    }
+            switch (op) {
+            case CoordRelationOp::Forward:
+                write_kernel_relation(
+                    task_outputs,
+                    task_inputs[0],
+                    active_rows,
+                    offsets,
+                    stride,
+                    padding
+                );
+                break;
+            case CoordRelationOp::Transposed:
+                write_transposed_kernel_relation(
+                    task_outputs,
+                    task_inputs[0],
+                    active_rows,
+                    offsets,
+                    stride,
+                    padding
+                );
+                break;
+            }
+        }
+    );
 }
 
 void eval_generative_kernel_relation(
     Triple stride,
+    const mx::Stream& stream,
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    auto active_rows = read_scalar_i32(inputs[2]);
-    write_generative_relation(
-        outputs, inputs[0], active_rows, read_offsets(inputs[1]), stride
+    allocate_all(outputs);
+    schedule(
+        stream,
+        inputs,
+        outputs,
+        [stride](
+            const std::vector<mx::array>& task_inputs,
+            std::vector<mx::array>& task_outputs
+        ) {
+            auto active_rows = read_scalar_i32(task_inputs[2]);
+            write_generative_relation(
+                task_outputs,
+                task_inputs[0],
+                active_rows,
+                read_offsets(task_inputs[1]),
+                stride
+            );
+        }
     );
 }
 

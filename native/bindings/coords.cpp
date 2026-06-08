@@ -33,43 +33,52 @@ nb::tuple relation_tuple(const NativeKernelRelation& relation) {
     );
 }
 
+nb::tuple coord_set_tuple(const NativeCoordSet& result) {
+    return nb::make_tuple(result.coords, result.count);
+}
+
 } // namespace
 
 void register_coords(nb::module_& module) {
     module.def(
         "downsample_coords",
         [](const mx::array& coords, const std::vector<int>& stride) {
-            return downsample_coords(
-                coords, triple_from_values(stride, "stride")
+            return coord_set_tuple(
+                downsample_coords(coords, triple_from_values(stride, "stride"))
             );
         },
         "coords"_a,
         "stride"_a,
         nb::sig(
             "def downsample_coords(coords: mlx.core.array, "
-            "stride: collections.abc.Sequence[int]) -> mlx.core.array"
+            "stride: collections.abc.Sequence[int]) -> "
+            "tuple[mlx.core.array, mlx.core.array]"
         ),
         "Downsample sparse coordinates."
     );
     module.def(
         "union_coords",
-        &union_coords,
+        [](const mx::array& lhs, const mx::array& rhs) {
+            return coord_set_tuple(union_coords(lhs, rhs));
+        },
         "lhs"_a,
         "rhs"_a,
         nb::sig(
             "def union_coords(lhs: mlx.core.array, rhs: mlx.core.array) -> "
-            "mlx.core.array"
+            "tuple[mlx.core.array, mlx.core.array]"
         ),
         "Return the ordered union of two coordinate arrays."
     );
     module.def(
         "intersection_coords",
-        &intersection_coords,
+        [](const mx::array& lhs, const mx::array& rhs) {
+            return coord_set_tuple(intersection_coords(lhs, rhs));
+        },
         "lhs"_a,
         "rhs"_a,
         nb::sig(
             "def intersection_coords(lhs: mlx.core.array, "
-            "rhs: mlx.core.array) -> mlx.core.array"
+            "rhs: mlx.core.array) -> tuple[mlx.core.array, mlx.core.array]"
         ),
         "Return the ordered intersection of two coordinate arrays."
     );

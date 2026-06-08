@@ -3,13 +3,12 @@ from __future__ import annotations
 from mlx_lattice.core.coords import (
     CoordinateManager,
     CoordinateMapKey,
+    CoordinateSet,
 )
 from mlx_lattice.core.relations import (
-    EdgeCoo,
-    EdgeCooPlan,
     KernelRelation,
     KernelSpec,
-    edge_coo_plan,
+    RelationEdges,
 )
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import Triple, triple
@@ -17,12 +16,11 @@ from mlx_lattice.core.types import Triple, triple
 __all__ = [
     'CoordinateManager',
     'CoordinateMapKey',
-    'EdgeCoo',
-    'EdgeCooPlan',
+    'CoordinateSet',
     'KernelRelation',
     'KernelSpec',
+    'RelationEdges',
     'SparseTensor',
     'Triple',
-    'edge_coo_plan',
     'triple',
 ]

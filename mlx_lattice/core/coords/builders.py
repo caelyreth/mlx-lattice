@@ -73,7 +73,7 @@ def build_kernel_relation(
     return _kernel_relation_from_native(
         native,
         offsets=offsets,
-        n_in_rows=int(coords.shape[0]),
+        in_capacity=int(coords.shape[0]),
     )
 
 
@@ -99,7 +99,7 @@ def build_generative_relation(
     return _kernel_relation_from_native(
         native,
         offsets=offsets,
-        n_in_rows=int(coords.shape[0]),
+        in_capacity=int(coords.shape[0]),
     )
 
 
@@ -133,7 +133,7 @@ def build_transposed_kernel_relation(
     return _kernel_relation_from_native(
         native,
         offsets=offsets,
-        n_in_rows=int(coords.shape[0]),
+        in_capacity=int(coords.shape[0]),
     )
 
 
@@ -144,7 +144,7 @@ def _kernel_relation_from_native(
     native: NativeKernelRelation,
     *,
     offsets: tuple[Triple, ...],
-    n_in_rows: int,
+    in_capacity: int,
 ) -> KernelRelation:
     (
         in_rows,
@@ -160,8 +160,8 @@ def _kernel_relation_from_native(
         counts=counts,
         kernel_offsets=offsets,
         out_coords=out_coords,
-        n_in_rows=n_in_rows,
-        n_out_rows=int(out_coords.shape[0]),
+        n_in_capacity=in_capacity,
+        n_out_capacity=int(out_coords.shape[0]),
         n_kernels=len(offsets),
     )
 

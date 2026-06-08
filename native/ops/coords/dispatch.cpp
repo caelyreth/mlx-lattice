@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <typeinfo>
 #include <vector>
 
 #include "backends/cpu/coords/algorithms.h"
@@ -9,7 +10,6 @@
 #include "mlx/device.h"
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
-#include "mlx/transforms.h"
 
 namespace mlx_lattice {
 
@@ -38,14 +38,6 @@ mx::array make_offsets_array(const std::vector<Triple>& offsets) {
     return mx::array(
         flat.begin(), mx::Shape{int(offsets.size()), 3}, mx::int32
     );
-}
-
-mx::array compact_coords(const std::vector<mx::array>& outputs) {
-    auto cpu_value = mx::contiguous(outputs[1], false, mx::Device::cpu);
-    cpu_value.eval();
-    cpu_value.wait();
-    auto rows = cpu_value.data<int32_t>()[0];
-    return mx::slice(outputs[0], {0, 0}, {rows, 4});
 }
 
 NativeKernelRelation
@@ -85,7 +77,6 @@ std::vector<mx::array> make_relation_outputs(
         mx::contiguous(offsets, false, device),
         mx::contiguous(active_rows, false, device),
     };
-    mx::eval(inputs);
     return mx::array::make_arrays(spec.shapes, spec.dtypes, primitive, inputs);
 }
 
@@ -105,15 +96,13 @@ class SetCoords final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
-        coords::cpu::eval_set_coords(op_, stride_, inputs, outputs);
+        coords::cpu::eval_set_coords(op_, stride_, stream(), inputs, outputs);
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
         coords::metal::eval_set_coords(
             op_, stride_, shape_, stream(), inputs, outputs
         );
@@ -122,6 +111,9 @@ class SetCoords final : public mx::Primitive {
     const char* name() const override { return "lattice::SetCoords"; }
 
     bool is_equivalent(const mx::Primitive& other) const override {
+        if (typeid(other) != typeid(SetCoords)) {
+            return false;
+        }
         const auto& op = static_cast<const SetCoords&>(other);
         return op_ == op.op_ && stride_ == op.stride_ &&
                shape_.lhs_rows == op.shape_.lhs_rows &&
@@ -143,21 +135,22 @@ class LookupCoords final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
-        coords::cpu::eval_lookup_coords(inputs, outputs);
+        coords::cpu::eval_lookup_coords(stream(), inputs, outputs);
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
         coords::metal::eval_lookup_coords(shape_, stream(), inputs, outputs);
     }
 
     const char* name() const override { return "lattice::LookupCoords"; }
 
     bool is_equivalent(const mx::Primitive& other) const override {
+        if (typeid(other) != typeid(LookupCoords)) {
+            return false;
+        }
         const auto& op = static_cast<const LookupCoords&>(other);
         return shape_.rows == op.shape_.rows &&
                shape_.query_rows == op.shape_.query_rows;
@@ -184,9 +177,8 @@ class GenericKernelRelation final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
         coords::cpu::eval_generic_kernel_relation(
-            op_, stride_, padding_, inputs, outputs
+            op_, stride_, padding_, stream(), inputs, outputs
         );
     }
 
@@ -194,7 +186,6 @@ class GenericKernelRelation final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
         coords::metal::eval_generic_kernel_relation(
             op_,
             rows_,
@@ -212,6 +203,9 @@ class GenericKernelRelation final : public mx::Primitive {
     }
 
     bool is_equivalent(const mx::Primitive& other) const override {
+        if (typeid(other) != typeid(GenericKernelRelation)) {
+            return false;
+        }
         const auto& relation = static_cast<const GenericKernelRelation&>(other);
         return op_ == relation.op_ && rows_ == relation.rows_ &&
                kernel_count_ == relation.kernel_count_ &&
@@ -241,15 +235,15 @@ class GenerativeKernelRelation final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
-        coords::cpu::eval_generative_kernel_relation(stride_, inputs, outputs);
+        coords::cpu::eval_generative_kernel_relation(
+            stride_, stream(), inputs, outputs
+        );
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        mx::eval(inputs);
         coords::metal::eval_generative_kernel_relation(
             rows_, kernel_count_, stride_, stream(), inputs, outputs
         );
@@ -260,6 +254,9 @@ class GenerativeKernelRelation final : public mx::Primitive {
     }
 
     bool is_equivalent(const mx::Primitive& other) const override {
+        if (typeid(other) != typeid(GenerativeKernelRelation)) {
+            return false;
+        }
         const auto& relation =
             static_cast<const GenerativeKernelRelation&>(other);
         return rows_ == relation.rows_ &&
@@ -307,28 +304,34 @@ std::vector<mx::array> make_set_outputs(
     );
 }
 
+NativeCoordSet coord_set_from_outputs(const std::vector<mx::array>& outputs) {
+    return {outputs[0], outputs[1]};
+}
+
 } // namespace
 
 // MARK: - set ops
 
-mx::array dispatch_downsample_coords(const mx::array& coords, Triple stride) {
+NativeCoordSet
+dispatch_downsample_coords(const mx::array& coords, Triple stride) {
     auto outputs = make_set_outputs(
         CoordSetOp::Downsample, coords, mx::array({}, mx::int32), stride
     );
-    return compact_coords(outputs);
+    return coord_set_from_outputs(outputs);
 }
 
-mx::array dispatch_union_coords(const mx::array& lhs, const mx::array& rhs) {
+NativeCoordSet
+dispatch_union_coords(const mx::array& lhs, const mx::array& rhs) {
     auto outputs =
         make_set_outputs(CoordSetOp::Union, lhs, rhs, Triple{1, 1, 1});
-    return compact_coords(outputs);
+    return coord_set_from_outputs(outputs);
 }
 
-mx::array
+NativeCoordSet
 dispatch_intersection_coords(const mx::array& lhs, const mx::array& rhs) {
     auto outputs =
         make_set_outputs(CoordSetOp::Intersection, lhs, rhs, Triple{1, 1, 1});
-    return compact_coords(outputs);
+    return coord_set_from_outputs(outputs);
 }
 
 mx::array

@@ -218,7 +218,6 @@ Plan build_plan(
 // NOLINTEND(bugprone-easily-swappable-parameters)
 
 void write_coords(mx::array& out, const std::vector<Coord>& coords) {
-    out.set_data(mx::allocator::malloc(out.nbytes()));
     if (out.dtype() == mx::int32) {
         auto data = out.data<int32_t>();
         std::fill(data, data + out.size(), 0);
@@ -242,15 +241,14 @@ void write_coords(mx::array& out, const std::vector<Coord>& coords) {
 }
 
 void write_counts(mx::array& out, const Plan& plan) {
-    out.set_data(mx::allocator::malloc(out.nbytes()));
     auto data = out.data<int32_t>();
     std::fill(data, data + out.size(), 0);
     data[0] = int(plan.edges.size());
     data[1] = int(plan.out_coords.size());
 }
 
-std::vector<int32_t> pool_degrees(const Plan& plan, int n_out_rows) {
-    std::vector<int32_t> degrees(n_out_rows, 0);
+std::vector<int32_t> pool_degrees(const Plan& plan, int out_capacity) {
+    std::vector<int32_t> degrees(out_capacity, 0);
     for (auto edge : plan.edges) {
         ++degrees[edge[1]];
     }

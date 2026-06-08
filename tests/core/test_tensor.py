@@ -8,7 +8,6 @@ from mlx_lattice.core import SparseTensor as CoreSparseTensor
 from mlx_lattice.ops import (
     cat,
     contains_coords,
-    inverse_map,
     lookup_coords,
     prune,
     sparse_collate,
@@ -38,14 +37,22 @@ def test_sparse_tensor_reuses_and_rejects_coordinate_ownership() -> None:
     coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
     feats = mx.ones((2, 1), dtype=mx.float32)
     x = SparseTensor(coords, feats)
-    y = SparseTensor(mx.array(coords.tolist(), dtype=mx.int32), feats + 1)
+    y = x.replace(feats=feats + 1)
 
     reused = y.reuse_coords_from(x)
 
     assert reused.coord_key == x.coord_key
     assert reused.coord_manager is x.coord_manager
     assert reused.coords is x.coords
-    assert inverse_map(reused.coords, x.coords).tolist() == [0, 1]
+
+    equal_values = SparseTensor(
+        mx.array(coords.tolist(), dtype=mx.int32), feats + 2
+    )
+    same_array = SparseTensor(coords, feats + 3)
+    assert not x.same_coords(equal_values)
+    assert not x.same_coords(same_array)
+    with pytest.raises(ValueError, match='coordinates must match'):
+        equal_values.reuse_coords_from(x)
 
     manager = CoordinateManager()
     key = manager.insert_coords(coords)
@@ -131,3 +138,16 @@ def test_sparse_collate_decompose_topk_and_prune() -> None:
         [[2, 0, 0], [3, 0, 0]],
     ]
     assert out.feats.tolist() == [[2.0], [3.0]]
+
+
+def test_batch_partitioned_views_require_batch_count_metadata() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [1, 1, 0, 0]],
+        dtype=mx.int32,
+    )
+    x = SparseTensor(coords, mx.ones((2, 1), dtype=mx.float32))
+
+    with pytest.raises(ValueError, match='batch_counts metadata'):
+        _ = x.batch_rows
+    with pytest.raises(ValueError, match='batch_counts metadata'):
+        _ = x.decomposed_coordinates
