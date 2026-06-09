@@ -1,7 +1,5 @@
 #include "ops/coords.h"
 
-#include <stdexcept>
-
 #include "ops/coords/validation.h"
 
 namespace mlx_lattice {

@@ -1,12 +1,10 @@
 #include "backends/metal/exec/runtime.h"
 
 #include <algorithm>
-#include <stdexcept>
 
 #include "backends/array_utils.h"
 #include "backends/metal/runtime_utils.h"
 #include "mlx/device.h"
-#include "mlx/stream.h"
 
 #ifdef _METAL_
 #include "mlx/backend/metal/device.h"

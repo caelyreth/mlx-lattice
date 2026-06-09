@@ -7,7 +7,6 @@
 
 #include "backends/array_utils.h"
 #include "backends/metal/runtime_utils.h"
-#include "mlx/stream.h"
 
 #ifdef _METAL_
 #include "mlx/backend/metal/device.h"

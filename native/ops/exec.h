@@ -1,6 +1,5 @@
 #pragma once
 
-#include "mlx/array.h"
 #include "ops/exec/types.h"
 
 namespace mlx_lattice {

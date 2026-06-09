@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <stdexcept>
 #include <vector>
 
 #include "backends/array_utils.h"
