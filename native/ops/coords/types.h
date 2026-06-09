@@ -49,6 +49,7 @@ enum NeighborRelationOutputSlot : std::size_t {
     NeighborSourceRows,
     NeighborIds,
     NeighborDistances,
+    NeighborRowOffsets,
     NeighborCounts,
     NeighborOutputCount,
 };
@@ -69,6 +70,7 @@ struct NativeNeighborRelation {
     mx::array source_rows;
     mx::array neighbor_ids;
     mx::array distances;
+    mx::array row_offsets;
     mx::array counts;
 };
 

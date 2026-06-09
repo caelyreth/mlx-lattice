@@ -1,6 +1,7 @@
 #include "backends/metal/coords/runtime.h"
 
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -878,15 +879,82 @@ void eval_neighbor_relation(
     encoder.set_output_array(outputs[NeighborSourceRows], 2);
     encoder.set_output_array(outputs[NeighborIds], 3);
     encoder.set_output_array(outputs[NeighborDistances], 4);
-    encoder.set_output_array(outputs[NeighborCounts], 5);
-    encoder.set_bytes(shape.query_rows, 6);
-    encoder.set_bytes(shape.max_neighbors, 7);
+    encoder.set_output_array(outputs[NeighborRowOffsets], 5);
+    encoder.set_output_array(outputs[NeighborCounts], 6);
+    encoder.set_bytes(shape.query_rows, 7);
+    encoder.set_bytes(shape.max_neighbors, 8);
     dispatch_1d(
         encoder,
         clear,
         static_cast<size_t>(shape.query_rows) *
             static_cast<size_t>(shape.max_neighbors)
     );
+
+    if (op == NeighborRelationOp::Knn && shape.max_neighbors <= 16 &&
+        shape.source_rows > 512) {
+        auto table_capacity = coord_hash_capacity(shape.source_rows);
+        auto table = make_int32_temp(table_capacity);
+        encoder.add_temporary(table);
+        clear_coord_hash(device, library, encoder, table, table_capacity);
+
+        auto insert =
+            device.get_kernel("coord_hash_insert_active_rows_i32", library);
+        encoder.set_compute_pipeline_state(insert);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[2], 1);
+        encoder.set_output_array(table, 2);
+        encoder.set_bytes(shape.source_rows, 3);
+        encoder.set_bytes(table_capacity, 4);
+        dispatch_1d(encoder, insert, static_cast<size_t>(shape.source_rows));
+
+        auto search_radius = std::max(
+            2,
+            static_cast<int>(
+                std::ceil(std::cbrt(static_cast<double>(shape.max_neighbors)))
+            ) * 2
+        );
+        auto count = device.get_kernel("count_knn_relation_hash_i32", library);
+        encoder.set_compute_pipeline_state(count);
+        for (int i = 0; i < int(inputs.size()); ++i) {
+            encoder.set_input_array(inputs[i], i);
+        }
+        encoder.set_input_array(table, 4);
+        encoder.set_output_array(outputs[NeighborRowOffsets], 5);
+        encoder.set_bytes(shape.source_rows, 6);
+        encoder.set_bytes(shape.query_rows, 7);
+        encoder.set_bytes(shape.max_neighbors, 8);
+        encoder.set_bytes(search_radius, 9);
+        encoder.set_bytes(table_capacity, 10);
+        dispatch_1d(encoder, count, static_cast<size_t>(shape.query_rows));
+
+        auto prefix =
+            device.get_kernel("prefix_neighbor_row_offsets_i32", library);
+        encoder.set_compute_pipeline_state(prefix);
+        encoder.set_output_array(outputs[NeighborRowOffsets], 0);
+        encoder.set_output_array(outputs[NeighborCounts], 1);
+        encoder.set_bytes(shape.query_rows, 2);
+        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+        auto fill =
+            device.get_kernel("fill_knn_relation_compact_hash_i32", library);
+        encoder.set_compute_pipeline_state(fill);
+        for (int i = 0; i < int(inputs.size()); ++i) {
+            encoder.set_input_array(inputs[i], i);
+        }
+        encoder.set_input_array(table, 4);
+        encoder.set_input_array(outputs[NeighborRowOffsets], 5);
+        encoder.set_output_array(outputs[NeighborQueryRows], 6);
+        encoder.set_output_array(outputs[NeighborSourceRows], 7);
+        encoder.set_output_array(outputs[NeighborIds], 8);
+        encoder.set_output_array(outputs[NeighborDistances], 9);
+        encoder.set_bytes(shape.source_rows, 10);
+        encoder.set_bytes(shape.query_rows, 11);
+        encoder.set_bytes(shape.max_neighbors, 12);
+        encoder.set_bytes(search_radius, 13);
+        encoder.set_bytes(table_capacity, 14);
+        dispatch_1d(encoder, fill, static_cast<size_t>(shape.query_rows));
+        return;
+    }
 
     if (op == NeighborRelationOp::Knn && shape.max_neighbors <= 16 &&
         shape.source_rows <= 512) {
@@ -906,6 +974,68 @@ void eval_neighbor_relation(
             MTL::Size(static_cast<size_t>(shape.query_rows), 1, 1),
             MTL::Size(128, 1, 1)
         );
+    } else if (op == NeighborRelationOp::Radius) {
+        auto table_capacity = coord_hash_capacity(shape.source_rows);
+        auto table = make_int32_temp(table_capacity);
+        encoder.add_temporary(table);
+        clear_coord_hash(device, library, encoder, table, table_capacity);
+
+        auto insert =
+            device.get_kernel("coord_hash_insert_active_rows_i32", library);
+        encoder.set_compute_pipeline_state(insert);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[2], 1);
+        encoder.set_output_array(table, 2);
+        encoder.set_bytes(shape.source_rows, 3);
+        encoder.set_bytes(table_capacity, 4);
+        dispatch_1d(encoder, insert, static_cast<size_t>(shape.source_rows));
+
+        auto ceil_radius =
+            static_cast<int>(std::ceil(std::sqrt(radius_squared)));
+        auto count =
+            device.get_kernel("count_radius_relation_hash_i32", library);
+        encoder.set_compute_pipeline_state(count);
+        for (int i = 0; i < int(inputs.size()); ++i) {
+            encoder.set_input_array(inputs[i], i);
+        }
+        encoder.set_input_array(table, 4);
+        encoder.set_output_array(outputs[NeighborRowOffsets], 5);
+        encoder.set_bytes(shape.source_rows, 6);
+        encoder.set_bytes(shape.query_rows, 7);
+        encoder.set_bytes(shape.max_neighbors, 8);
+        encoder.set_bytes(radius_squared, 9);
+        encoder.set_bytes(ceil_radius, 10);
+        encoder.set_bytes(table_capacity, 11);
+        dispatch_1d(encoder, count, static_cast<size_t>(shape.query_rows));
+
+        auto prefix =
+            device.get_kernel("prefix_neighbor_row_offsets_i32", library);
+        encoder.set_compute_pipeline_state(prefix);
+        encoder.set_output_array(outputs[NeighborRowOffsets], 0);
+        encoder.set_output_array(outputs[NeighborCounts], 1);
+        encoder.set_bytes(shape.query_rows, 2);
+        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+        auto fill =
+            device.get_kernel("fill_radius_relation_compact_hash_i32", library);
+        encoder.set_compute_pipeline_state(fill);
+        for (int i = 0; i < int(inputs.size()); ++i) {
+            encoder.set_input_array(inputs[i], i);
+        }
+        encoder.set_input_array(table, 4);
+        encoder.set_input_array(outputs[NeighborRowOffsets], 5);
+        encoder.set_output_array(outputs[NeighborQueryRows], 6);
+        encoder.set_output_array(outputs[NeighborSourceRows], 7);
+        encoder.set_output_array(outputs[NeighborIds], 8);
+        encoder.set_output_array(outputs[NeighborDistances], 9);
+        encoder.set_bytes(shape.source_rows, 10);
+        encoder.set_bytes(shape.query_rows, 11);
+        encoder.set_bytes(shape.max_neighbors, 12);
+        encoder.set_bytes(radius_squared, 13);
+        encoder.set_bytes(ceil_radius, 14);
+        encoder.set_bytes(table_capacity, 15);
+        dispatch_1d(encoder, fill, static_cast<size_t>(shape.query_rows));
+        return;
     } else {
         auto fill = device.get_kernel("fill_neighbor_relation_i32", library);
         encoder.set_compute_pipeline_state(fill);
@@ -930,9 +1060,10 @@ void eval_neighbor_relation(
     encoder.set_output_array(outputs[NeighborSourceRows], 1);
     encoder.set_output_array(outputs[NeighborIds], 2);
     encoder.set_output_array(outputs[NeighborDistances], 3);
-    encoder.set_output_array(outputs[NeighborCounts], 4);
-    encoder.set_bytes(shape.query_rows, 5);
-    encoder.set_bytes(shape.max_neighbors, 6);
+    encoder.set_output_array(outputs[NeighborRowOffsets], 4);
+    encoder.set_output_array(outputs[NeighborCounts], 5);
+    encoder.set_bytes(shape.query_rows, 6);
+    encoder.set_bytes(shape.max_neighbors, 7);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 #else
     (void)op;

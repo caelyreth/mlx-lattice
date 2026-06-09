@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 import mlx.core as mx
@@ -22,6 +23,7 @@ type NativeKernelRelation = tuple[
     mx.array,
 ]
 type NativeNeighborRelation = tuple[
+    mx.array,
     mx.array,
     mx.array,
     mx.array,
@@ -201,7 +203,7 @@ def build_radius_relation(
     _require_matching_coord_dtype(source_coords, query_coords)
     radius_value = _nonnegative_float(radius, 'radius')
     neighbor_count = (
-        int(source_coords.shape[0])
+        0
         if max_neighbors is None
         else _positive_int(max_neighbors, 'max_neighbors')
     )
@@ -217,7 +219,11 @@ def build_radius_relation(
         native,
         query_capacity=int(query_coords.shape[0]),
         source_capacity=int(source_coords.shape[0]),
-        max_neighbors=neighbor_count,
+        max_neighbors=(
+            _radius_neighbor_capacity(radius_value)
+            if max_neighbors is None
+            else neighbor_count
+        ),
     )
 
 
@@ -259,12 +265,20 @@ def _neighbor_relation_from_native(
     source_capacity: int,
     max_neighbors: int,
 ) -> NeighborRelation:
-    query_rows, source_rows, neighbor_ids, distances, counts = native
+    (
+        query_rows,
+        source_rows,
+        neighbor_ids,
+        distances,
+        row_offsets,
+        counts,
+    ) = native
     return NeighborRelation(
         query_rows,
         source_rows,
         neighbor_ids,
         distances,
+        row_offsets=row_offsets,
         counts=counts,
         n_query_capacity=query_capacity,
         n_source_capacity=source_capacity,
@@ -312,3 +326,15 @@ def _active_rows(value: mx.array | None, coords: mx.array) -> mx.array:
             )
         return value
     return mx.array([coords.shape[0]], dtype=mx.int32)
+
+
+def _radius_neighbor_capacity(radius: float) -> int:
+    limit = math.ceil(radius)
+    radius_squared = radius * radius
+    count = 0
+    for dz in range(-limit, limit + 1):
+        for dy in range(-limit, limit + 1):
+            for dx in range(-limit, limit + 1):
+                if dx * dx + dy * dy + dz * dz <= radius_squared:
+                    count += 1
+    return max(count, 1)

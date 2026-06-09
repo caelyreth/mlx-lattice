@@ -71,12 +71,14 @@ def test_neighbor_relation_accepts_and_validates_query_contract() -> None:
     rows = mx.array([0, 1], dtype=mx.int32)
     short = mx.array([0], dtype=mx.int32)
     distances = mx.array([1.0, 4.0], dtype=mx.float32)
+    row_offsets = mx.array([0, 1, 2], dtype=mx.int32)
 
     relation = NeighborRelation(
         rows,
         rows,
         rows,
         distances,
+        row_offsets=row_offsets,
         n_query_capacity=2,
         n_source_capacity=3,
         max_neighbors=2,
@@ -87,6 +89,7 @@ def test_neighbor_relation_accepts_and_validates_query_contract() -> None:
     assert relation.n_query_capacity == 2
     assert relation.n_source_capacity == 3
     assert relation.max_neighbors == 2
+    assert relation.row_offsets is row_offsets
     assert relation.edge_count.tolist() == [2]
     assert relation.query_count.tolist() == [0]
 

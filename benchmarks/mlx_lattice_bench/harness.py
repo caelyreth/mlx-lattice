@@ -274,6 +274,7 @@ def _collect_arrays(value: Any) -> Iterable[mx.array]:
         yield value.edges.source_rows
         yield value.edges.neighbor_ids
         yield value.distances
+        yield value.row_offsets
         yield value.counts
         return
     if isinstance(value, Mapping):

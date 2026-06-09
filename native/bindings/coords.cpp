@@ -61,6 +61,7 @@ nb::tuple neighbor_tuple(const NativeNeighborRelation& relation) {
         relation.source_rows,
         relation.neighbor_ids,
         relation.distances,
+        relation.row_offsets,
         relation.counts
     );
 }
@@ -313,7 +314,7 @@ void register_coords(nb::module_& module) {
             "query_coords: mlx.core.array, "
             "query_active_rows: mlx.core.array, k: int) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, mlx.core.array]"
         ),
         "Build a semantic KNN neighbor relation."
     );
@@ -346,7 +347,8 @@ void register_coords(nb::module_& module) {
             "query_coords: mlx.core.array, "
             "query_active_rows: mlx.core.array, radius: float, "
             "max_neighbors: int) -> tuple[mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array]"
         ),
         "Build a semantic radius-query neighbor relation."
     );

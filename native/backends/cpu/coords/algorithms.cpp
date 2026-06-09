@@ -485,6 +485,38 @@ bool closer_neighbor(
     return lhs.source_row < rhs.source_row;
 }
 
+std::vector<NeighborCandidate> radius_candidates(
+    const std::unordered_map<Coord, int32_t, CoordHash>& source_rows_by_coord,
+    Coord query,
+    float radius_squared
+) {
+    auto radius = static_cast<int>(std::ceil(std::sqrt(radius_squared)));
+    std::vector<NeighborCandidate> candidates;
+    auto reserve_radius = static_cast<std::size_t>(radius);
+    candidates.reserve(reserve_radius * reserve_radius * reserve_radius);
+    for (int dz = -radius; dz <= radius; ++dz) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                auto distance = static_cast<float>(dx * dx + dy * dy + dz * dz);
+                if (distance > radius_squared) {
+                    continue;
+                }
+                auto target = Coord{
+                    query[0],
+                    query[1] + dx,
+                    query[2] + dy,
+                    query[3] + dz,
+                };
+                auto match = source_rows_by_coord.find(target);
+                if (match != source_rows_by_coord.end()) {
+                    candidates.push_back({match->second, distance});
+                }
+            }
+        }
+    }
+    return candidates;
+}
+
 void write_neighbor_relation(
     std::vector<mx::array>& outputs,
     NeighborRelationOp op,
@@ -505,28 +537,45 @@ void write_neighbor_relation(
     std::vector<int32_t> query_rows;
     std::vector<int32_t> source_rows;
     std::vector<int32_t> neighbor_ids;
+    std::vector<int32_t> row_offsets(query_values.size() + 1, 0);
     std::vector<float> distances;
     query_rows.reserve(query_values.size() * shape.max_neighbors);
     source_rows.reserve(query_values.size() * shape.max_neighbors);
     neighbor_ids.reserve(query_values.size() * shape.max_neighbors);
     distances.reserve(query_values.size() * shape.max_neighbors);
 
+    std::unordered_map<Coord, int32_t, CoordHash> source_rows_by_coord;
+    if (op == NeighborRelationOp::Radius) {
+        source_rows_by_coord.reserve(source_values.size());
+        for (int source_row = 0; source_row < int(source_values.size());
+             ++source_row) {
+            source_rows_by_coord.emplace(
+                source_values[source_row], static_cast<int32_t>(source_row)
+            );
+        }
+    }
+
     std::vector<NeighborCandidate> candidates;
     candidates.reserve(source_values.size());
     for (int query_row = 0; query_row < int(query_values.size()); ++query_row) {
+        row_offsets[query_row] = static_cast<int32_t>(query_rows.size());
         candidates.clear();
         auto query = query_values[query_row];
-        for (int source_row = 0; source_row < int(source_values.size());
-             ++source_row) {
-            auto source = source_values[source_row];
-            if (!same_batch(query, source)) {
-                continue;
+        if (op == NeighborRelationOp::Radius) {
+            candidates =
+                radius_candidates(source_rows_by_coord, query, radius_squared);
+        } else {
+            for (int source_row = 0; source_row < int(source_values.size());
+                 ++source_row) {
+                auto source = source_values[source_row];
+                if (!same_batch(query, source)) {
+                    continue;
+                }
+                auto distance = squared_spatial_distance(query, source);
+                candidates.push_back(
+                    {static_cast<int32_t>(source_row), distance}
+                );
             }
-            auto distance = squared_spatial_distance(query, source);
-            if (op == NeighborRelationOp::Radius && distance > radius_squared) {
-                continue;
-            }
-            candidates.push_back({static_cast<int32_t>(source_row), distance});
         }
         std::sort(candidates.begin(), candidates.end(), closer_neighbor);
         auto limit = std::min(shape.max_neighbors, int(candidates.size()));
@@ -537,11 +586,13 @@ void write_neighbor_relation(
             distances.push_back(candidates[neighbor].distance);
         }
     }
+    row_offsets[query_values.size()] = static_cast<int32_t>(query_rows.size());
 
     write_i32(outputs[NeighborQueryRows], query_rows);
     write_i32(outputs[NeighborSourceRows], source_rows);
     write_i32(outputs[NeighborIds], neighbor_ids);
     write_f32(outputs[NeighborDistances], distances);
+    write_i32(outputs[NeighborRowOffsets], row_offsets);
     write_count(
         outputs[NeighborCounts],
         int(query_rows.size()),

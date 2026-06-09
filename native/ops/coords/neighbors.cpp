@@ -1,5 +1,7 @@
 #include "ops/coords/factories.h"
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <typeinfo>
 #include <vector>
@@ -19,6 +21,11 @@ struct NeighborOutputSpec {
     std::vector<mx::Dtype> dtypes;
 };
 
+struct NeighborOutputCapacity {
+    int edges;
+    int queries;
+};
+
 struct NeighborRelationConfig {
     NeighborRelationOp op;
     int max_neighbors;
@@ -32,18 +39,37 @@ neighbor_from_outputs(const std::vector<mx::array>& outputs) {
         outputs[NeighborSourceRows],
         outputs[NeighborIds],
         outputs[NeighborDistances],
+        outputs[NeighborRowOffsets],
         outputs[NeighborCounts],
     };
 }
 
-NeighborOutputSpec neighbor_output_spec(int edge_capacity) {
+NeighborOutputSpec neighbor_output_spec(NeighborOutputCapacity capacity) {
     std::vector<mx::Shape> shapes(
-        NeighborOutputCount, mx::Shape{edge_capacity}
+        NeighborOutputCount, mx::Shape{capacity.edges}
     );
     std::vector<mx::Dtype> dtypes(NeighborOutputCount, mx::int32);
     dtypes[NeighborDistances] = mx::float32;
+    shapes[NeighborRowOffsets] = mx::Shape{capacity.queries + 1};
     shapes[NeighborCounts] = mx::Shape{2};
     return {shapes, dtypes};
+}
+
+int radius_neighbor_capacity(double radius) {
+    auto limit = static_cast<int>(std::ceil(radius));
+    auto radius_squared = radius * radius;
+    auto count = 0;
+    for (int dz = -limit; dz <= limit; ++dz) {
+        for (int dy = -limit; dy <= limit; ++dy) {
+            for (int dx = -limit; dx <= limit; ++dx) {
+                auto dist = double(dx * dx + dy * dy + dz * dz);
+                if (dist <= radius_squared) {
+                    ++count;
+                }
+            }
+        }
+    }
+    return std::max(count, 1);
 }
 
 std::vector<mx::array> make_neighbor_outputs(
@@ -129,7 +155,9 @@ NativeNeighborRelation make_neighbor_relation(
     auto edge_capacity = shape.query_rows * shape.max_neighbors;
     auto device = coord_device();
     auto outputs = make_neighbor_outputs(
-        neighbor_output_spec(edge_capacity),
+        neighbor_output_spec(
+            NeighborOutputCapacity{edge_capacity, shape.query_rows}
+        ),
         std::make_shared<NeighborRelationPrimitive>(
             coord_stream(device), config.op, shape, config.radius_squared
         ),
@@ -172,10 +200,12 @@ NativeNeighborRelation make_radius_relation(
     double radius,
     int max_neighbors
 ) {
+    auto neighbor_capacity =
+        max_neighbors == 0 ? radius_neighbor_capacity(radius) : max_neighbors;
     return make_neighbor_relation(
         NeighborRelationConfig{
             NeighborRelationOp::Radius,
-            max_neighbors,
+            neighbor_capacity,
             static_cast<float>(radius * radius),
         },
         source_coords,

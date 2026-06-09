@@ -216,6 +216,12 @@ def test_knn_and_radius_relations_define_neighbor_query_contract() -> None:
         4.0,
         1.0,
     ]
+    assert _active_row_offsets(knn.row_offsets, knn.query_count) == [
+        0,
+        2,
+        4,
+        5,
+    ]
     assert knn.n_query_capacity == 3
     assert knn.n_source_capacity == 4
     assert knn.max_neighbors == 2
@@ -244,6 +250,12 @@ def test_knn_and_radius_relations_define_neighbor_query_contract() -> None:
         1.0,
         1.0,
         1.0,
+    ]
+    assert _active_row_offsets(radius.row_offsets, radius.query_count) == [
+        0,
+        2,
+        3,
+        4,
     ]
     assert capped.counts.tolist() == [3, 3]
     assert _active_rows(capped.edges.source_rows, capped.edge_count) == [
@@ -515,6 +527,7 @@ def test_metal_neighbor_relations_match_cpu_contract_when_available() -> (
             knn.edges.source_rows,
             knn.edges.neighbor_ids,
             knn.distances,
+            knn.row_offsets,
             knn.counts,
             radius.counts,
         )

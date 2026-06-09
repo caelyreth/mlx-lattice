@@ -162,6 +162,7 @@ class KernelRelation:
 class NeighborRelation:
     edges: NeighborEdges
     distances: mx.array
+    row_offsets: mx.array
     counts: mx.array
     n_query_capacity: int | None = None
     n_source_capacity: int | None = None
@@ -174,6 +175,7 @@ class NeighborRelation:
         neighbor_ids: mx.array,
         distances: mx.array,
         *,
+        row_offsets: mx.array | None = None,
         counts: mx.array | None = None,
         n_query_capacity: int | None = None,
         n_source_capacity: int | None = None,
@@ -189,9 +191,24 @@ class NeighborRelation:
         if counts is None:
             counts = mx.array([query_rows.shape[0], 0], dtype=mx.int32)
         _validate_counts(counts)
+        if row_offsets is None:
+            query_capacity = (
+                0 if n_query_capacity is None else int(n_query_capacity)
+            )
+            row_offsets = mx.array(
+                [0] * (query_capacity + 1), dtype=mx.int32
+            )
+        _validate_row_offsets(row_offsets)
+        if n_query_capacity is not None and int(row_offsets.shape[0]) != (
+            int(n_query_capacity) + 1
+        ):
+            raise ValueError(
+                'row_offsets must have length n_query_capacity + 1.'
+            )
 
         object.__setattr__(self, 'edges', edges)
         object.__setattr__(self, 'distances', distances)
+        object.__setattr__(self, 'row_offsets', row_offsets)
         object.__setattr__(self, 'counts', counts)
         object.__setattr__(
             self,
