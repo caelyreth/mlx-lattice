@@ -184,8 +184,10 @@ def _compiled(
     kind: WorkloadKind,
 ) -> Callable[[WorkloadFixture], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: WorkloadFixture) -> tuple[Any, tuple[Any, ...]]:
+        base = fixture.sparse.tensor()
+
         def fn(feats: mx.array) -> mx.array:
-            inputs = _compiled_inputs(kind, fixture, feats)
+            inputs = _compiled_inputs(kind, fixture, feats, base=base)
             out = _run(kind, inputs)
             return out.feats
 
@@ -205,8 +207,10 @@ def _backward(
     kind: WorkloadKind,
 ) -> Callable[[WorkloadFixture], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: WorkloadFixture) -> tuple[Any, tuple[Any, ...]]:
+        base = fixture.sparse.tensor()
+
         def loss(feats: mx.array) -> mx.array:
-            inputs = _compiled_inputs(kind, fixture, feats)
+            inputs = _compiled_inputs(kind, fixture, feats, base=base)
             return mx.sum(_run(kind, inputs).feats)
 
         points = (
@@ -226,6 +230,8 @@ def _compiled_inputs(
     kind: WorkloadKind,
     fixture: WorkloadFixture,
     feats: mx.array,
+    *,
+    base: SparseTensor | None = None,
 ) -> WorkloadInputs:
     point_workload = kind in ('voxel_stem', 'mini_encoder')
     points = None if fixture.points is None else fixture.points.points
@@ -234,10 +240,8 @@ def _compiled_inputs(
         None if fixture.points is None else fixture.points.batch_indices
     )
     return WorkloadInputs(
-        x=SparseTensor(
-            fixture.sparse.coords,
-            feats if not point_workload else fixture.sparse.feats,
-            batch_counts=fixture.sparse.batch_counts,
+        x=(base or fixture.sparse.tensor()).replace(
+            feats=feats if not point_workload else fixture.sparse.feats
         ),
         points=points,
         point_feats=feats if point_workload else point_feats,
