@@ -7,8 +7,7 @@ target_sources(
   PRIVATE
     conv/algorithms.cpp
     coords/algorithms.cpp
-    pool/algorithms.cpp
-    pool/planning.cpp)
+    pool/algorithms.cpp)
 
 target_include_directories(
   mlx_lattice_backend_cpu

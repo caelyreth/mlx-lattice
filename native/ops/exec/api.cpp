@@ -2,26 +2,10 @@
 
 #include <vector>
 
-#include "ops/coords.h"
 #include "ops/exec/factories.h"
 #include "ops/exec/validation.h"
 
 namespace mlx_lattice {
-
-namespace {
-
-mx::array make_offsets_array(const std::vector<Triple>& offsets) {
-    std::vector<int32_t> flat;
-    flat.reserve(offsets.size() * 3);
-    for (auto offset : offsets) {
-        flat.insert(flat.end(), offset.begin(), offset.end());
-    }
-    return mx::array(
-        flat.begin(), mx::Shape{int(offsets.size()), 3}, mx::int32
-    );
-}
-
-} // namespace
 
 mx::array sparse_conv_features(
     const mx::array& feats,
@@ -104,25 +88,37 @@ mx::array sparse_conv_features(
     );
 }
 
-NativeSparseTensorOutput sparse_pool(
+mx::array sparse_pool_features(
     PoolReduceOp op,
-    const mx::array& coords,
-    const mx::array& active_rows,
     const mx::array& feats,
-    Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
-    Triple stride,
-    Triple padding, // NOLINT(bugprone-easily-swappable-parameters)
-    Triple dilation
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
+    const mx::array& counts,
+    int out_capacity,
+    int n_kernels
 ) {
-    validate_sparse_pool(coords, active_rows, feats);
-    return make_sparse_pool(
-        op,
-        coords,
-        active_rows,
+    validate_sparse_pool_features(
         feats,
-        make_offsets_array(kernel_offsets(kernel_size, dilation)),
-        stride,
-        padding
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
+        counts,
+        out_capacity,
+        n_kernels
+    );
+    return make_sparse_pool_features(
+        op,
+        feats,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
+        counts,
+        out_capacity,
+        n_kernels
     );
 }
 

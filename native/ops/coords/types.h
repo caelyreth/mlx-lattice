@@ -28,12 +28,11 @@ enum CoordRelationOutputSlot : std::size_t {
     RelationInRows = 0,
     RelationOutRows,
     RelationKernelIds,
+    RelationRowOffsets,
     RelationOutCoords,
     RelationCounts,
     RelationOutputCount,
 };
-
-constexpr std::size_t DirectRelationOutputCount = RelationOutputCount - 1;
 
 enum class NeighborRelationOp : std::uint8_t {
     Knn,
@@ -55,11 +54,12 @@ enum NeighborRelationOutputSlot : std::size_t {
 };
 
 struct NativeKernelRelation {
-    // Baseline edge-COO view of a logical relation. Future native execution
-    // plans can lower the same relation into CSR, buckets, or implicit GEMM.
+    // Baseline edge-COO diagnostics plus the first native execution view.
+    // Edges are ordered by output row and row_offsets is CSR-style metadata.
     mx::array in_rows;
     mx::array out_rows;
     mx::array kernel_ids;
+    mx::array row_offsets;
     mx::array out_coords;
     mx::array counts;
 };

@@ -14,119 +14,93 @@ namespace mlx_lattice {
 
 namespace {
 
-mx::array make_sparse_pool_grad(
+mx::array make_sparse_pool_features_grad(
     PoolReduceOp reduce,
     const mx::array& cotangent,
     const mx::array& feats,
     const mx::array& pooled,
-    const mx::array& coords,
-    const mx::array& active_rows,
-    const mx::array& offsets,
-    const mx::array& out_coords,
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
     const mx::array& counts,
-    Triple stride,
-    Triple padding,
     SparsePoolShape shape
 );
 
-mx::array make_sparse_pool_jvp(
+mx::array make_sparse_pool_features_jvp(
     PoolReduceOp reduce,
     const mx::array& tangent,
     const mx::array& feats,
     const mx::array& pooled,
-    const mx::array& coords,
-    const mx::array& active_rows,
-    const mx::array& offsets,
-    const mx::array& out_coords,
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
     const mx::array& counts,
-    Triple stride,
-    Triple padding,
     SparsePoolShape shape
 );
 
-class SparsePool final : public SparsePrimitive {
+class SparsePoolFeatures final : public SparsePrimitive {
   public:
-    SparsePool(
+    SparsePoolFeatures(
         mx::Stream stream,
         PoolReduceOp reduce,
-        SparsePoolShape shape,
-        Triple stride, // NOLINT(bugprone-easily-swappable-parameters)
-        Triple padding
+        SparsePoolShape shape
     )
-        : SparsePrimitive(stream), reduce_(reduce), shape_(shape),
-          stride_(stride), padding_(padding) {}
+        : SparsePrimitive(stream), reduce_(reduce), shape_(shape) {}
 
     void eval_cpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        backend::cpu::pool::eval(
-            reduce_, shape_, stride_, padding_, stream(), inputs, outputs
-        );
+        backend::cpu::pool::eval(reduce_, shape_, stream(), inputs, outputs);
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        backend::metal::pool::eval(
-            reduce_, shape_, stride_, padding_, stream(), inputs, outputs
-        );
+        backend::metal::pool::eval(reduce_, shape_, stream(), inputs, outputs);
     }
 
-    const char* name() const override { return "lattice::SparsePool"; }
+    const char* name() const override { return "lattice::SparsePoolFeatures"; }
 
     std::vector<mx::array>
     jvp(const std::vector<mx::array>& primals,
         const std::vector<mx::array>& tangents,
         const std::vector<int>& argnums) override {
         for (int index = 0; index < int(argnums.size()); ++index) {
-            if (argnums[index] == 2) {
-                auto outputs = make_sparse_pool(
+            if (argnums[index] == 0) {
+                auto pooled = make_sparse_pool_features(
                     reduce_,
                     primals[0],
                     primals[1],
                     primals[2],
                     primals[3],
-                    stride_,
-                    padding_
+                    primals[4],
+                    primals[5],
+                    shape_.out_capacity,
+                    shape_.n_kernels
                 );
-                auto tangent = make_sparse_pool_jvp(
+                return {make_sparse_pool_features_jvp(
                     reduce_,
                     tangents[index],
-                    primals[2],
-                    outputs.feats,
                     primals[0],
+                    pooled,
                     primals[1],
+                    primals[2],
                     primals[3],
-                    outputs.coords,
-                    outputs.counts,
-                    stride_,
-                    padding_,
+                    primals[4],
+                    primals[5],
                     shape_
-                );
-                return {
-                    tangent,
-                    mx::zeros(
-                        mx::Shape{shape_.out_capacity, 4},
-                        primals[0].dtype(),
-                        stream()
-                    ),
-                    mx::zeros(mx::Shape{2}, mx::int32, stream()),
-                };
+                )};
             }
         }
-        return {
-            mx::zeros(
-                mx::Shape{shape_.out_capacity, shape_.channels},
-                primals[2].dtype(),
-                stream()
-            ),
-            mx::zeros(
-                mx::Shape{shape_.out_capacity, 4}, primals[0].dtype(), stream()
-            ),
-            mx::zeros(mx::Shape{2}, mx::int32, stream()),
-        };
+        return {mx::zeros(
+            mx::Shape{shape_.out_capacity, shape_.channels},
+            primals[0].dtype(),
+            stream()
+        )};
     }
 
     std::vector<mx::array>
@@ -137,19 +111,17 @@ class SparsePool final : public SparsePrimitive {
         std::vector<mx::array> grads;
         grads.reserve(argnums.size());
         for (const auto argnum : argnums) {
-            if (argnum == 2) {
-                grads.push_back(make_sparse_pool_grad(
+            if (argnum == 0) {
+                grads.push_back(make_sparse_pool_features_grad(
                     reduce_,
                     cotangents[0],
-                    primals[2],
-                    outputs[SparseOutFeats],
                     primals[0],
+                    outputs[0],
                     primals[1],
+                    primals[2],
                     primals[3],
-                    outputs[SparseOutCoords],
-                    outputs[SparseCounts],
-                    stride_,
-                    padding_,
+                    primals[4],
+                    primals[5],
                     shape_
                 ));
             } else {
@@ -160,12 +132,11 @@ class SparsePool final : public SparsePrimitive {
     }
 
     bool is_equivalent(const mx::Primitive& other) const override {
-        if (typeid(other) != typeid(SparsePool)) {
+        if (typeid(other) != typeid(SparsePoolFeatures)) {
             return false;
         }
-        const auto& op = static_cast<const SparsePool&>(other);
-        return reduce_ == op.reduce_ && stride_ == op.stride_ &&
-               padding_ == op.padding_ &&
+        const auto& op = static_cast<const SparsePoolFeatures&>(other);
+        return reduce_ == op.reduce_ &&
                shape_.in_capacity == op.shape_.in_capacity &&
                shape_.out_capacity == op.shape_.out_capacity &&
                shape_.n_kernels == op.shape_.n_kernels &&
@@ -175,28 +146,23 @@ class SparsePool final : public SparsePrimitive {
   private:
     PoolReduceOp reduce_;
     SparsePoolShape shape_;
-    Triple stride_;
-    Triple padding_;
 };
 
-class SparsePoolGrad : public SparsePrimitive {
+class SparsePoolFeaturesGrad : public SparsePrimitive {
   public:
-    SparsePoolGrad(
+    SparsePoolFeaturesGrad(
         mx::Stream stream,
         PoolReduceOp reduce,
-        SparsePoolShape shape,
-        Triple stride, // NOLINT(bugprone-easily-swappable-parameters)
-        Triple padding
+        SparsePoolShape shape
     )
-        : SparsePrimitive(stream), reduce_(reduce), shape_(shape),
-          stride_(stride), padding_(padding) {}
+        : SparsePrimitive(stream), reduce_(reduce), shape_(shape) {}
 
     void eval_cpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
         backend::cpu::pool::eval_grad(
-            reduce_, shape_, stride_, padding_, stream(), inputs, outputs
+            reduce_, shape_, stream(), inputs, outputs
         );
     }
 
@@ -205,19 +171,20 @@ class SparsePoolGrad : public SparsePrimitive {
         std::vector<mx::array>& outputs
     ) override {
         backend::metal::pool::eval_grad(
-            reduce_, shape_, stride_, padding_, stream(), inputs, outputs
+            reduce_, shape_, stream(), inputs, outputs
         );
     }
 
-    const char* name() const override { return "lattice::SparsePoolGrad"; }
+    const char* name() const override {
+        return "lattice::SparsePoolFeaturesGrad";
+    }
 
     bool is_equivalent(const mx::Primitive& other) const override {
-        if (typeid(other) != typeid(SparsePoolGrad)) {
+        if (typeid(other) != typeid(SparsePoolFeaturesGrad)) {
             return false;
         }
-        const auto& op = static_cast<const SparsePoolGrad&>(other);
-        return reduce_ == op.reduce_ && stride_ == op.stride_ &&
-               padding_ == op.padding_ &&
+        const auto& op = static_cast<const SparsePoolFeaturesGrad&>(other);
+        return reduce_ == op.reduce_ &&
                shape_.in_capacity == op.shape_.in_capacity &&
                shape_.out_capacity == op.shape_.out_capacity &&
                shape_.n_kernels == op.shape_.n_kernels &&
@@ -227,20 +194,18 @@ class SparsePoolGrad : public SparsePrimitive {
   protected:
     PoolReduceOp reduce_;
     SparsePoolShape shape_;
-    Triple stride_;
-    Triple padding_;
 };
 
-class SparsePoolJvp final : public SparsePoolGrad {
+class SparsePoolFeaturesJvp final : public SparsePoolFeaturesGrad {
   public:
-    using SparsePoolGrad::SparsePoolGrad;
+    using SparsePoolFeaturesGrad::SparsePoolFeaturesGrad;
 
     void eval_cpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
         backend::cpu::pool::eval_jvp(
-            reduce_, shape_, stride_, padding_, stream(), inputs, outputs
+            reduce_, shape_, stream(), inputs, outputs
         );
     }
 
@@ -249,84 +214,94 @@ class SparsePoolJvp final : public SparsePoolGrad {
         std::vector<mx::array>& outputs
     ) override {
         backend::metal::pool::eval_jvp(
-            reduce_, shape_, stride_, padding_, stream(), inputs, outputs
+            reduce_, shape_, stream(), inputs, outputs
         );
     }
 
-    const char* name() const override { return "lattice::SparsePoolJvp"; }
+    const char* name() const override {
+        return "lattice::SparsePoolFeaturesJvp";
+    }
 };
+
+mx::Stream pool_stream(
+    const mx::array& feats,
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
+    const mx::array& counts
+) {
+    return sparse_pool_features_stream(
+        feats, in_rows, out_rows, kernel_ids, row_offsets, counts
+    );
+}
 
 } // namespace
 
-NativeSparseTensorOutput make_sparse_pool(
+mx::array make_sparse_pool_features(
     PoolReduceOp reduce,
-    const mx::array& coords,
-    const mx::array& active_rows,
     const mx::array& feats,
-    const mx::array& offsets,
-    Triple stride,
-    Triple padding
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
+    const mx::array& counts,
+    int out_capacity,
+    int n_kernels
 ) {
-    auto out_capacity = coords.shape(0);
     auto shape = SparsePoolShape{
-        coords.shape(0),
+        feats.shape(0),
         out_capacity,
-        offsets.shape(0),
+        n_kernels,
         feats.shape(1),
     };
-    auto stream = sparse_pool_stream(coords, active_rows, feats, offsets);
+    auto stream =
+        pool_stream(feats, in_rows, out_rows, kernel_ids, row_offsets, counts);
     auto primitive =
-        std::make_shared<SparsePool>(stream, reduce, shape, stride, padding);
+        std::make_shared<SparsePoolFeatures>(stream, reduce, shape);
     auto inputs = std::vector<mx::array>{
-        coords,
-        active_rows,
         feats,
-        offsets,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
+        counts,
     };
-    auto outputs = mx::array::make_arrays(
-        {mx::Shape{out_capacity, feats.shape(1)},
-         mx::Shape{out_capacity, 4},
-         mx::Shape{2}},
-        {feats.dtype(), coords.dtype(), mx::int32},
+    return mx::array::make_arrays(
+        {mx::Shape{out_capacity, feats.shape(1)}},
+        {feats.dtype()},
         primitive,
         inputs
-    );
-    return {
-        outputs[SparseOutCoords],
-        outputs[SparseOutFeats],
-        outputs[SparseCounts],
-    };
+    )[0];
 }
 
 namespace {
 
-mx::array make_sparse_pool_grad(
+mx::array make_sparse_pool_features_grad(
     PoolReduceOp reduce,
     const mx::array& cotangent,
     const mx::array& feats,
     const mx::array& pooled,
-    const mx::array& coords,
-    const mx::array& active_rows,
-    const mx::array& offsets,
-    const mx::array& out_coords,
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
     const mx::array& counts,
-    Triple stride,
-    Triple padding,
     SparsePoolShape shape
 ) {
-    (void)pooled;
-    auto stream = sparse_pool_stream(coords, active_rows, cotangent, offsets);
-    auto primitive = std::make_shared<SparsePoolGrad>(
-        stream, reduce, shape, stride, padding
+    auto stream = pool_stream(
+        cotangent, in_rows, out_rows, kernel_ids, row_offsets, counts
     );
+    auto primitive =
+        std::make_shared<SparsePoolFeaturesGrad>(stream, reduce, shape);
     auto inputs = std::vector<mx::array>{
         cotangent,
         feats,
         pooled,
-        coords,
-        active_rows,
-        offsets,
-        out_coords,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
         counts,
     };
     return mx::array::make_arrays(
@@ -337,31 +312,31 @@ mx::array make_sparse_pool_grad(
     )[0];
 }
 
-mx::array make_sparse_pool_jvp(
+mx::array make_sparse_pool_features_jvp(
     PoolReduceOp reduce,
     const mx::array& tangent,
     const mx::array& feats,
     const mx::array& pooled,
-    const mx::array& coords,
-    const mx::array& active_rows,
-    const mx::array& offsets,
-    const mx::array& out_coords,
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
     const mx::array& counts,
-    Triple stride,
-    Triple padding,
     SparsePoolShape shape
 ) {
-    auto stream = sparse_pool_stream(coords, active_rows, tangent, offsets);
+    auto stream = pool_stream(
+        tangent, in_rows, out_rows, kernel_ids, row_offsets, counts
+    );
     auto primitive =
-        std::make_shared<SparsePoolJvp>(stream, reduce, shape, stride, padding);
+        std::make_shared<SparsePoolFeaturesJvp>(stream, reduce, shape);
     auto inputs = std::vector<mx::array>{
         tangent,
         feats,
         pooled,
-        coords,
-        active_rows,
-        offsets,
-        out_coords,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
         counts,
     };
     return mx::array::make_arrays(

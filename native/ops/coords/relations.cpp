@@ -38,6 +38,7 @@ relation_from_outputs(const std::vector<mx::array>& outputs) {
         outputs[RelationInRows],
         outputs[RelationOutRows],
         outputs[RelationKernelIds],
+        outputs[RelationRowOffsets],
         outputs[RelationOutCoords],
         outputs[RelationCounts],
     };
@@ -51,6 +52,7 @@ RelationOutputSpec relation_output_spec(
 ) {
     std::vector<mx::Shape> shapes(RelationOutputCount, mx::Shape{edges});
     std::vector<mx::Dtype> dtypes(RelationOutputCount, mx::int32);
+    shapes[RelationRowOffsets] = mx::Shape{out_rows + 1};
     shapes[RelationOutCoords] = mx::Shape{out_rows, 4};
     shapes[RelationCounts] = mx::Shape{2};
     dtypes[RelationOutCoords] = coord_dtype;

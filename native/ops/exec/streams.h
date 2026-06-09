@@ -13,11 +13,13 @@ mx::Stream sparse_conv_features_stream(
     const mx::array& counts
 );
 
-mx::Stream sparse_pool_stream(
-    const mx::array& coords,
-    const mx::array& active_rows,
+mx::Stream sparse_pool_features_stream(
     const mx::array& feats,
-    const mx::array& offsets
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
+    const mx::array& counts
 );
 
 } // namespace mlx_lattice

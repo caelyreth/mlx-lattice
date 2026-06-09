@@ -122,24 +122,39 @@ def _fused_pool(
     output_stride: Triple,
 ) -> SparseTensor:
     _validate_pool_dtype(x.feats)
+    _validate_metal_coord_dtype(x)
     if mode not in ('sum', 'max', 'avg'):
         raise ValueError("mode must be 'sum', 'max', or 'avg'.")
-    out_coords, feats, counts = ext.sparse_pool(
-        x.coords,
-        x.active_rows,
+    relation = x.coord_manager.kernel_relation(
+        x.coord_key,
+        kernel_size=spec.size,
+        stride=spec.stride,
+        padding=spec.padding,
+        dilation=spec.dilation,
+    )
+    if relation.n_out_capacity is None or relation.n_kernels is None:
+        raise ValueError(
+            'kernel relation is missing static shape metadata.'
+        )
+    if relation.out_coords is None:
+        raise ValueError('kernel relation is missing output coordinates.')
+    feats = ext.sparse_pool_features(
         x.feats,
+        relation.edges.in_rows,
+        relation.edges.out_rows,
+        relation.edges.kernel_ids,
+        relation.row_offsets,
+        relation.counts,
         mode,
-        list(spec.size),
-        list(spec.stride),
-        list(spec.padding),
-        list(spec.dilation),
+        relation.n_out_capacity,
+        relation.n_kernels,
     )
     return SparseTensor(
-        out_coords,
+        relation.out_coords,
         feats,
         stride=output_stride,
         coord_manager=x.coord_manager,
-        active_rows=counts[1:2],
+        active_rows=relation.out_count,
     )
 
 
@@ -200,6 +215,11 @@ def _batch_ids(counts: tuple[int, ...]) -> mx.array:
 def _validate_pool_dtype(feats: mx.array) -> None:
     if feats.dtype != mx.float32:
         raise ValueError('pooling currently supports float32 tensors.')
+
+
+def _validate_metal_coord_dtype(x: SparseTensor) -> None:
+    if mx.default_device() == mx.gpu and x.coords.dtype != mx.int32:
+        raise ValueError('Metal sparse pooling requires int32 coordinates.')
 
 
 def _mul_stride(lhs: Triple, rhs: Triple) -> Triple:

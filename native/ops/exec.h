@@ -17,15 +17,16 @@ mx::array sparse_conv_features(
     int n_kernels
 );
 
-NativeSparseTensorOutput sparse_pool(
+mx::array sparse_pool_features(
     PoolReduceOp op,
-    const mx::array& coords,
-    const mx::array& active_rows,
     const mx::array& feats,
-    Triple kernel_size,
-    Triple stride,
-    Triple padding,
-    Triple dilation
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& row_offsets,
+    const mx::array& counts,
+    int out_capacity,
+    int n_kernels
 );
 
 } // namespace mlx_lattice

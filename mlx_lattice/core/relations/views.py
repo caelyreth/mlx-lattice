@@ -58,6 +58,7 @@ class NeighborEdges:
 @dataclass(frozen=True, slots=True, init=False)
 class KernelRelation:
     edges: RelationEdges
+    row_offsets: mx.array
     counts: mx.array
     kernel_offsets: tuple[Triple, ...]
     out_coords: mx.array | None = None
@@ -71,6 +72,7 @@ class KernelRelation:
         out_rows: mx.array,
         kernel_ids: mx.array,
         *,
+        row_offsets: mx.array | None = None,
         counts: mx.array | None = None,
         kernel_offsets: tuple[Triple, ...] = (),
         out_coords: mx.array | None = None,
@@ -89,6 +91,12 @@ class KernelRelation:
                 dtype=mx.int32,
             )
         _validate_counts(counts)
+        if row_offsets is None:
+            out_capacity = (
+                0 if out_coords is None else int(out_coords.shape[0])
+            )
+            row_offsets = mx.array([0] * (out_capacity + 1), dtype=mx.int32)
+        _validate_row_offsets(row_offsets)
 
         edges = RelationEdges(in_rows, out_rows, kernel_ids)
         normalized_kernel_offsets = tuple(
@@ -111,6 +119,10 @@ class KernelRelation:
             normalized_n_kernels = len(normalized_kernel_offsets)
         if out_coords is not None:
             out_coord_capacity = int(out_coords.shape[0])
+            if int(row_offsets.shape[0]) != out_coord_capacity + 1:
+                raise ValueError(
+                    'row_offsets must have length n_out_capacity + 1.'
+                )
             if (
                 normalized_n_out_capacity is not None
                 and normalized_n_out_capacity != out_coord_capacity
@@ -121,6 +133,7 @@ class KernelRelation:
             normalized_n_out_capacity = out_coord_capacity
 
         object.__setattr__(self, 'edges', edges)
+        object.__setattr__(self, 'row_offsets', row_offsets)
         object.__setattr__(self, 'counts', counts)
         object.__setattr__(
             self, 'kernel_offsets', normalized_kernel_offsets
@@ -230,6 +243,13 @@ def _validate_counts(value: mx.array) -> None:
     if value.shape != (2,) or value.dtype != mx.int32:
         raise ValueError(
             'relation counts must have shape (2,) and int32 dtype.'
+        )
+
+
+def _validate_row_offsets(value: mx.array) -> None:
+    if value.ndim != 1 or value.dtype != mx.int32:
+        raise ValueError(
+            'row_offsets must have shape (N + 1,) and int32 dtype.'
         )
 
 

@@ -650,6 +650,8 @@ void eval_generic_kernel_relation(
             encoder.set_bytes(stride[2], 9);
             encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 
+            auto planned_rows = make_int32_temp(rows * kernel_count);
+            encoder.add_temporary(planned_rows);
             auto plan = device.get_kernel(
                 "build_strided_forward_relation_plan_i32", library
             );
@@ -659,7 +661,7 @@ void eval_generic_kernel_relation(
             encoder.set_input_array(outputs[RelationOutCoords], 2);
             encoder.set_input_array(outputs[RelationCounts], 3);
             encoder.set_input_array(outputs[RelationOutputCount], 4);
-            encoder.set_output_array(outputs[RelationInRows], 5);
+            encoder.set_output_array(planned_rows, 5);
             encoder.set_bytes(rows, 6);
             encoder.set_bytes(kernel_count, 7);
             encoder.set_bytes(table_capacity, 8);
@@ -679,17 +681,20 @@ void eval_generic_kernel_relation(
                 "build_strided_forward_relation_compact_i32", library
             );
             encoder.set_compute_pipeline_state(compact);
-            encoder.set_input_array(outputs[RelationInRows], 0);
+            encoder.set_input_array(planned_rows, 0);
             encoder.set_output_array(outputs[RelationInRows], 1);
             encoder.set_output_array(outputs[RelationOutRows], 2);
             encoder.set_output_array(outputs[RelationKernelIds], 3);
-            encoder.set_output_array(outputs[RelationCounts], 4);
-            encoder.set_bytes(rows, 5);
-            encoder.set_bytes(kernel_count, 6);
+            encoder.set_output_array(outputs[RelationRowOffsets], 4);
+            encoder.set_output_array(outputs[RelationCounts], 5);
+            encoder.set_bytes(rows, 6);
+            encoder.set_bytes(kernel_count, 7);
             encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
             return;
         }
 
+        auto planned_rows = make_int32_temp(rows * kernel_count);
+        encoder.add_temporary(planned_rows);
         auto plan = device.get_kernel(
             "build_identity_forward_relation_plan_i32", library
         );
@@ -698,7 +703,7 @@ void eval_generic_kernel_relation(
         encoder.set_input_array(inputs[1], 1);
         encoder.set_input_array(inputs[2], 2);
         encoder.set_input_array(outputs[RelationOutputCount], 3);
-        encoder.set_output_array(outputs[RelationInRows], 4);
+        encoder.set_output_array(planned_rows, 4);
         encoder.set_output_array(outputs[RelationOutCoords], 5);
         encoder.set_bytes(rows, 6);
         encoder.set_bytes(kernel_count, 7);
@@ -716,14 +721,15 @@ void eval_generic_kernel_relation(
             "build_identity_forward_relation_compact_i32", library
         );
         encoder.set_compute_pipeline_state(compact);
-        encoder.set_input_array(outputs[RelationInRows], 0);
+        encoder.set_input_array(planned_rows, 0);
         encoder.set_output_array(outputs[RelationInRows], 1);
         encoder.set_output_array(outputs[RelationOutRows], 2);
         encoder.set_output_array(outputs[RelationKernelIds], 3);
-        encoder.set_output_array(outputs[RelationCounts], 4);
-        encoder.set_input_array(inputs[2], 5);
-        encoder.set_bytes(rows, 6);
-        encoder.set_bytes(kernel_count, 7);
+        encoder.set_output_array(outputs[RelationRowOffsets], 4);
+        encoder.set_output_array(outputs[RelationCounts], 5);
+        encoder.set_input_array(inputs[2], 6);
+        encoder.set_bytes(rows, 7);
+        encoder.set_bytes(kernel_count, 8);
         encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
         return;
     }
@@ -738,14 +744,14 @@ void eval_generic_kernel_relation(
         for (int i = 0; i < int(RelationOutputCount); ++i) {
             encoder.set_output_array(outputs[i], i + 3);
         }
-        encoder.set_bytes(rows, 8);
-        encoder.set_bytes(kernel_count, 9);
-        encoder.set_bytes(stride[0], 10);
-        encoder.set_bytes(stride[1], 11);
-        encoder.set_bytes(stride[2], 12);
-        encoder.set_bytes(padding[0], 13);
-        encoder.set_bytes(padding[1], 14);
-        encoder.set_bytes(padding[2], 15);
+        encoder.set_bytes(rows, 9);
+        encoder.set_bytes(kernel_count, 10);
+        encoder.set_bytes(stride[0], 11);
+        encoder.set_bytes(stride[1], 12);
+        encoder.set_bytes(stride[2], 13);
+        encoder.set_bytes(padding[0], 14);
+        encoder.set_bytes(padding[1], 15);
+        encoder.set_bytes(padding[2], 16);
         dispatch_1d(encoder, kernel, static_cast<size_t>(rows) * kernel_count);
         return;
     }
@@ -765,14 +771,14 @@ void eval_generic_kernel_relation(
     for (int i = 0; i < int(outputs.size()); ++i) {
         encoder.set_output_array(outputs[i], i + 3);
     }
-    encoder.set_bytes(rows, 8);
-    encoder.set_bytes(kernel_count, 9);
-    encoder.set_bytes(stride[0], 10);
-    encoder.set_bytes(stride[1], 11);
-    encoder.set_bytes(stride[2], 12);
-    encoder.set_bytes(padding[0], 13);
-    encoder.set_bytes(padding[1], 14);
-    encoder.set_bytes(padding[2], 15);
+    encoder.set_bytes(rows, 9);
+    encoder.set_bytes(kernel_count, 10);
+    encoder.set_bytes(stride[0], 11);
+    encoder.set_bytes(stride[1], 12);
+    encoder.set_bytes(stride[2], 13);
+    encoder.set_bytes(padding[0], 14);
+    encoder.set_bytes(padding[1], 15);
+    encoder.set_bytes(padding[2], 16);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 #else
     (void)op;
@@ -821,11 +827,11 @@ void eval_generative_kernel_relation(
     for (int i = 0; i < int(outputs.size()); ++i) {
         encoder.set_output_array(outputs[i], i + 3);
     }
-    encoder.set_bytes(rows, 8);
-    encoder.set_bytes(kernel_count, 9);
-    encoder.set_bytes(stride[0], 10);
-    encoder.set_bytes(stride[1], 11);
-    encoder.set_bytes(stride[2], 12);
+    encoder.set_bytes(rows, 9);
+    encoder.set_bytes(kernel_count, 10);
+    encoder.set_bytes(stride[0], 11);
+    encoder.set_bytes(stride[1], 12);
+    encoder.set_bytes(stride[2], 13);
     encoder.dispatch_threads(
         MTL::Size(static_cast<size_t>(thread_count), 1, 1),
         MTL::Size(group, 1, 1)

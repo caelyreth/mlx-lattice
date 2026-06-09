@@ -19,6 +19,7 @@ type NativeKernelRelation = tuple[
     mx.array,
     mx.array,
     mx.array,
+    mx.array,
 ]
 type NativeNeighborRelation = tuple[
     mx.array,
@@ -233,6 +234,7 @@ def _kernel_relation_from_native(
         in_rows,
         out_rows,
         kernel_ids,
+        row_offsets,
         out_coords,
         counts,
     ) = native
@@ -240,6 +242,7 @@ def _kernel_relation_from_native(
         in_rows,
         out_rows,
         kernel_ids,
+        row_offsets=row_offsets,
         counts=counts,
         kernel_offsets=offsets,
         out_coords=out_coords,

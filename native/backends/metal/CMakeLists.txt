@@ -36,7 +36,6 @@ if(MLX_LATTICE_HAS_METAL)
       ${CMAKE_CURRENT_LIST_DIR}/coords/set.metal
       ${CMAKE_CURRENT_LIST_DIR}/pool/autodiff.metal
       ${CMAKE_CURRENT_LIST_DIR}/pool/forward.metal
-      ${CMAKE_CURRENT_LIST_DIR}/pool/topology.metal
     INCLUDE_DIRS ${PROJECT_SOURCE_DIR} ${MLX_INCLUDE_DIRS}
     OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 

@@ -27,6 +27,10 @@ def _active_rows(values: mx.array, count: mx.array) -> list[int]:
     return cast('list[int]', values[: int(count.tolist()[0])].tolist())
 
 
+def _active_row_offsets(values: mx.array, count: mx.array) -> list[int]:
+    return cast('list[int]', values[: int(count.tolist()[0]) + 1].tolist())
+
+
 def _active_floats(values: mx.array, count: mx.array) -> list[float]:
     return cast('list[float]', values[: int(count.tolist()[0])].tolist())
 
@@ -93,6 +97,15 @@ def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
         2,
     ]
     assert _active_rows(relation.edges.out_rows, relation.edge_count) == [
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        2,
+    ]
+    assert _active_rows(relation.edges.kernel_ids, relation.edge_count) == [
         1,
         2,
         0,
@@ -101,14 +114,13 @@ def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
         0,
         1,
     ]
-    assert _active_rows(relation.edges.kernel_ids, relation.edge_count) == [
+    assert _active_row_offsets(
+        relation.row_offsets, relation.out_count
+    ) == [
         0,
-        0,
-        1,
-        1,
-        1,
         2,
-        2,
+        5,
+        7,
     ]
 
 
@@ -318,6 +330,7 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
         list[int],
         list[int],
         list[int],
+        list[int],
     ]:
         coords = mx.array(
             [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
@@ -329,6 +342,7 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
             relation.edges.in_rows,
             relation.edges.out_rows,
             relation.edges.kernel_ids,
+            relation.row_offsets,
             relation.counts,
         )
         assert relation.out_coords is not None
@@ -337,14 +351,16 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
             _active_rows(relation.edges.in_rows, relation.edge_count),
             _active_rows(relation.edges.out_rows, relation.edge_count),
             _active_rows(relation.edges.kernel_ids, relation.edge_count),
+            _active_row_offsets(relation.row_offsets, relation.out_count),
             cast('list[int]', relation.counts.tolist()),
         )
 
     assert run_with_gpu_default(run) == (
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         [0, 1, 0, 1, 2, 1, 2],
-        [1, 2, 0, 1, 2, 0, 1],
         [0, 0, 1, 1, 1, 2, 2],
+        [1, 2, 0, 1, 2, 0, 1],
+        [0, 2, 5, 7],
         [7, 3],
     )
 
@@ -429,6 +445,7 @@ def test_metal_strided_relation_preserves_stable_edge_contract() -> None:
         list[int],
         list[int],
         list[int],
+        list[int],
     ]:
         coords = mx.array(
             [[0, row, 0, 0] for row in range(6)],
@@ -445,6 +462,7 @@ def test_metal_strided_relation_preserves_stable_edge_contract() -> None:
             relation.edges.in_rows,
             relation.edges.out_rows,
             relation.edges.kernel_ids,
+            relation.row_offsets,
             relation.counts,
         )
         return (
@@ -452,14 +470,16 @@ def test_metal_strided_relation_preserves_stable_edge_contract() -> None:
             _active_rows(relation.edges.in_rows, relation.edge_count),
             _active_rows(relation.edges.out_rows, relation.edge_count),
             _active_rows(relation.edges.kernel_ids, relation.edge_count),
+            _active_row_offsets(relation.row_offsets, relation.out_count),
             cast('list[int]', relation.counts.tolist()),
         )
 
     assert run_with_gpu_default(run) == (
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
-        [1, 3, 0, 2, 4, 1, 3, 5],
-        [1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 1, 1, 2, 3, 3, 4, 5],
         [0, 0, 1, 1, 1, 2, 2, 2],
+        [1, 2, 0, 1, 2, 0, 1, 2],
+        [0, 2, 5, 8],
         [8, 3],
     )
 

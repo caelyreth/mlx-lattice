@@ -340,23 +340,39 @@ Coord kernel_input_coord(
 
 void write_map_rows(
     std::vector<mx::array>& outputs,
-    const std::vector<Edge>& edges
+    const std::vector<Edge>& edges,
+    int out_capacity
 ) {
     std::vector<int32_t> in_rows;
     std::vector<int32_t> out_rows;
     std::vector<int32_t> kernel_ids;
+    std::vector<int32_t> row_offsets(
+        static_cast<std::size_t>(out_capacity) + 1, 0
+    );
     in_rows.reserve(edges.size());
     out_rows.reserve(edges.size());
     kernel_ids.reserve(edges.size());
+    auto current_out = 0;
     for (auto edge : edges) {
+        while (current_out <= edge[1] && current_out < out_capacity) {
+            row_offsets[static_cast<std::size_t>(current_out)] =
+                int32_t(in_rows.size());
+            ++current_out;
+        }
         in_rows.push_back(edge[0]);
         out_rows.push_back(edge[1]);
         kernel_ids.push_back(edge[2]);
+    }
+    while (current_out <= out_capacity) {
+        row_offsets[static_cast<std::size_t>(current_out)] =
+            int32_t(in_rows.size());
+        ++current_out;
     }
 
     write_i32(outputs[RelationInRows], in_rows);
     write_i32(outputs[RelationOutRows], out_rows);
     write_i32(outputs[RelationKernelIds], kernel_ids);
+    write_i32(outputs[RelationRowOffsets], row_offsets);
 }
 
 void write_map(
@@ -366,11 +382,27 @@ void write_map(
     mx::Dtype coord_dtype,
     bool compact
 ) {
-    write_map_rows(outputs, edges);
+    auto row_major_edges = edges;
+    std::stable_sort(
+        row_major_edges.begin(),
+        row_major_edges.end(),
+        [](const Edge& lhs, const Edge& rhs) {
+            if (lhs[1] != rhs[1]) {
+                return lhs[1] < rhs[1];
+            }
+            if (lhs[2] != rhs[2]) {
+                return lhs[2] < rhs[2];
+            }
+            return lhs[0] < rhs[0];
+        }
+    );
+    write_map_rows(outputs, row_major_edges, int(out_coords.size()));
     write_coords(outputs[RelationOutCoords], out_coords, coord_dtype);
     if (compact) {
         write_count(
-            outputs[RelationCounts], int(edges.size()), int(out_coords.size())
+            outputs[RelationCounts],
+            int(row_major_edges.size()),
+            int(out_coords.size())
         );
     }
 }
@@ -535,9 +567,9 @@ void write_kernel_relation(
 
     std::vector<Edge> edges;
     edges.reserve(out_values.size() * offsets.size());
-    for (int kernel = 0; kernel < int(offsets.size()); ++kernel) {
-        auto offset = offsets[kernel];
-        for (int out_row = 0; out_row < int(out_values.size()); ++out_row) {
+    for (int out_row = 0; out_row < int(out_values.size()); ++out_row) {
+        for (int kernel = 0; kernel < int(offsets.size()); ++kernel) {
+            auto offset = offsets[kernel];
             auto candidate = kernel_input_coord(
                 out_values[out_row], offset, stride, padding
             );
