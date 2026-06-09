@@ -71,6 +71,10 @@ void register_exec(nb::module_& module) {
            const mx::array& out_rows,
            const mx::array& kernel_ids,
            const mx::array& counts,
+           const mx::array& in_row_offsets,
+           const mx::array& in_edge_ids,
+           const mx::array& kernel_row_offsets,
+           const mx::array& kernel_edge_ids,
            int out_capacity,
            int n_kernels) {
             return sparse_conv_features(
@@ -80,6 +84,10 @@ void register_exec(nb::module_& module) {
                 out_rows,
                 kernel_ids,
                 counts,
+                in_row_offsets,
+                in_edge_ids,
+                kernel_row_offsets,
+                kernel_edge_ids,
                 out_capacity,
                 n_kernels
             );
@@ -90,13 +98,20 @@ void register_exec(nb::module_& module) {
         "out_rows"_a,
         "kernel_ids"_a,
         "counts"_a,
+        "in_row_offsets"_a,
+        "in_edge_ids"_a,
+        "kernel_row_offsets"_a,
+        "kernel_edge_ids"_a,
         "out_capacity"_a,
         "n_kernels"_a,
         nb::sig(
             "def sparse_conv_features(feats: mlx.core.array, "
             "weights: mlx.core.array, in_rows: mlx.core.array, "
             "out_rows: mlx.core.array, kernel_ids: mlx.core.array, "
-            "counts: mlx.core.array, out_capacity: int, "
+            "counts: mlx.core.array, in_row_offsets: mlx.core.array, "
+            "in_edge_ids: mlx.core.array, "
+            "kernel_row_offsets: mlx.core.array, "
+            "kernel_edge_ids: mlx.core.array, out_capacity: int, "
             "n_kernels: int) -> mlx.core.array"
         ),
         "Run sparse convolution feature accumulation over a kernel relation."

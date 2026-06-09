@@ -105,6 +105,75 @@ void insert_coord_hash(
     encoder.set_bytes(shape.capacity, 3);
     dispatch_1d(encoder, insert, static_cast<size_t>(shape.rows));
 }
+
+template <typename Device, typename Library, typename Encoder>
+void build_kernel_relation_views(
+    Device& device,
+    Library& library,
+    Encoder& encoder,
+    std::vector<mx::array>& outputs,
+    int in_capacity,
+    int kernel_count
+) {
+    auto edge_capacity = static_cast<int>(outputs[RelationInRows].shape(0));
+    auto in_cursors = make_int32_temp(in_capacity + 1);
+    auto kernel_cursors = make_int32_temp(kernel_count + 1);
+    encoder.add_temporaries({in_cursors, kernel_cursors});
+
+    auto clear = device.get_kernel("clear_kernel_relation_views_i32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(outputs[RelationInRowOffsets], 0);
+    encoder.set_output_array(outputs[RelationInEdgeIds], 1);
+    encoder.set_output_array(outputs[RelationKernelRowOffsets], 2);
+    encoder.set_output_array(outputs[RelationKernelEdgeIds], 3);
+    encoder.set_bytes(edge_capacity, 4);
+    encoder.set_bytes(in_capacity, 5);
+    encoder.set_bytes(kernel_count, 6);
+    dispatch_1d(
+        encoder,
+        clear,
+        static_cast<size_t>(
+            std::max({edge_capacity, in_capacity + 1, kernel_count + 1})
+        )
+    );
+
+    auto count = device.get_kernel("count_kernel_relation_views_i32", library);
+    encoder.set_compute_pipeline_state(count);
+    encoder.set_input_array(outputs[RelationInRows], 0);
+    encoder.set_input_array(outputs[RelationKernelIds], 1);
+    encoder.set_input_array(outputs[RelationCounts], 2);
+    encoder.set_output_array(outputs[RelationInRowOffsets], 3);
+    encoder.set_output_array(outputs[RelationKernelRowOffsets], 4);
+    encoder.set_bytes(edge_capacity, 5);
+    encoder.set_bytes(in_capacity, 6);
+    encoder.set_bytes(kernel_count, 7);
+    dispatch_1d(encoder, count, static_cast<size_t>(edge_capacity));
+
+    auto prefix =
+        device.get_kernel("prefix_kernel_relation_views_i32", library);
+    encoder.set_compute_pipeline_state(prefix);
+    encoder.set_output_array(outputs[RelationInRowOffsets], 0);
+    encoder.set_output_array(in_cursors, 1);
+    encoder.set_output_array(outputs[RelationKernelRowOffsets], 2);
+    encoder.set_output_array(kernel_cursors, 3);
+    encoder.set_bytes(in_capacity, 4);
+    encoder.set_bytes(kernel_count, 5);
+    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+    auto fill = device.get_kernel("fill_kernel_relation_views_i32", library);
+    encoder.set_compute_pipeline_state(fill);
+    encoder.set_input_array(outputs[RelationInRows], 0);
+    encoder.set_input_array(outputs[RelationKernelIds], 1);
+    encoder.set_input_array(outputs[RelationCounts], 2);
+    encoder.set_input_array(in_cursors, 3);
+    encoder.set_input_array(kernel_cursors, 4);
+    encoder.set_output_array(outputs[RelationInEdgeIds], 5);
+    encoder.set_output_array(outputs[RelationKernelEdgeIds], 6);
+    encoder.set_bytes(edge_capacity, 7);
+    encoder.set_bytes(in_capacity, 8);
+    encoder.set_bytes(kernel_count, 9);
+    dispatch_1d(encoder, fill, static_cast<size_t>(edge_capacity));
+}
 #endif
 
 // MARK: - guards
@@ -691,6 +760,9 @@ void eval_generic_kernel_relation(
             encoder.set_bytes(rows, 6);
             encoder.set_bytes(kernel_count, 7);
             encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+            build_kernel_relation_views(
+                device, library, encoder, outputs, rows, kernel_count
+            );
             return;
         }
 
@@ -732,6 +804,9 @@ void eval_generic_kernel_relation(
         encoder.set_bytes(rows, 7);
         encoder.set_bytes(kernel_count, 8);
         encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+        build_kernel_relation_views(
+            device, library, encoder, outputs, rows, kernel_count
+        );
         return;
     }
 
@@ -742,7 +817,7 @@ void eval_generic_kernel_relation(
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
         encoder.set_input_array(inputs[2], 2);
-        for (int i = 0; i < int(RelationOutputCount); ++i) {
+        for (int i = 0; i < int(RelationInRowOffsets); ++i) {
             encoder.set_output_array(outputs[i], i + 3);
         }
         encoder.set_bytes(rows, 9);
@@ -754,6 +829,9 @@ void eval_generic_kernel_relation(
         encoder.set_bytes(padding[1], 15);
         encoder.set_bytes(padding[2], 16);
         dispatch_1d(encoder, kernel, static_cast<size_t>(rows) * kernel_count);
+        build_kernel_relation_views(
+            device, library, encoder, outputs, rows, kernel_count
+        );
         return;
     }
 
@@ -769,7 +847,7 @@ void eval_generic_kernel_relation(
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
     encoder.set_input_array(inputs[2], 2);
-    for (int i = 0; i < int(outputs.size()); ++i) {
+    for (int i = 0; i < int(RelationInRowOffsets); ++i) {
         encoder.set_output_array(outputs[i], i + 3);
     }
     encoder.set_bytes(rows, 9);
@@ -781,6 +859,9 @@ void eval_generic_kernel_relation(
     encoder.set_bytes(padding[1], 15);
     encoder.set_bytes(padding[2], 16);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+    build_kernel_relation_views(
+        device, library, encoder, outputs, rows, kernel_count
+    );
 #else
     (void)op;
     (void)rows;
@@ -825,7 +906,7 @@ void eval_generative_kernel_relation(
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
     encoder.set_input_array(inputs[2], 2);
-    for (int i = 0; i < int(outputs.size()); ++i) {
+    for (int i = 0; i < int(RelationInRowOffsets); ++i) {
         encoder.set_output_array(outputs[i], i + 3);
     }
     encoder.set_bytes(rows, 9);
@@ -836,6 +917,9 @@ void eval_generative_kernel_relation(
     encoder.dispatch_threads(
         MTL::Size(static_cast<size_t>(thread_count), 1, 1),
         MTL::Size(group, 1, 1)
+    );
+    build_kernel_relation_views(
+        device, library, encoder, outputs, rows, kernel_count
     );
 #else
     (void)rows;

@@ -187,14 +187,10 @@ def _backward(
     def factory(fixture: ConvFixture) -> tuple[Any, tuple[Any, ...]]:
         weight = _weight_for(kind, fixture)
         stride = 2 if kind in ('transpose', 'generative_transpose') else 1
+        base = fixture.arrays.tensor(stride=stride)
 
         def loss(feats: mx.array, weight_arg: mx.array) -> mx.array:
-            x = SparseTensor(
-                fixture.arrays.coords,
-                feats,
-                stride=stride,
-                batch_counts=fixture.arrays.batch_counts,
-            )
+            x = base.replace(feats=feats)
             return mx.sum(
                 _run(kind, _compiled_inputs(kind, x, weight_arg)).feats
             )

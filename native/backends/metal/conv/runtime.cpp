@@ -95,7 +95,7 @@ void eval(
 
     auto kernel = device.get_kernel("sparse_relation_conv_f32_i32", library);
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < int(inputs.size()); ++index) {
+    for (int index = 0; index < 6; ++index) {
         encoder.set_input_array(inputs[index], index);
     }
     encoder.set_output_array(out, 6);
@@ -131,7 +131,6 @@ void eval_input_grad(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    clear_output(encoder, device, library, out);
 
     auto kernel =
         device.get_kernel("sparse_relation_conv_input_grad_f32_i32", library);
@@ -139,15 +138,19 @@ void eval_input_grad(
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 6);
-    bind_common_shape(encoder, inputs, shape);
-    encoder.set_bytes(stride_at(inputs[0], 0), 11);
-    encoder.set_bytes(stride_at(inputs[0], 1), 12);
-    bind_weight_shape(encoder, inputs[1], shape, 13);
+    encoder.set_output_array(out, 10);
+    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 11);
+    encoder.set_bytes(shape.out_capacity, 12);
+    encoder.set_bytes(shape.in_capacity, 13);
+    encoder.set_bytes(shape.in_channels, 14);
+    encoder.set_bytes(shape.out_channels, 15);
+    encoder.set_bytes(stride_at(inputs[0], 0), 16);
+    encoder.set_bytes(stride_at(inputs[0], 1), 17);
+    bind_weight_shape(encoder, inputs[1], shape, 18);
     dispatch_1d(
         encoder,
         kernel,
-        static_cast<size_t>(inputs[2].shape(0)) *
+        static_cast<size_t>(shape.in_capacity) *
             static_cast<size_t>(shape.in_channels)
     );
 #else
@@ -180,16 +183,19 @@ void eval_weight_grad(
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 6);
-    bind_common_shape(encoder, inputs, shape);
-    encoder.set_bytes(stride_at(inputs[0], 0), 11);
-    encoder.set_bytes(stride_at(inputs[0], 1), 12);
-    encoder.set_bytes(stride_at(inputs[1], 0), 13);
-    encoder.set_bytes(stride_at(inputs[1], 1), 14);
-    encoder.set_bytes(shape.weight_layout, 15);
-    encoder.set_bytes(shape.kernel_x, 16);
-    encoder.set_bytes(shape.kernel_y, 17);
-    encoder.set_bytes(shape.kernel_z, 18);
+    encoder.set_output_array(out, 10);
+    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 11);
+    encoder.set_bytes(shape.out_capacity, 12);
+    encoder.set_bytes(shape.in_channels, 13);
+    encoder.set_bytes(shape.out_channels, 14);
+    encoder.set_bytes(stride_at(inputs[0], 0), 15);
+    encoder.set_bytes(stride_at(inputs[0], 1), 16);
+    encoder.set_bytes(stride_at(inputs[1], 0), 17);
+    encoder.set_bytes(stride_at(inputs[1], 1), 18);
+    encoder.set_bytes(shape.weight_layout, 19);
+    encoder.set_bytes(shape.kernel_x, 20);
+    encoder.set_bytes(shape.kernel_y, 21);
+    encoder.set_bytes(shape.kernel_z, 22);
     dispatch_1d(
         encoder,
         kernel,

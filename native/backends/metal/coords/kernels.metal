@@ -422,6 +422,128 @@ using namespace metal;
     counts[1] = out_count;
 }
 
+// MARK: - relation execution views
+
+[[kernel]] void clear_kernel_relation_views_i32(
+    device int* in_row_offsets [[buffer(0)]],
+    device int* in_edge_ids [[buffer(1)]],
+    device int* kernel_row_offsets [[buffer(2)]],
+    device int* kernel_edge_ids [[buffer(3)]],
+    constant const int& edge_capacity [[buffer(4)]],
+    constant const int& in_capacity [[buffer(5)]],
+    constant const int& kernel_count [[buffer(6)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    if (elem <= uint(in_capacity)) {
+        in_row_offsets[elem] = 0;
+    }
+    if (elem <= uint(kernel_count)) {
+        kernel_row_offsets[elem] = 0;
+    }
+    if (elem < uint(edge_capacity)) {
+        in_edge_ids[elem] = -1;
+        kernel_edge_ids[elem] = -1;
+    }
+}
+
+[[kernel]] void count_kernel_relation_views_i32(
+    device const int* in_rows [[buffer(0)]],
+    device const int* kernel_ids [[buffer(1)]],
+    device const int* counts [[buffer(2)]],
+    device atomic_int* in_row_offsets [[buffer(3)]],
+    device atomic_int* kernel_row_offsets [[buffer(4)]],
+    constant const int& edge_capacity [[buffer(5)]],
+    constant const int& in_capacity [[buffer(6)]],
+    constant const int& kernel_count [[buffer(7)]],
+    uint edge [[thread_position_in_grid]]
+) {
+    int edge_count = min(counts[0], edge_capacity);
+    if (edge >= uint(edge_count)) {
+        return;
+    }
+
+    int in_row = in_rows[edge];
+    int kernel_id = kernel_ids[edge];
+    if (in_row >= 0 && in_row < in_capacity) {
+        atomic_fetch_add_explicit(
+            &in_row_offsets[in_row + 1], 1, memory_order_relaxed
+        );
+    }
+    if (kernel_id >= 0 && kernel_id < kernel_count) {
+        atomic_fetch_add_explicit(
+            &kernel_row_offsets[kernel_id + 1], 1, memory_order_relaxed
+        );
+    }
+}
+
+[[kernel]] void prefix_kernel_relation_views_i32(
+    device int* in_row_offsets [[buffer(0)]],
+    device int* in_cursors [[buffer(1)]],
+    device int* kernel_row_offsets [[buffer(2)]],
+    device int* kernel_cursors [[buffer(3)]],
+    constant const int& in_capacity [[buffer(4)]],
+    constant const int& kernel_count [[buffer(5)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    if (elem != 0) {
+        return;
+    }
+
+    int total = 0;
+    in_row_offsets[0] = 0;
+    in_cursors[0] = 0;
+    for (int row = 1; row <= in_capacity; ++row) {
+        int count = in_row_offsets[row];
+        total += count;
+        in_row_offsets[row] = total;
+        in_cursors[row] = total;
+    }
+
+    total = 0;
+    kernel_row_offsets[0] = 0;
+    kernel_cursors[0] = 0;
+    for (int kernel_index = 1; kernel_index <= kernel_count; ++kernel_index) {
+        int count = kernel_row_offsets[kernel_index];
+        total += count;
+        kernel_row_offsets[kernel_index] = total;
+        kernel_cursors[kernel_index] = total;
+    }
+}
+
+[[kernel]] void fill_kernel_relation_views_i32(
+    device const int* in_rows [[buffer(0)]],
+    device const int* kernel_ids [[buffer(1)]],
+    device const int* counts [[buffer(2)]],
+    device atomic_int* in_cursors [[buffer(3)]],
+    device atomic_int* kernel_cursors [[buffer(4)]],
+    device int* in_edge_ids [[buffer(5)]],
+    device int* kernel_edge_ids [[buffer(6)]],
+    constant const int& edge_capacity [[buffer(7)]],
+    constant const int& in_capacity [[buffer(8)]],
+    constant const int& kernel_count [[buffer(9)]],
+    uint edge [[thread_position_in_grid]]
+) {
+    int edge_count = min(counts[0], edge_capacity);
+    if (edge >= uint(edge_count)) {
+        return;
+    }
+
+    int in_row = in_rows[edge];
+    int kernel_id = kernel_ids[edge];
+    if (in_row >= 0 && in_row < in_capacity) {
+        int slot = atomic_fetch_add_explicit(
+            &in_cursors[in_row], 1, memory_order_relaxed
+        );
+        in_edge_ids[slot] = int(edge);
+    }
+    if (kernel_id >= 0 && kernel_id < kernel_count) {
+        int slot = atomic_fetch_add_explicit(
+            &kernel_cursors[kernel_id], 1, memory_order_relaxed
+        );
+        kernel_edge_ids[slot] = int(edge);
+    }
+}
+
 // MARK: - neighbor relations
 
 [[kernel]] void build_neighbor_relation_i32(

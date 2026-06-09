@@ -122,6 +122,26 @@ def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:
         5,
         7,
     ]
+    assert relation.in_row_offsets.tolist() == [0, 2, 5, 7]
+    assert _active_rows(relation.in_edge_ids, relation.edge_count) == [
+        0,
+        2,
+        1,
+        3,
+        5,
+        4,
+        6,
+    ]
+    assert relation.kernel_row_offsets.tolist() == [0, 2, 5, 7]
+    assert _active_rows(relation.kernel_edge_ids, relation.edge_count) == [
+        2,
+        5,
+        0,
+        3,
+        6,
+        1,
+        4,
+    ]
 
 
 def test_strided_and_transposed_relations_define_output_policy() -> None:

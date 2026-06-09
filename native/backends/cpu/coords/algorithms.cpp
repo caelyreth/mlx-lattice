@@ -341,6 +341,7 @@ Coord kernel_input_coord(
 void write_map_rows(
     std::vector<mx::array>& outputs,
     const std::vector<Edge>& edges,
+    int in_capacity, // NOLINT(bugprone-easily-swappable-parameters)
     int out_capacity
 ) {
     std::vector<int32_t> in_rows;
@@ -373,11 +374,60 @@ void write_map_rows(
     write_i32(outputs[RelationOutRows], out_rows);
     write_i32(outputs[RelationKernelIds], kernel_ids);
     write_i32(outputs[RelationRowOffsets], row_offsets);
+
+    auto kernel_capacity = int(outputs[RelationKernelRowOffsets].shape(0)) - 1;
+    std::vector<int32_t> in_offsets(
+        static_cast<std::size_t>(in_capacity) + 1, 0
+    );
+    std::vector<int32_t> kernel_offsets(
+        static_cast<std::size_t>(kernel_capacity) + 1, 0
+    );
+    for (auto edge_id = 0; edge_id < int(in_rows.size()); ++edge_id) {
+        auto in_row = in_rows[edge_id];
+        auto kernel_id = kernel_ids[edge_id];
+        if (in_row >= 0 && in_row < in_capacity) {
+            in_offsets[static_cast<std::size_t>(in_row) + 1] += 1;
+        }
+        if (kernel_id >= 0 && kernel_id < kernel_capacity) {
+            kernel_offsets[static_cast<std::size_t>(kernel_id) + 1] += 1;
+        }
+    }
+    for (auto row = 0; row < in_capacity; ++row) {
+        in_offsets[static_cast<std::size_t>(row) + 1] +=
+            in_offsets[static_cast<std::size_t>(row)];
+    }
+    for (auto row = 0; row < kernel_capacity; ++row) {
+        kernel_offsets[static_cast<std::size_t>(row) + 1] +=
+            kernel_offsets[static_cast<std::size_t>(row)];
+    }
+
+    auto in_cursors = in_offsets;
+    auto kernel_cursors = kernel_offsets;
+    std::vector<int32_t> in_edge_ids(in_rows.size(), -1);
+    std::vector<int32_t> kernel_edge_ids(in_rows.size(), -1);
+    for (auto edge_id = 0; edge_id < int(in_rows.size()); ++edge_id) {
+        auto in_row = in_rows[edge_id];
+        auto kernel_id = kernel_ids[edge_id];
+        if (in_row >= 0 && in_row < in_capacity) {
+            auto slot = in_cursors[static_cast<std::size_t>(in_row)]++;
+            in_edge_ids[static_cast<std::size_t>(slot)] = edge_id;
+        }
+        if (kernel_id >= 0 && kernel_id < kernel_capacity) {
+            auto slot = kernel_cursors[static_cast<std::size_t>(kernel_id)]++;
+            kernel_edge_ids[static_cast<std::size_t>(slot)] = edge_id;
+        }
+    }
+
+    write_i32(outputs[RelationInRowOffsets], in_offsets);
+    write_i32(outputs[RelationInEdgeIds], in_edge_ids, -1);
+    write_i32(outputs[RelationKernelRowOffsets], kernel_offsets);
+    write_i32(outputs[RelationKernelEdgeIds], kernel_edge_ids, -1);
 }
 
 void write_map(
     std::vector<mx::array>& outputs,
     const std::vector<Edge>& edges,
+    int in_capacity,
     const std::vector<Coord>& out_coords,
     mx::Dtype coord_dtype,
     bool compact
@@ -396,7 +446,9 @@ void write_map(
             return lhs[0] < rhs[0];
         }
     );
-    write_map_rows(outputs, row_major_edges, int(out_coords.size()));
+    write_map_rows(
+        outputs, row_major_edges, in_capacity, int(out_coords.size())
+    );
     write_coords(outputs[RelationOutCoords], out_coords, coord_dtype);
     if (compact) {
         write_count(
@@ -635,7 +687,9 @@ void write_kernel_relation(
         }
     }
 
-    write_map(outputs, edges, out_values, coords.dtype(), true);
+    write_map(
+        outputs, edges, int(values.size()), out_values, coords.dtype(), true
+    );
 }
 
 void write_generative_relation(
@@ -671,7 +725,9 @@ void write_generative_relation(
         }
     }
 
-    write_map(outputs, edges, out_values, coords.dtype(), true);
+    write_map(
+        outputs, edges, int(values.size()), out_values, coords.dtype(), true
+    );
 }
 
 void write_transposed_kernel_relation(
@@ -715,7 +771,9 @@ void write_transposed_kernel_relation(
         }
     }
 
-    write_map(outputs, edges, out_values, coords.dtype(), true);
+    write_map(
+        outputs, edges, int(values.size()), out_values, coords.dtype(), true
+    );
 }
 
 } // namespace

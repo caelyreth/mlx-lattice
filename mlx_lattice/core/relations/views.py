@@ -32,6 +32,19 @@ class RelationEdges:
 
 
 @dataclass(frozen=True, slots=True)
+class RelationView:
+    """CSR-style execution view over relation edge arrays."""
+
+    row_offsets: mx.array
+    edge_ids: mx.array | None = None
+
+    def __post_init__(self) -> None:
+        _validate_row_offsets(self.row_offsets)
+        if self.edge_ids is not None:
+            _validate_row_array(self.edge_ids, name='edge_ids')
+
+
+@dataclass(frozen=True, slots=True)
 class NeighborEdges:
     """Semantic neighbor edge arrays for query/source relations."""
 
@@ -59,6 +72,13 @@ class NeighborEdges:
 class KernelRelation:
     edges: RelationEdges
     row_offsets: mx.array
+    in_row_offsets: mx.array
+    in_edge_ids: mx.array
+    kernel_row_offsets: mx.array
+    kernel_edge_ids: mx.array
+    out_view: RelationView
+    in_view: RelationView
+    kernel_view: RelationView
     counts: mx.array
     kernel_offsets: tuple[Triple, ...]
     out_coords: mx.array | None = None
@@ -74,6 +94,10 @@ class KernelRelation:
         *,
         row_offsets: mx.array | None = None,
         counts: mx.array | None = None,
+        in_row_offsets: mx.array | None = None,
+        in_edge_ids: mx.array | None = None,
+        kernel_row_offsets: mx.array | None = None,
+        kernel_edge_ids: mx.array | None = None,
         kernel_offsets: tuple[Triple, ...] = (),
         out_coords: mx.array | None = None,
         n_in_capacity: int | None = None,
@@ -99,6 +123,23 @@ class KernelRelation:
         _validate_row_offsets(row_offsets)
 
         edges = RelationEdges(in_rows, out_rows, kernel_ids)
+        if in_row_offsets is None:
+            in_capacity = 0 if n_in_capacity is None else int(n_in_capacity)
+            in_row_offsets = mx.array(
+                [0] * (in_capacity + 1), dtype=mx.int32
+            )
+        if in_edge_ids is None:
+            in_edge_ids = mx.array([0] * edges.capacity, dtype=mx.int32)
+        if kernel_row_offsets is None:
+            kernel_capacity = 0 if n_kernels is None else int(n_kernels)
+            kernel_row_offsets = mx.array(
+                [0] * (kernel_capacity + 1), dtype=mx.int32
+            )
+        if kernel_edge_ids is None:
+            kernel_edge_ids = mx.array([0] * edges.capacity, dtype=mx.int32)
+        in_view = RelationView(in_row_offsets, in_edge_ids)
+        kernel_view = RelationView(kernel_row_offsets, kernel_edge_ids)
+        out_view = RelationView(row_offsets)
         normalized_kernel_offsets = tuple(
             (int(x), int(y), int(z)) for x, y, z in kernel_offsets
         )
@@ -134,6 +175,13 @@ class KernelRelation:
 
         object.__setattr__(self, 'edges', edges)
         object.__setattr__(self, 'row_offsets', row_offsets)
+        object.__setattr__(self, 'in_row_offsets', in_row_offsets)
+        object.__setattr__(self, 'in_edge_ids', in_edge_ids)
+        object.__setattr__(self, 'kernel_row_offsets', kernel_row_offsets)
+        object.__setattr__(self, 'kernel_edge_ids', kernel_edge_ids)
+        object.__setattr__(self, 'out_view', out_view)
+        object.__setattr__(self, 'in_view', in_view)
+        object.__setattr__(self, 'kernel_view', kernel_view)
         object.__setattr__(self, 'counts', counts)
         object.__setattr__(
             self, 'kernel_offsets', normalized_kernel_offsets

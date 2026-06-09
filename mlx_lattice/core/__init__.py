@@ -12,6 +12,7 @@ from mlx_lattice.core.relations import (
     NeighborEdges,
     NeighborRelation,
     RelationEdges,
+    RelationView,
 )
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import Triple, triple
@@ -25,6 +26,7 @@ __all__ = [
     'NeighborEdges',
     'NeighborRelation',
     'RelationEdges',
+    'RelationView',
     'SparseQuantization',
     'SparseTensor',
     'Triple',

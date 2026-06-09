@@ -8,6 +8,7 @@ from mlx_lattice.core import (
     NeighborEdges,
     NeighborRelation,
     RelationEdges,
+    RelationView,
 )
 from tests.support import mx
 
@@ -58,6 +59,9 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
     assert relation.n_out_capacity == 2
     assert relation.n_in_capacity == 2
     assert relation.n_kernels == 2
+    assert isinstance(relation.out_view, RelationView)
+    assert isinstance(relation.in_view, RelationView)
+    assert isinstance(relation.kernel_view, RelationView)
 
     with pytest.raises(ValueError, match='same row count'):
         KernelRelation(rows, short, rows)

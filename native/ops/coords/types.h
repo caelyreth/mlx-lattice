@@ -31,6 +31,10 @@ enum CoordRelationOutputSlot : std::size_t {
     RelationRowOffsets,
     RelationOutCoords,
     RelationCounts,
+    RelationInRowOffsets,
+    RelationInEdgeIds,
+    RelationKernelRowOffsets,
+    RelationKernelEdgeIds,
     RelationOutputCount,
 };
 
@@ -63,6 +67,10 @@ struct NativeKernelRelation {
     mx::array row_offsets;
     mx::array out_coords;
     mx::array counts;
+    mx::array in_row_offsets;
+    mx::array in_edge_ids;
+    mx::array kernel_row_offsets;
+    mx::array kernel_edge_ids;
 };
 
 struct NativeNeighborRelation {

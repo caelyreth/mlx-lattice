@@ -51,7 +51,11 @@ nb::tuple relation_tuple(const NativeKernelRelation& relation) {
         relation.kernel_ids,
         relation.row_offsets,
         relation.out_coords,
-        relation.counts
+        relation.counts,
+        relation.in_row_offsets,
+        relation.in_edge_ids,
+        relation.kernel_row_offsets,
+        relation.kernel_edge_ids
     );
 }
 
@@ -222,7 +226,9 @@ void register_coords(nb::module_& module) {
             "padding: collections.abc.Sequence[int], "
             "dilation: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array]"
         ),
         "Build a forward sparse kernel relation."
     );
@@ -249,7 +255,9 @@ void register_coords(nb::module_& module) {
             "kernel_size: collections.abc.Sequence[int], "
             "stride: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array]"
         ),
         "Build a generative sparse kernel relation."
     );
@@ -284,7 +292,9 @@ void register_coords(nb::module_& module) {
             "padding: collections.abc.Sequence[int], "
             "dilation: collections.abc.Sequence[int]) -> "
             "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
-            "mlx.core.array, mlx.core.array, mlx.core.array]"
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array]"
         ),
         "Build a transposed sparse kernel relation."
     );

@@ -41,12 +41,18 @@ relation_from_outputs(const std::vector<mx::array>& outputs) {
         outputs[RelationRowOffsets],
         outputs[RelationOutCoords],
         outputs[RelationCounts],
+        outputs[RelationInRowOffsets],
+        outputs[RelationInEdgeIds],
+        outputs[RelationKernelRowOffsets],
+        outputs[RelationKernelEdgeIds],
     };
 }
 
 RelationOutputSpec relation_output_spec(
     int edges,    // NOLINT(bugprone-easily-swappable-parameters)
+    int in_rows,  // NOLINT(bugprone-easily-swappable-parameters)
     int out_rows, // NOLINT(bugprone-easily-swappable-parameters)
+    int kernels,
     mx::Dtype coord_dtype,
     int scratch_rows = 0
 ) {
@@ -55,6 +61,8 @@ RelationOutputSpec relation_output_spec(
     shapes[RelationRowOffsets] = mx::Shape{out_rows + 1};
     shapes[RelationOutCoords] = mx::Shape{out_rows, 4};
     shapes[RelationCounts] = mx::Shape{2};
+    shapes[RelationInRowOffsets] = mx::Shape{in_rows + 1};
+    shapes[RelationKernelRowOffsets] = mx::Shape{kernels + 1};
     dtypes[RelationOutCoords] = coord_dtype;
     if (scratch_rows > 0) {
         shapes.push_back(mx::Shape{scratch_rows});
@@ -251,7 +259,12 @@ NativeKernelRelation make_kernel_relation(
     auto scratch_rows = is_gpu_device(device) ? coord_hash_capacity(rows) : 0;
     auto outputs = make_relation_outputs(
         relation_output_spec(
-            max_edges, max_out_rows, coords.dtype(), scratch_rows
+            max_edges,
+            rows,
+            max_out_rows,
+            kernel_count,
+            coords.dtype(),
+            scratch_rows
         ),
         std::make_shared<GenericKernelRelation>(
             coord_stream(device),
@@ -282,7 +295,9 @@ NativeKernelRelation make_generative_relation(
     auto pair_count = rows * kernel_count;
     auto device = coord_device();
     auto outputs = make_relation_outputs(
-        relation_output_spec(pair_count, pair_count, coords.dtype()),
+        relation_output_spec(
+            pair_count, rows, pair_count, kernel_count, coords.dtype()
+        ),
         std::make_shared<GenerativeKernelRelation>(
             coord_stream(device), rows, kernel_count, stride
         ),
@@ -310,7 +325,9 @@ NativeKernelRelation make_transposed_kernel_relation(
     auto device = coord_device();
     auto direct = can_use_direct_transposed_relation(offsets, stride);
     auto outputs = make_relation_outputs(
-        relation_output_spec(max_edges, max_edges, coords.dtype()),
+        relation_output_spec(
+            max_edges, rows, max_edges, kernel_count, coords.dtype()
+        ),
         std::make_shared<GenericKernelRelation>(
             coord_stream(device),
             CoordRelationOp::Transposed,

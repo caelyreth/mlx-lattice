@@ -21,6 +21,10 @@ mx::array make_sparse_conv_features_input_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
+    const mx::array& kernel_row_offsets,
+    const mx::array& kernel_edge_ids,
     SparseConvShape shape
 );
 
@@ -31,6 +35,10 @@ mx::array make_sparse_conv_features_weight_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
+    const mx::array& kernel_row_offsets,
+    const mx::array& kernel_edge_ids,
     const mx::Shape& weight_shape,
     SparseConvShape shape
 );
@@ -75,6 +83,10 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[3],
                     primals[4],
                     primals[5],
+                    primals[6],
+                    primals[7],
+                    primals[8],
+                    primals[9],
                     shape_.out_capacity,
                     shape_.n_kernels
                 );
@@ -89,6 +101,10 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[3],
                     primals[4],
                     primals[5],
+                    primals[6],
+                    primals[7],
+                    primals[8],
+                    primals[9],
                     shape_.out_capacity,
                     shape_.n_kernels
                 );
@@ -119,6 +135,10 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[3],
                     primals[4],
                     primals[5],
+                    primals[6],
+                    primals[7],
+                    primals[8],
+                    primals[9],
                     shape_
                 ));
             } else if (argnum == 1) {
@@ -129,6 +149,10 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[3],
                     primals[4],
                     primals[5],
+                    primals[6],
+                    primals[7],
+                    primals[8],
+                    primals[9],
                     primals[1].shape(),
                     shape_
                 ));
@@ -255,6 +279,10 @@ mx::array make_sparse_conv_features(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
+    const mx::array& kernel_row_offsets,
+    const mx::array& kernel_edge_ids,
     int out_capacity,
     int n_kernels
 ) {
@@ -271,7 +299,16 @@ mx::array make_sparse_conv_features(
         mapped_weight ? 1 : weights.shape(3),
     };
     auto stream = sparse_conv_features_stream(
-        feats, weights, in_rows, out_rows, kernel_ids, counts
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        in_row_offsets,
+        in_edge_ids,
+        kernel_row_offsets,
+        kernel_edge_ids
     );
     auto primitive = std::make_shared<SparseConvFeatures>(stream, shape);
     auto inputs = std::vector<mx::array>{
@@ -281,6 +318,10 @@ mx::array make_sparse_conv_features(
         out_rows,
         kernel_ids,
         counts,
+        in_row_offsets,
+        in_edge_ids,
+        kernel_row_offsets,
+        kernel_edge_ids,
     };
     return mx::array::make_arrays(
         {mx::Shape{out_capacity, shape.out_channels}},
@@ -299,10 +340,23 @@ mx::array make_sparse_conv_features_input_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
+    const mx::array& kernel_row_offsets,
+    const mx::array& kernel_edge_ids,
     SparseConvShape shape
 ) {
     auto stream = sparse_conv_features_stream(
-        cotangent, weights, in_rows, out_rows, kernel_ids, counts
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        in_row_offsets,
+        in_edge_ids,
+        kernel_row_offsets,
+        kernel_edge_ids
     );
     auto primitive =
         std::make_shared<SparseConvFeaturesInputGrad>(stream, shape);
@@ -313,6 +367,10 @@ mx::array make_sparse_conv_features_input_grad(
         out_rows,
         kernel_ids,
         counts,
+        in_row_offsets,
+        in_edge_ids,
+        kernel_row_offsets,
+        kernel_edge_ids,
     };
     return mx::array::make_arrays(
         {mx::Shape{shape.in_capacity, shape.in_channels}},
@@ -329,11 +387,24 @@ mx::array make_sparse_conv_features_weight_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
+    const mx::array& kernel_row_offsets,
+    const mx::array& kernel_edge_ids,
     const mx::Shape& weight_shape,
     SparseConvShape shape
 ) {
     auto stream = sparse_conv_features_stream(
-        feats, cotangent, in_rows, out_rows, kernel_ids, counts
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        in_row_offsets,
+        in_edge_ids,
+        kernel_row_offsets,
+        kernel_edge_ids
     );
     auto primitive =
         std::make_shared<SparseConvFeaturesWeightGrad>(stream, shape);
@@ -344,6 +415,10 @@ mx::array make_sparse_conv_features_weight_grad(
         out_rows,
         kernel_ids,
         counts,
+        in_row_offsets,
+        in_edge_ids,
+        kernel_row_offsets,
+        kernel_edge_ids,
     };
     return mx::array::make_arrays(
         {weight_shape}, {cotangent.dtype()}, primitive, inputs

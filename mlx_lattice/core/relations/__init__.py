@@ -6,6 +6,7 @@ from mlx_lattice.core.relations.views import (
     NeighborEdges,
     NeighborRelation,
     RelationEdges,
+    RelationView,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     'NeighborEdges',
     'NeighborRelation',
     'RelationEdges',
+    'RelationView',
 ]
