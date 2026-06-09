@@ -26,10 +26,12 @@ def test_case_catalog_exposes_expected_public_surface_groups() -> None:
         'workloads',
     }
     assert 'voxelize_mean' in names
+    assert 'voxelize_mean_fixed' in names
     assert 'conv3d_generic' in names
     assert 'conv3d_generic_dfeatures' in names
     assert 'conv3d_generic_dweight' in names
     assert 'workload_mini_encoder' in names
+    assert 'workload_mini_encoder_fixed' in names
     assert cases[0].params[0]['N'] == 256
 
 

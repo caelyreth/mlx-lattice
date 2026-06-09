@@ -40,7 +40,10 @@ from mlx_lattice.ops.pool import (
     pool3d,
     sum_pool3d,
 )
-from mlx_lattice.ops.quantization import voxelize
+from mlx_lattice.ops.quantization import (
+    voxelize,
+    voxelize_with_quantization,
+)
 from mlx_lattice.ops.relations import (
     build_generative_relation,
     build_kernel_relation,
@@ -105,4 +108,5 @@ __all__ = [
     'transposed_kernel_relation',
     'union_coords',
     'voxelize',
+    'voxelize_with_quantization',
 ]

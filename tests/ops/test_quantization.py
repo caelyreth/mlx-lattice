@@ -4,7 +4,12 @@ from typing import cast
 
 import pytest
 
-from mlx_lattice.ops import sparse_quantize, voxelize
+from mlx_lattice import SparseTensor
+from mlx_lattice.ops import (
+    sparse_quantize,
+    voxelize,
+    voxelize_with_quantization,
+)
 from tests.support import (
     active_coords,
     active_feats,
@@ -110,6 +115,37 @@ def test_voxelize_aggregates_features_into_sparse_tensor() -> None:
         active_feats(summed).tolist(), [[4.0, 40.0], [5.0, 50.0]]
     )
     assert mean.stride == (1, 1, 1)
+
+
+def test_voxelize_with_quantization_reuses_native_map() -> None:
+    points = mx.array(
+        [[0.1, 0.0, 0.0], [0.9, 0.0, 0.0], [1.1, 0.0, 0.0]],
+        dtype=mx.float32,
+    )
+    feats = mx.array(
+        [[1.0, 10.0], [3.0, 30.0], [5.0, 50.0]],
+        dtype=mx.float32,
+    )
+    quantization = sparse_quantize(points)
+    template = SparseTensor(
+        quantization.coords,
+        mx.zeros_like(feats),
+        active_rows=quantization.active_rows,
+    )
+
+    mapped = voxelize_with_quantization(
+        quantization,
+        feats,
+        reduction='mean',
+        template=template,
+    )
+    direct = voxelize(points, feats, reduction='mean')
+
+    assert mapped.same_coords(template)
+    assert active_coords(mapped) == active_coords(direct)
+    assert_nested_close(
+        active_feats(mapped).tolist(), active_feats(direct).tolist()
+    )
 
 
 def test_voxelize_feature_aggregation_is_autogradable() -> None:

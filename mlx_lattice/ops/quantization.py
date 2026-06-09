@@ -5,13 +5,17 @@ from collections.abc import Sequence
 import mlx.core as mx
 
 from mlx_lattice.core.coords.quantization import (
+    SparseQuantization,
     VoxelReduction,
     sparse_quantize,
-    voxelize_features,
+)
+from mlx_lattice.core.coords.quantization import (
+    voxelize_features as _voxelize_features,
 )
 from mlx_lattice.core.tensor import SparseTensor
+from mlx_lattice.core.types import triple
 
-__all__ = ['voxelize']
+__all__ = ['voxelize', 'voxelize_with_quantization']
 
 
 def voxelize(
@@ -37,15 +41,45 @@ def voxelize(
         origin=origin,
         active_rows=active_rows,
     )
-    voxel_feats = voxelize_features(
+    return voxelize_with_quantization(
+        quantization,
+        feats,
+        active_rows=active_rows,
+        reduction=reduction,
+        stride=stride,
+    )
+
+
+def voxelize_with_quantization(
+    quantization: SparseQuantization,
+    feats: mx.array,
+    *,
+    active_rows: mx.array | None = None,
+    reduction: VoxelReduction = 'mean',
+    stride: int | Sequence[int] = 1,
+    template: SparseTensor | None = None,
+) -> SparseTensor:
+    """Apply a precomputed native point-to-voxel map to feature rows."""
+    voxel_feats = _voxelize_features(
         feats,
         quantization,
         active_rows=active_rows,
         reduction=reduction,
     )
+    if template is not None:
+        if template.coords is not quantization.coords:
+            raise ValueError(
+                'template must use the quantization coordinate array.'
+            )
+        if template.active_rows is not quantization.active_rows:
+            raise ValueError(
+                'template must use the quantization active_rows array.'
+            )
+        return template.replace(feats=voxel_feats)
+
     return SparseTensor(
         quantization.coords,
         voxel_feats,
-        stride=stride,
+        stride=triple(stride, name='stride'),
         active_rows=quantization.active_rows,
     )

@@ -507,23 +507,31 @@ void eval_sparse_quantize(
     encoder.set_bytes(spec.origin[2], 12);
     dispatch_1d(encoder, plan, static_cast<size_t>(rows));
 
-    auto compact = device.get_kernel("compact_quantized_points_i32", library);
-    encoder.set_compute_pipeline_state(compact);
+    auto prefix = device.get_kernel("prefix_quantized_points_i32", library);
+    encoder.set_compute_pipeline_state(prefix);
+    encoder.set_input_array(inputs[2], 0);
+    encoder.set_input_array(selected, 1);
+    encoder.set_output_array(outputs[1], 2);
+    encoder.set_output_array(representative_voxels, 3);
+    encoder.set_bytes(rows, 4);
+    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+    auto fill = device.get_kernel("fill_quantized_points_i32", library);
+    encoder.set_compute_pipeline_state(fill);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
     encoder.set_input_array(inputs[2], 2);
     encoder.set_input_array(selected, 3);
-    encoder.set_output_array(outputs[0], 4);
-    encoder.set_output_array(outputs[1], 5);
-    encoder.set_output_array(representative_voxels, 6);
-    encoder.set_bytes(rows, 7);
-    encoder.set_bytes(spec.voxel_size[0], 8);
-    encoder.set_bytes(spec.voxel_size[1], 9);
-    encoder.set_bytes(spec.voxel_size[2], 10);
-    encoder.set_bytes(spec.origin[0], 11);
-    encoder.set_bytes(spec.origin[1], 12);
-    encoder.set_bytes(spec.origin[2], 13);
-    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+    encoder.set_input_array(representative_voxels, 4);
+    encoder.set_output_array(outputs[0], 5);
+    encoder.set_bytes(rows, 6);
+    encoder.set_bytes(spec.voxel_size[0], 7);
+    encoder.set_bytes(spec.voxel_size[1], 8);
+    encoder.set_bytes(spec.voxel_size[2], 9);
+    encoder.set_bytes(spec.origin[0], 10);
+    encoder.set_bytes(spec.origin[1], 11);
+    encoder.set_bytes(spec.origin[2], 12);
+    dispatch_1d(encoder, fill, static_cast<size_t>(rows));
 
     auto map = device.get_kernel("map_quantized_points_i32", library);
     encoder.set_compute_pipeline_state(map);

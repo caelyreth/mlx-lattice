@@ -204,21 +204,12 @@ inline int lookup_quantized_point_hash(
                     ) == int(row);
 }
 
-[[kernel]] void compact_quantized_points_i32(
-    device const float* points [[buffer(0)]],
-    device const int* batch_indices [[buffer(1)]],
-    device const int* active_rows [[buffer(2)]],
-    device const int* selected [[buffer(3)]],
-    device int* out_coords [[buffer(4)]],
-    device int* out_active_rows [[buffer(5)]],
-    device int* representative_voxels [[buffer(6)]],
-    constant const int& rows [[buffer(7)]],
-    constant const float& voxel_x [[buffer(8)]],
-    constant const float& voxel_y [[buffer(9)]],
-    constant const float& voxel_z [[buffer(10)]],
-    constant const float& origin_x [[buffer(11)]],
-    constant const float& origin_y [[buffer(12)]],
-    constant const float& origin_z [[buffer(13)]],
+[[kernel]] void prefix_quantized_points_i32(
+    device const int* active_rows [[buffer(0)]],
+    device const int* selected [[buffer(1)]],
+    device int* out_active_rows [[buffer(2)]],
+    device int* representative_voxels [[buffer(3)]],
+    constant const int& rows [[buffer(4)]],
     uint elem [[thread_position_in_grid]]
 ) {
     if (elem != 0) {
@@ -227,26 +218,53 @@ inline int lookup_quantized_point_hash(
     int point_count = min(active_rows[0], rows);
     int out_count = 0;
     for (int row = 0; row < point_count; ++row) {
-        if (selected[row] == 0) {
+        if (selected[row] != 0) {
+            representative_voxels[row] = out_count++;
             continue;
         }
-        int candidate[4];
-        quantized_point_coord(
-            points,
-            batch_indices,
-            row,
-            voxel_x,
-            voxel_y,
-            voxel_z,
-            origin_x,
-            origin_y,
-            origin_z,
-            candidate
-        );
-        write_coord(out_coords, out_count, candidate);
-        representative_voxels[row] = out_count++;
+        representative_voxels[row] = -1;
+    }
+    for (int row = point_count; row < rows; ++row) {
+        representative_voxels[row] = -1;
     }
     out_active_rows[0] = out_count;
+}
+
+[[kernel]] void fill_quantized_points_i32(
+    device const float* points [[buffer(0)]],
+    device const int* batch_indices [[buffer(1)]],
+    device const int* active_rows [[buffer(2)]],
+    device const int* selected [[buffer(3)]],
+    device const int* representative_voxels [[buffer(4)]],
+    device int* out_coords [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    constant const float& voxel_x [[buffer(7)]],
+    constant const float& voxel_y [[buffer(8)]],
+    constant const float& voxel_z [[buffer(9)]],
+    constant const float& origin_x [[buffer(10)]],
+    constant const float& origin_y [[buffer(11)]],
+    constant const float& origin_z [[buffer(12)]],
+    uint row [[thread_position_in_grid]]
+) {
+    int point_count = min(active_rows[0], rows);
+    if (row >= uint(point_count) || selected[row] == 0) {
+        return;
+    }
+
+    int candidate[4];
+    quantized_point_coord(
+        points,
+        batch_indices,
+        int(row),
+        voxel_x,
+        voxel_y,
+        voxel_z,
+        origin_x,
+        origin_y,
+        origin_z,
+        candidate
+    );
+    write_coord(out_coords, representative_voxels[row], candidate);
 }
 
 [[kernel]] void map_quantized_points_i32(

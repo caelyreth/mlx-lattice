@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import mlx.core as mx
-from mlx_lattice.core import SparseTensor
+from mlx_lattice.core import SparseQuantization, SparseTensor
 from mlx_lattice.ops import (
     avg_pool3d,
     conv3d,
@@ -17,6 +17,7 @@ from mlx_lattice.ops import (
     subm_conv3d,
     sum_pool3d,
     voxelize,
+    voxelize_with_quantization,
 )
 
 from mlx_lattice_bench.cases.common import benchmark_n, param_grid
@@ -32,9 +33,11 @@ from mlx_lattice_bench.harness import BenchmarkCase
 
 type WorkloadKind = Literal[
     'voxel_stem',
+    'voxel_stem_fixed',
     'subm_block',
     'downsample_block',
     'mini_encoder',
+    'mini_encoder_fixed',
     'neighbor_pipeline',
 ]
 
@@ -43,6 +46,8 @@ type WorkloadKind = Literal[
 class WorkloadFixture:
     sparse: SparseArrays
     points: PointArrays | None
+    quantization: SparseQuantization | None
+    voxel_template: SparseTensor | None
     linear_weight: mx.array
     bias: mx.array
     kernel3_weight: mx.array
@@ -54,6 +59,8 @@ class WorkloadInputs:
     points: mx.array | None
     point_feats: mx.array | None
     batch_indices: mx.array | None
+    quantization: SparseQuantization | None
+    voxel_template: SparseTensor | None
     linear_weight: mx.array
     bias: mx.array
     kernel3_weight: mx.array
@@ -71,9 +78,11 @@ def cases(
         _case(name, kind, params)
         for name, kind in (
             ('workload_voxel_stem', 'voxel_stem'),
+            ('workload_voxel_stem_fixed', 'voxel_stem_fixed'),
             ('workload_subm_block', 'subm_block'),
             ('workload_downsample_block', 'downsample_block'),
             ('workload_mini_encoder', 'mini_encoder'),
+            ('workload_mini_encoder_fixed', 'mini_encoder_fixed'),
             ('workload_neighbor_pipeline', 'neighbor_pipeline'),
         )
     )
@@ -104,15 +113,32 @@ def _setup(
     rows = benchmark_n(params)
     batches = int(params['batches'])
     point_workload = kind in _POINT_WORKLOADS
-    return WorkloadFixture(
-        sparse=sparse_arrays(rows=rows, channels=channels, batches=batches),
-        points=point_arrays(
+    points = (
+        point_arrays(
             rows=rows,
             channels=channels,
             batches=batches,
         )
         if point_workload
-        else None,
+        else None
+    )
+    quantization = None
+    voxel_template = None
+    if points is not None and kind in _FIXED_VOXEL_WORKLOADS:
+        quantization = sparse_quantize(
+            points.points,
+            batch_indices=points.batch_indices,
+        )
+        voxel_template = SparseTensor(
+            quantization.coords,
+            mx.zeros_like(points.feats),
+            active_rows=quantization.active_rows,
+        )
+    return WorkloadFixture(
+        sparse=sparse_arrays(rows=rows, channels=channels, batches=batches),
+        points=points,
+        quantization=quantization,
+        voxel_template=voxel_template,
         linear_weight=dense_weight((channels, channels)),
         bias=dense_bias(channels),
         kernel3_weight=dense_weight((channels, 3, 3, 3, channels)),
@@ -129,6 +155,8 @@ def _prepare(fixture: WorkloadFixture) -> WorkloadInputs:
         batch_indices=None
         if fixture.points is None
         else fixture.points.batch_indices,
+        quantization=fixture.quantization,
+        voxel_template=fixture.voxel_template,
         linear_weight=fixture.linear_weight,
         bias=fixture.bias,
         kernel3_weight=fixture.kernel3_weight,
@@ -142,6 +170,15 @@ def _run(kind: WorkloadKind, inputs: WorkloadInputs) -> Any:
             points,
             point_feats,
             batch_indices=batch_indices,
+        )
+        return relu(linear(x, inputs.linear_weight, inputs.bias))
+    if kind == 'voxel_stem_fixed':
+        _, point_feats, _ = _point_inputs(inputs)
+        quantization, template = _fixed_voxel_inputs(inputs)
+        x = voxelize_with_quantization(
+            quantization,
+            point_feats,
+            template=template,
         )
         return relu(linear(x, inputs.linear_weight, inputs.bias))
     if kind == 'subm_block':
@@ -162,6 +199,17 @@ def _run(kind: WorkloadKind, inputs: WorkloadInputs) -> Any:
             points,
             point_feats,
             batch_indices=batch_indices,
+        )
+        y = relu(subm_conv3d(y, inputs.kernel3_weight, kernel_size=3))
+        y = conv3d(y, inputs.kernel3_weight, kernel_size=3, stride=2)
+        return avg_pool3d(relu(y), kernel_size=2, stride=2)
+    if kind == 'mini_encoder_fixed':
+        _, point_feats, _ = _point_inputs(inputs)
+        quantization, template = _fixed_voxel_inputs(inputs)
+        y = voxelize_with_quantization(
+            quantization,
+            point_feats,
+            template=template,
         )
         y = relu(subm_conv3d(y, inputs.kernel3_weight, kernel_size=3))
         y = conv3d(y, inputs.kernel3_weight, kernel_size=3, stride=2)
@@ -196,7 +244,7 @@ def _compiled(
         )
         return fn, (
             points.feats
-            if kind in ('voxel_stem', 'mini_encoder')
+            if kind in _POINT_FEATURE_WORKLOADS
             else fixture.sparse.feats,
         )
 
@@ -218,7 +266,7 @@ def _backward(
         )
         args = (
             points.feats
-            if kind in ('voxel_stem', 'mini_encoder')
+            if kind in _POINT_FEATURE_WORKLOADS
             else fixture.sparse.feats
         )
         return mx.grad(loss), (args,)
@@ -233,7 +281,7 @@ def _compiled_inputs(
     *,
     base: SparseTensor | None = None,
 ) -> WorkloadInputs:
-    point_workload = kind in ('voxel_stem', 'mini_encoder')
+    point_workload = kind in _POINT_FEATURE_WORKLOADS
     points = None if fixture.points is None else fixture.points.points
     point_feats = None if fixture.points is None else fixture.points.feats
     batch_indices = (
@@ -246,13 +294,25 @@ def _compiled_inputs(
         points=points,
         point_feats=feats if point_workload else point_feats,
         batch_indices=batch_indices,
+        quantization=fixture.quantization,
+        voxel_template=fixture.voxel_template,
         linear_weight=fixture.linear_weight,
         bias=fixture.bias,
         kernel3_weight=fixture.kernel3_weight,
     )
 
 
-_POINT_WORKLOADS = ('voxel_stem', 'mini_encoder', 'neighbor_pipeline')
+_POINT_FEATURE_WORKLOADS = (
+    'voxel_stem',
+    'voxel_stem_fixed',
+    'mini_encoder',
+    'mini_encoder_fixed',
+)
+_FIXED_VOXEL_WORKLOADS = ('voxel_stem_fixed', 'mini_encoder_fixed')
+_POINT_WORKLOADS = (
+    *_POINT_FEATURE_WORKLOADS,
+    'neighbor_pipeline',
+)
 
 
 def _point_fixture(fixture: WorkloadFixture) -> PointArrays:
@@ -271,3 +331,13 @@ def _point_inputs(
     ):
         raise ValueError('point inputs are required for this workload.')
     return inputs.points, inputs.point_feats, inputs.batch_indices
+
+
+def _fixed_voxel_inputs(
+    inputs: WorkloadInputs,
+) -> tuple[SparseQuantization, SparseTensor]:
+    if inputs.quantization is None or inputs.voxel_template is None:
+        raise ValueError(
+            'fixed voxel metadata is required for this workload.'
+        )
+    return inputs.quantization, inputs.voxel_template
