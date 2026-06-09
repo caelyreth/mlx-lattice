@@ -131,20 +131,24 @@ void eval_grad(
     encoder.set_bytes(total, 1);
     dispatch_1d(encoder, clear, static_cast<size_t>(total));
 
-    auto kernel =
-        device.get_kernel("sparse_pool_relation_grad_f32_i32", library);
+    auto kernel = device.get_kernel(
+        reduce == PoolReduceOp::Max
+            ? "sparse_pool_relation_grad_f32_i32"
+            : "sparse_pool_relation_sum_avg_grad_f32_i32",
+        library
+    );
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
     encoder.set_output_array(out, 8);
     bind_autodiff_shape(encoder, inputs, reduce, shape);
-    dispatch_1d(
-        encoder,
-        kernel,
-        static_cast<size_t>(shape.out_capacity) *
-            static_cast<size_t>(shape.channels)
-    );
+    auto threads = reduce == PoolReduceOp::Max
+                       ? static_cast<size_t>(shape.out_capacity) *
+                             static_cast<size_t>(shape.channels)
+                       : static_cast<size_t>(inputs[3].shape(0)) *
+                             static_cast<size_t>(shape.channels);
+    dispatch_1d(encoder, kernel, threads);
 #else
     (void)reduce;
     (void)shape;

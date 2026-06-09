@@ -90,6 +90,61 @@ inline int pool_edge_rank(
     }
 }
 
+[[kernel]] void sparse_pool_relation_sum_avg_grad_f32_i32(
+    device const float* cotangent [[buffer(0)]],
+    device const float* feats [[buffer(1)]],
+    device const float* pooled [[buffer(2)]],
+    device const int* in_rows [[buffer(3)]],
+    device const int* out_rows [[buffer(4)]],
+    device const int* kernel_ids [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device atomic_float* grad [[buffer(8)]],
+    constant const int& reduce [[buffer(9)]],
+    constant const int& in_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& channels [[buffer(13)]],
+    constant const int& cotangent_s0 [[buffer(14)]],
+    constant const int& cotangent_s1 [[buffer(15)]],
+    constant const int& feat_s0 [[buffer(16)]],
+    constant const int& feat_s1 [[buffer(17)]],
+    constant const int& pooled_s0 [[buffer(18)]],
+    constant const int& pooled_s1 [[buffer(19)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    (void)feats;
+    (void)kernel_ids;
+    (void)in_capacity;
+    (void)n_kernels;
+    (void)feat_s0;
+    (void)feat_s1;
+    (void)pooled;
+    (void)pooled_s0;
+    (void)pooled_s1;
+    int edge_count = counts[0];
+    int total = edge_count * channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int edge = int(elem) / channels;
+    int channel = int(elem) - edge * channels;
+    int in_row = in_rows[edge];
+    int out_row = out_rows[edge];
+    if (in_row < 0 || out_row < 0 || out_row >= out_capacity) {
+        return;
+    }
+
+    int degree = row_offsets[out_row + 1] - row_offsets[out_row];
+    float scale = reduce == 2 ? 1.0f / float(max(degree, 1)) : 1.0f;
+    float contribution =
+        cotangent[out_row * cotangent_s0 + channel * cotangent_s1] * scale;
+    atomic_fetch_add_explicit(
+        &grad[in_row * channels + channel], contribution, memory_order_relaxed
+    );
+}
+
 [[kernel]] void sparse_pool_relation_jvp_f32_i32(
     device const float* tangent [[buffer(0)]],
     device const float* feats [[buffer(1)]],
