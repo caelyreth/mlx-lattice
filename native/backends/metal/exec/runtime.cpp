@@ -62,6 +62,17 @@ bool is_identity_forward_coords(Triple stride, Triple padding) {
     return stride == Triple{1, 1, 1} && padding == Triple{0, 0, 0};
 }
 
+bool is_nonoverlapping_transposed(
+    SparseMapOp op,
+    SparseConvShape shape,
+    Triple stride,
+    Triple padding
+) {
+    return op == SparseMapOp::Transposed && padding == Triple{0, 0, 0} &&
+           shape.kernel_x == stride[0] && shape.kernel_y == stride[1] &&
+           shape.kernel_z == stride[2];
+}
+
 #ifdef _METAL_
 mx::array make_int32_temp(int elements) {
     auto count = std::max(elements, 1);
@@ -70,6 +81,14 @@ mx::array make_int32_temp(int elements) {
         mx::Shape{count},
         mx::int32
     );
+}
+
+int next_power_of_two(int value) {
+    auto out = 1;
+    while (out < value) {
+        out <<= 1;
+    }
+    return out;
 }
 
 template <typename Encoder, typename Kernel>
@@ -175,11 +194,208 @@ void eval_sparse_conv(
         return;
     }
 
-    if (op == SparseMapOp::Forward) {
-        auto clear = device.get_kernel("sparse_conv_clear_f32_i32", library);
+    if (op == SparseMapOp::Generative ||
+        is_nonoverlapping_transposed(op, shape, stride, padding)) {
+        auto kernel =
+            device.get_kernel("sparse_conv_generative_f32_i32", library);
+        encoder.set_compute_pipeline_state(kernel);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[1], 1);
+        encoder.set_input_array(inputs[2], 2);
+        encoder.set_input_array(inputs[3], 3);
+        encoder.set_input_array(inputs[4], 4);
+        encoder.set_output_array(outputs[SparseOutCoords], 5);
+        encoder.set_output_array(outputs[SparseOutFeats], 6);
+        encoder.set_output_array(outputs[SparseCounts], 7);
+        encoder.set_bytes(shape.in_capacity, 8);
+        encoder.set_bytes(shape.out_capacity, 9);
+        encoder.set_bytes(shape.n_kernels, 10);
+        encoder.set_bytes(shape.in_channels, 11);
+        encoder.set_bytes(shape.out_channels, 12);
+        encoder.set_bytes(stride[0], 13);
+        encoder.set_bytes(stride[1], 14);
+        encoder.set_bytes(stride[2], 15);
+        encoder.set_bytes(stride_at(inputs[2], 0), 16);
+        encoder.set_bytes(stride_at(inputs[2], 1), 17);
+        encoder.set_bytes(stride_at(inputs[3], 0), 18);
+        encoder.set_bytes(stride_at(inputs[3], 1), 19);
+        encoder.set_bytes(stride_at(inputs[3], 2), 20);
+        encoder.set_bytes(
+            inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 21
+        );
+        encoder.set_bytes(
+            inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 22
+        );
+        encoder.set_bytes(shape.weight_layout, 23);
+        encoder.set_bytes(shape.kernel_x, 24);
+        encoder.set_bytes(shape.kernel_y, 25);
+        encoder.set_bytes(shape.kernel_z, 26);
         auto coord_elements = static_cast<size_t>(shape.out_capacity) * 4;
         auto feat_elements = static_cast<size_t>(shape.out_capacity) *
                              static_cast<size_t>(shape.out_channels);
+        dispatch_1d(encoder, kernel, std::max(coord_elements, feat_elements));
+        return;
+    }
+
+    if (op == SparseMapOp::Forward) {
+        auto coord_elements = static_cast<size_t>(shape.out_capacity) * 4;
+        auto feat_elements = static_cast<size_t>(shape.out_capacity) *
+                             static_cast<size_t>(shape.out_channels);
+        auto max_edges = shape.out_capacity * shape.n_kernels;
+
+        if (is_identity_forward_coords(stride, padding)) {
+            auto table_capacity = next_power_of_two(
+                std::max(
+                    shape.in_capacity * (shape.in_capacity >= 65536 ? 4 : 2), 2
+                )
+            );
+            auto table_keys = make_int32_temp(table_capacity);
+            auto table_rows = make_int32_temp(table_capacity);
+            encoder.add_temporaries({table_keys, table_rows});
+
+            constexpr int empty_key = 0x7fffffff;
+            auto hash_clear =
+                device.get_kernel("sparse_conv_hash_clear_i32", library);
+            encoder.set_compute_pipeline_state(hash_clear);
+            encoder.set_output_array(table_keys, 0);
+            encoder.set_output_array(table_rows, 1);
+            encoder.set_output_array(outputs[SparseCounts], 2);
+            encoder.set_bytes(table_capacity, 3);
+            encoder.set_bytes(empty_key, 4);
+            dispatch_1d(
+                encoder, hash_clear, static_cast<size_t>(table_capacity)
+            );
+
+            auto hash_insert =
+                device.get_kernel("sparse_conv_hash_insert_i32", library);
+            encoder.set_compute_pipeline_state(hash_insert);
+            encoder.set_input_array(inputs[0], 0);
+            encoder.set_input_array(inputs[1], 1);
+            encoder.set_output_array(table_keys, 2);
+            encoder.set_output_array(table_rows, 3);
+            encoder.set_bytes(shape.in_capacity, 4);
+            encoder.set_bytes(table_capacity, 5);
+            encoder.set_bytes(empty_key, 6);
+            dispatch_1d(
+                encoder, hash_insert, static_cast<size_t>(shape.in_capacity)
+            );
+
+            if (shape.out_channels % 4 == 0 && shape.in_capacity >= 8192) {
+                auto plan_in_rows = make_int32_temp(max_edges);
+                encoder.add_temporary(plan_in_rows);
+
+                auto plan = device.get_kernel(
+                    "sparse_conv_identity_hash_plan_i32", library
+                );
+                encoder.set_compute_pipeline_state(plan);
+                encoder.set_input_array(inputs[0], 0);
+                encoder.set_input_array(inputs[1], 1);
+                encoder.set_input_array(inputs[4], 2);
+                encoder.set_input_array(table_keys, 3);
+                encoder.set_input_array(table_rows, 4);
+                encoder.set_output_array(outputs[SparseOutCoords], 5);
+                encoder.set_output_array(outputs[SparseCounts], 6);
+                encoder.set_output_array(plan_in_rows, 7);
+                encoder.set_bytes(shape.in_capacity, 8);
+                encoder.set_bytes(shape.n_kernels, 9);
+                encoder.set_bytes(table_capacity, 10);
+                encoder.set_bytes(empty_key, 11);
+                dispatch_1d(
+                    encoder,
+                    plan,
+                    std::max(coord_elements, static_cast<size_t>(max_edges))
+                );
+
+                auto gather = device.get_kernel(
+                    "sparse_conv_identity_plan_gather_vec4_f32_i32", library
+                );
+                encoder.set_compute_pipeline_state(gather);
+                encoder.set_input_array(inputs[2], 0);
+                encoder.set_input_array(inputs[3], 1);
+                encoder.set_input_array(plan_in_rows, 2);
+                encoder.set_input_array(outputs[SparseCounts], 3);
+                encoder.set_output_array(outputs[SparseOutFeats], 4);
+                encoder.set_bytes(shape.out_capacity, 5);
+                encoder.set_bytes(shape.n_kernels, 6);
+                encoder.set_bytes(shape.in_channels, 7);
+                encoder.set_bytes(shape.out_channels, 8);
+                encoder.set_bytes(stride_at(inputs[2], 0), 9);
+                encoder.set_bytes(stride_at(inputs[2], 1), 10);
+                encoder.set_bytes(stride_at(inputs[3], 0), 11);
+                encoder.set_bytes(stride_at(inputs[3], 1), 12);
+                encoder.set_bytes(stride_at(inputs[3], 2), 13);
+                encoder.set_bytes(
+                    inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 14
+                );
+                encoder.set_bytes(
+                    inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 15
+                );
+                encoder.set_bytes(shape.weight_layout, 16);
+                encoder.set_bytes(shape.kernel_x, 17);
+                encoder.set_bytes(shape.kernel_y, 18);
+                encoder.set_bytes(shape.kernel_z, 19);
+                dispatch_1d(
+                    encoder,
+                    gather,
+                    static_cast<size_t>(shape.out_capacity) *
+                        static_cast<size_t>(shape.out_channels / 4)
+                );
+                return;
+            }
+
+            auto use_vec4 = shape.out_channels % 4 == 0;
+            auto conv = device.get_kernel(
+                use_vec4 ? "sparse_conv_identity_hash_vec4_f32_i32"
+                         : "sparse_conv_identity_hash_f32_i32",
+                library
+            );
+            encoder.set_compute_pipeline_state(conv);
+            encoder.set_input_array(inputs[0], 0);
+            encoder.set_input_array(inputs[1], 1);
+            encoder.set_input_array(inputs[2], 2);
+            encoder.set_input_array(inputs[3], 3);
+            encoder.set_input_array(inputs[4], 4);
+            encoder.set_input_array(table_keys, 5);
+            encoder.set_input_array(table_rows, 6);
+            encoder.set_output_array(outputs[SparseOutCoords], 7);
+            encoder.set_output_array(outputs[SparseOutFeats], 8);
+            encoder.set_output_array(outputs[SparseCounts], 9);
+            encoder.set_bytes(shape.in_capacity, 10);
+            encoder.set_bytes(shape.out_capacity, 11);
+            encoder.set_bytes(shape.n_kernels, 12);
+            encoder.set_bytes(shape.in_channels, 13);
+            encoder.set_bytes(shape.out_channels, 14);
+            encoder.set_bytes(table_capacity, 15);
+            encoder.set_bytes(empty_key, 16);
+            encoder.set_bytes(stride_at(inputs[2], 0), 17);
+            encoder.set_bytes(stride_at(inputs[2], 1), 18);
+            encoder.set_bytes(stride_at(inputs[3], 0), 19);
+            encoder.set_bytes(stride_at(inputs[3], 1), 20);
+            encoder.set_bytes(stride_at(inputs[3], 2), 21);
+            encoder.set_bytes(
+                inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 22
+            );
+            encoder.set_bytes(
+                inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 23
+            );
+            encoder.set_bytes(shape.weight_layout, 24);
+            encoder.set_bytes(shape.kernel_x, 25);
+            encoder.set_bytes(shape.kernel_y, 26);
+            encoder.set_bytes(shape.kernel_z, 27);
+            dispatch_1d(
+                encoder,
+                conv,
+                std::max(
+                    coord_elements,
+                    use_vec4 ? static_cast<size_t>(shape.out_capacity) *
+                                   static_cast<size_t>(shape.out_channels / 4)
+                             : feat_elements
+                )
+            );
+            return;
+        }
+
+        auto clear = device.get_kernel("sparse_conv_clear_f32_i32", library);
         encoder.set_compute_pipeline_state(clear);
         encoder.set_output_array(outputs[SparseOutCoords], 0);
         encoder.set_output_array(outputs[SparseOutFeats], 1);
@@ -189,60 +405,6 @@ void eval_sparse_conv(
         encoder.set_bytes(coord_total, 3);
         encoder.set_bytes(feat_total, 4);
         dispatch_1d(encoder, clear, std::max(coord_elements, feat_elements));
-
-        auto max_edges = shape.out_capacity * shape.n_kernels;
-        if (is_identity_forward_coords(stride, padding)) {
-            auto plan_in_rows = make_int32_temp(max_edges);
-            encoder.add_temporary(plan_in_rows);
-
-            auto plan =
-                device.get_kernel("sparse_conv_identity_plan_i32", library);
-            encoder.set_compute_pipeline_state(plan);
-            encoder.set_input_array(inputs[0], 0);
-            encoder.set_input_array(inputs[1], 1);
-            encoder.set_input_array(inputs[4], 2);
-            encoder.set_output_array(outputs[SparseOutCoords], 3);
-            encoder.set_output_array(outputs[SparseCounts], 4);
-            encoder.set_output_array(plan_in_rows, 5);
-            encoder.set_bytes(shape.in_capacity, 6);
-            encoder.set_bytes(shape.n_kernels, 7);
-            dispatch_1d(
-                encoder,
-                plan,
-                std::max(coord_elements, static_cast<size_t>(max_edges))
-            );
-
-            auto gather = device.get_kernel(
-                "sparse_conv_identity_plan_gather_f32_i32", library
-            );
-            encoder.set_compute_pipeline_state(gather);
-            encoder.set_input_array(inputs[2], 0);
-            encoder.set_input_array(inputs[3], 1);
-            encoder.set_input_array(plan_in_rows, 2);
-            encoder.set_input_array(outputs[SparseCounts], 3);
-            encoder.set_output_array(outputs[SparseOutFeats], 4);
-            encoder.set_bytes(shape.out_capacity, 5);
-            encoder.set_bytes(shape.n_kernels, 6);
-            encoder.set_bytes(shape.in_channels, 7);
-            encoder.set_bytes(shape.out_channels, 8);
-            encoder.set_bytes(stride_at(inputs[2], 0), 9);
-            encoder.set_bytes(stride_at(inputs[2], 1), 10);
-            encoder.set_bytes(stride_at(inputs[3], 0), 11);
-            encoder.set_bytes(stride_at(inputs[3], 1), 12);
-            encoder.set_bytes(stride_at(inputs[3], 2), 13);
-            encoder.set_bytes(
-                inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 14
-            );
-            encoder.set_bytes(
-                inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 15
-            );
-            encoder.set_bytes(shape.weight_layout, 16);
-            encoder.set_bytes(shape.kernel_x, 17);
-            encoder.set_bytes(shape.kernel_y, 18);
-            encoder.set_bytes(shape.kernel_z, 19);
-            dispatch_1d(encoder, gather, feat_elements);
-            return;
-        }
 
         auto plan_in_rows = make_int32_temp(max_edges);
         auto plan_kernel_ids = make_int32_temp(max_edges);

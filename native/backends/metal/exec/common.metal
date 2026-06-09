@@ -78,6 +78,53 @@ inline bool find_input_row(
     return false;
 }
 
+inline int exec_coord_hash_i32(int b, int x, int y, int z) {
+    uint hash = 2166136261u;
+    hash = (hash ^ uint(b)) * 16777619u;
+    hash = (hash ^ uint(x)) * 16777619u;
+    hash = (hash ^ uint(y)) * 16777619u;
+    hash = (hash ^ uint(z)) * 16777619u;
+    int out = int(hash & 0x7fffffffu);
+    return out == int(0x7fffffff) ? out - 1 : out;
+}
+
+inline int exec_coord_hash_i32(device const int* coords, int row) {
+    int base = row * 4;
+    return exec_coord_hash_i32(
+        coords[base], coords[base + 1], coords[base + 2], coords[base + 3]
+    );
+}
+
+inline int exec_coord_hash_i32(thread const int* coord) {
+    return exec_coord_hash_i32(coord[0], coord[1], coord[2], coord[3]);
+}
+
+inline int lookup_input_row_hash(
+    device const int* coords,
+    device const int* table_keys,
+    device const int* table_rows,
+    int table_capacity,
+    int empty_key,
+    thread const int* target
+) {
+    int key = exec_coord_hash_i32(target);
+    int slot = key & (table_capacity - 1);
+    for (int probe = 0; probe < table_capacity; ++probe) {
+        int found = table_keys[slot];
+        if (found == empty_key) {
+            return -1;
+        }
+        if (found == key) {
+            int row = table_rows[slot];
+            if (row >= 0 && coord4_equal(target, coords, row)) {
+                return row;
+            }
+        }
+        slot = (slot + 1) & (table_capacity - 1);
+    }
+    return -1;
+}
+
 inline bool valid_forward_relation_coord(
     device const int* coords,
     int rows,
@@ -362,6 +409,46 @@ inline int weight_offset(
     (void)kernel_x;
     return out_channel * weight_s0 + kx * weight_s1 + ky * weight_s2 +
            kz * weight_s3 + in_channel * weight_s4;
+}
+
+inline float4 weight4_at(
+    device const float* weights,
+    int kernel_id,
+    int in_channel,
+    int out_channel,
+    int weight_layout,
+    int kernel_y,
+    int kernel_z,
+    int weight_s0,
+    int weight_s1,
+    int weight_s2,
+    int weight_s3,
+    int weight_s4
+) {
+    if (weight_layout == 0) {
+        int base = kernel_id * weight_s0 + in_channel * weight_s1 +
+                   out_channel * weight_s2;
+        return float4(
+            weights[base],
+            weights[base + weight_s2],
+            weights[base + 2 * weight_s2],
+            weights[base + 3 * weight_s2]
+        );
+    }
+
+    int xy = kernel_y * kernel_z;
+    int kx = kernel_id / xy;
+    int rem = kernel_id % xy;
+    int ky = rem / kernel_z;
+    int kz = rem % kernel_z;
+    int base = out_channel * weight_s0 + kx * weight_s1 + ky * weight_s2 +
+               kz * weight_s3 + in_channel * weight_s4;
+    return float4(
+        weights[base],
+        weights[base + weight_s0],
+        weights[base + 2 * weight_s0],
+        weights[base + 3 * weight_s0]
+    );
 }
 
 inline int dense_weight_offset(
