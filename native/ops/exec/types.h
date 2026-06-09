@@ -12,6 +12,11 @@ enum class PoolReduceOp {
     Avg,
 };
 
+enum class PoolInputLayout {
+    Overlap,
+    Exclusive,
+};
+
 enum class SparseMapOp {
     Forward,
     Transposed,
@@ -48,6 +53,7 @@ struct SparsePoolShape {
     int out_capacity;
     int n_kernels;
     int channels;
+    bool input_exclusive;
 };
 
 } // namespace mlx_lattice

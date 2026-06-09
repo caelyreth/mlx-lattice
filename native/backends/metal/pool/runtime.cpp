@@ -55,19 +55,20 @@ void bind_autodiff_shape(
     Encoder& encoder,
     const std::vector<mx::array>& inputs,
     PoolReduceOp reduce,
-    SparsePoolShape shape
+    SparsePoolShape shape,
+    int first_index
 ) {
-    encoder.set_bytes(reduce_id(reduce), 9);
-    encoder.set_bytes(shape.in_capacity, 10);
-    encoder.set_bytes(shape.out_capacity, 11);
-    encoder.set_bytes(shape.n_kernels, 12);
-    encoder.set_bytes(shape.channels, 13);
-    encoder.set_bytes(stride_at(inputs[0], 0), 14);
-    encoder.set_bytes(stride_at(inputs[0], 1), 15);
-    encoder.set_bytes(stride_at(inputs[1], 0), 16);
-    encoder.set_bytes(stride_at(inputs[1], 1), 17);
-    encoder.set_bytes(stride_at(inputs[2], 0), 18);
-    encoder.set_bytes(stride_at(inputs[2], 1), 19);
+    encoder.set_bytes(reduce_id(reduce), first_index);
+    encoder.set_bytes(shape.in_capacity, first_index + 1);
+    encoder.set_bytes(shape.out_capacity, first_index + 2);
+    encoder.set_bytes(shape.n_kernels, first_index + 3);
+    encoder.set_bytes(shape.channels, first_index + 4);
+    encoder.set_bytes(stride_at(inputs[0], 0), first_index + 5);
+    encoder.set_bytes(stride_at(inputs[0], 1), first_index + 6);
+    encoder.set_bytes(stride_at(inputs[1], 0), first_index + 7);
+    encoder.set_bytes(stride_at(inputs[1], 1), first_index + 8);
+    encoder.set_bytes(stride_at(inputs[2], 0), first_index + 9);
+    encoder.set_bytes(stride_at(inputs[2], 1), first_index + 10);
 }
 #endif
 
@@ -89,7 +90,7 @@ void eval(
     auto& encoder = mx::metal::get_command_encoder(stream);
     auto kernel = device.get_kernel("sparse_pool_relation_f32_i32", library);
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < int(inputs.size()); ++index) {
+    for (int index = 0; index < 6; ++index) {
         encoder.set_input_array(inputs[index], index);
     }
     encoder.set_output_array(out, 6);
@@ -124,31 +125,27 @@ void eval_grad(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto clear = device.get_kernel("sparse_pool_autodiff_clear_f32", library);
-    encoder.set_compute_pipeline_state(clear);
-    encoder.set_output_array(out, 0);
-    auto total = static_cast<int>(out.size());
-    encoder.set_bytes(total, 1);
-    dispatch_1d(encoder, clear, static_cast<size_t>(total));
 
-    auto kernel = device.get_kernel(
-        reduce == PoolReduceOp::Max
-            ? "sparse_pool_relation_grad_f32_i32"
-            : "sparse_pool_relation_sum_avg_grad_f32_i32",
-        library
-    );
+    auto kernel_name = "sparse_pool_relation_sum_avg_input_grad_f32_i32";
+    if (reduce == PoolReduceOp::Max) {
+        kernel_name = "sparse_pool_relation_max_input_grad_f32_i32";
+    } else if (shape.input_exclusive) {
+        kernel_name =
+            "sparse_pool_relation_sum_avg_exclusive_input_grad_f32_i32";
+    }
+    auto kernel = device.get_kernel(kernel_name, library);
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 8);
-    bind_autodiff_shape(encoder, inputs, reduce, shape);
-    auto threads = reduce == PoolReduceOp::Max
-                       ? static_cast<size_t>(shape.out_capacity) *
-                             static_cast<size_t>(shape.channels)
-                       : static_cast<size_t>(inputs[3].shape(0)) *
-                             static_cast<size_t>(shape.channels);
-    dispatch_1d(encoder, kernel, threads);
+    encoder.set_output_array(out, 10);
+    bind_autodiff_shape(encoder, inputs, reduce, shape, 11);
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(shape.in_capacity) *
+            static_cast<size_t>(shape.channels)
+    );
 #else
     (void)reduce;
     (void)shape;
@@ -179,8 +176,8 @@ void eval_jvp(
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 8);
-    bind_autodiff_shape(encoder, inputs, reduce, shape);
+    encoder.set_output_array(out, 10);
+    bind_autodiff_shape(encoder, inputs, reduce, shape, 11);
     dispatch_1d(
         encoder,
         kernel,

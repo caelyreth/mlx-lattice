@@ -2,16 +2,6 @@
 
 using namespace metal;
 
-[[kernel]] void sparse_pool_autodiff_clear_f32(
-    device float* out [[buffer(0)]],
-    constant const int& total [[buffer(1)]],
-    uint elem [[thread_position_in_grid]]
-) {
-    if (elem < uint(total)) {
-        out[elem] = 0.0f;
-    }
-}
-
 inline int pool_edge_rank(
     device const int* in_rows,
     device const int* kernel_ids,
@@ -21,76 +11,28 @@ inline int pool_edge_rank(
     return in_rows[edge] * n_kernels + kernel_ids[edge];
 }
 
-[[kernel]] void sparse_pool_relation_grad_f32_i32(
-    device const float* cotangent [[buffer(0)]],
-    device const float* feats [[buffer(1)]],
-    device const float* pooled [[buffer(2)]],
-    device const int* in_rows [[buffer(3)]],
-    device const int* out_rows [[buffer(4)]],
-    device const int* kernel_ids [[buffer(5)]],
-    device const int* row_offsets [[buffer(6)]],
-    device const int* counts [[buffer(7)]],
-    device atomic_float* grad [[buffer(8)]],
-    constant const int& reduce [[buffer(9)]],
-    constant const int& in_capacity [[buffer(10)]],
-    constant const int& out_capacity [[buffer(11)]],
-    constant const int& n_kernels [[buffer(12)]],
-    constant const int& channels [[buffer(13)]],
-    constant const int& cotangent_s0 [[buffer(14)]],
-    constant const int& cotangent_s1 [[buffer(15)]],
-    constant const int& feat_s0 [[buffer(16)]],
-    constant const int& feat_s1 [[buffer(17)]],
-    constant const int& pooled_s0 [[buffer(18)]],
-    constant const int& pooled_s1 [[buffer(19)]],
-    uint elem [[thread_position_in_grid]]
+inline int pool_max_tie_count(
+    device const float* feats,
+    device const int* in_rows,
+    device const int* row_offsets,
+    int out_row,
+    int channel,
+    float pooled_value,
+    int feat_s0,
+    int feat_s1
 ) {
-    (void)out_rows;
-    (void)kernel_ids;
-    (void)in_capacity;
-    (void)n_kernels;
-    int total = out_capacity * channels;
-    if (elem >= uint(total)) {
-        return;
-    }
-
-    int out_row = int(elem) / channels;
-    int channel = int(elem) - out_row * channels;
-    if (out_row >= counts[1]) {
-        return;
-    }
-
-    float pooled_value = pooled[out_row * pooled_s0 + channel * pooled_s1];
-    int contributors = row_offsets[out_row + 1] - row_offsets[out_row];
-    if (reduce == 1) {
-        contributors = 0;
-        for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
-             ++edge) {
-            int in_row = in_rows[edge];
-            if (feats[in_row * feat_s0 + channel * feat_s1] == pooled_value) {
-                ++contributors;
-            }
-        }
-    }
-
-    float scale = reduce == 0 ? 1.0f : 1.0f / float(max(contributors, 1));
-    float contribution =
-        cotangent[out_row * cotangent_s0 + channel * cotangent_s1] * scale;
+    int count = 0;
     for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
          ++edge) {
         int in_row = in_rows[edge];
-        if (reduce == 1 &&
-            feats[in_row * feat_s0 + channel * feat_s1] != pooled_value) {
-            continue;
+        if (feats[in_row * feat_s0 + channel * feat_s1] == pooled_value) {
+            ++count;
         }
-        atomic_fetch_add_explicit(
-            &grad[in_row * channels + channel],
-            contribution,
-            memory_order_relaxed
-        );
     }
+    return count;
 }
 
-[[kernel]] void sparse_pool_relation_sum_avg_grad_f32_i32(
+[[kernel]] void sparse_pool_relation_sum_avg_input_grad_f32_i32(
     device const float* cotangent [[buffer(0)]],
     device const float* feats [[buffer(1)]],
     device const float* pooled [[buffer(2)]],
@@ -99,50 +41,194 @@ inline int pool_edge_rank(
     device const int* kernel_ids [[buffer(5)]],
     device const int* row_offsets [[buffer(6)]],
     device const int* counts [[buffer(7)]],
-    device atomic_float* grad [[buffer(8)]],
-    constant const int& reduce [[buffer(9)]],
-    constant const int& in_capacity [[buffer(10)]],
-    constant const int& out_capacity [[buffer(11)]],
-    constant const int& n_kernels [[buffer(12)]],
-    constant const int& channels [[buffer(13)]],
-    constant const int& cotangent_s0 [[buffer(14)]],
-    constant const int& cotangent_s1 [[buffer(15)]],
-    constant const int& feat_s0 [[buffer(16)]],
-    constant const int& feat_s1 [[buffer(17)]],
-    constant const int& pooled_s0 [[buffer(18)]],
-    constant const int& pooled_s1 [[buffer(19)]],
+    device const int* in_row_offsets [[buffer(8)]],
+    device const int* in_edge_ids [[buffer(9)]],
+    device float* grad [[buffer(10)]],
+    constant const int& reduce [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& out_capacity [[buffer(13)]],
+    constant const int& n_kernels [[buffer(14)]],
+    constant const int& channels [[buffer(15)]],
+    constant const int& cotangent_s0 [[buffer(16)]],
+    constant const int& cotangent_s1 [[buffer(17)]],
+    constant const int& feat_s0 [[buffer(18)]],
+    constant const int& feat_s1 [[buffer(19)]],
+    constant const int& pooled_s0 [[buffer(20)]],
+    constant const int& pooled_s1 [[buffer(21)]],
     uint elem [[thread_position_in_grid]]
 ) {
     (void)feats;
+    (void)in_rows;
     (void)kernel_ids;
-    (void)in_capacity;
     (void)n_kernels;
     (void)feat_s0;
     (void)feat_s1;
     (void)pooled;
     (void)pooled_s0;
     (void)pooled_s1;
-    int edge_count = counts[0];
-    int total = edge_count * channels;
+    int total = in_capacity * channels;
     if (elem >= uint(total)) {
         return;
     }
 
-    int edge = int(elem) / channels;
-    int channel = int(elem) - edge * channels;
-    int in_row = in_rows[edge];
+    int in_row = int(elem) / channels;
+    int channel = int(elem) - in_row * channels;
+    float value = 0.0f;
+    int out_count = min(counts[1], out_capacity);
+    for (int cursor = in_row_offsets[in_row];
+         cursor < in_row_offsets[in_row + 1];
+         ++cursor) {
+        int edge = in_edge_ids[cursor];
+        if (edge < 0) {
+            continue;
+        }
+        int out_row = out_rows[edge];
+        if (out_row < 0 || out_row >= out_count) {
+            continue;
+        }
+        int degree = row_offsets[out_row + 1] - row_offsets[out_row];
+        float scale = reduce == 2 ? 1.0f / float(max(degree, 1)) : 1.0f;
+        value +=
+            cotangent[out_row * cotangent_s0 + channel * cotangent_s1] * scale;
+    }
+    grad[elem] = value;
+}
+
+[[kernel]] void sparse_pool_relation_sum_avg_exclusive_input_grad_f32_i32(
+    device const float* cotangent [[buffer(0)]],
+    device const float* feats [[buffer(1)]],
+    device const float* pooled [[buffer(2)]],
+    device const int* in_rows [[buffer(3)]],
+    device const int* out_rows [[buffer(4)]],
+    device const int* kernel_ids [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device const int* in_row_offsets [[buffer(8)]],
+    device const int* in_edge_ids [[buffer(9)]],
+    device float* grad [[buffer(10)]],
+    constant const int& reduce [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& out_capacity [[buffer(13)]],
+    constant const int& n_kernels [[buffer(14)]],
+    constant const int& channels [[buffer(15)]],
+    constant const int& cotangent_s0 [[buffer(16)]],
+    constant const int& cotangent_s1 [[buffer(17)]],
+    constant const int& feat_s0 [[buffer(18)]],
+    constant const int& feat_s1 [[buffer(19)]],
+    constant const int& pooled_s0 [[buffer(20)]],
+    constant const int& pooled_s1 [[buffer(21)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    (void)feats;
+    (void)in_rows;
+    (void)kernel_ids;
+    (void)n_kernels;
+    (void)feat_s0;
+    (void)feat_s1;
+    (void)pooled;
+    (void)pooled_s0;
+    (void)pooled_s1;
+    int total = in_capacity * channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int in_row = int(elem) / channels;
+    int channel = int(elem) - in_row * channels;
+    int start = in_row_offsets[in_row];
+    int stop = in_row_offsets[in_row + 1];
+    if (start >= stop) {
+        grad[elem] = 0.0f;
+        return;
+    }
+    int edge = in_edge_ids[start];
+    int out_count = min(counts[1], out_capacity);
+    if (edge < 0) {
+        grad[elem] = 0.0f;
+        return;
+    }
     int out_row = out_rows[edge];
-    if (in_row < 0 || out_row < 0 || out_row >= out_capacity) {
+    if (out_row < 0 || out_row >= out_count) {
+        grad[elem] = 0.0f;
         return;
     }
 
     int degree = row_offsets[out_row + 1] - row_offsets[out_row];
     float scale = reduce == 2 ? 1.0f / float(max(degree, 1)) : 1.0f;
-    float contribution =
+    grad[elem] =
         cotangent[out_row * cotangent_s0 + channel * cotangent_s1] * scale;
-    atomic_fetch_add_explicit(
-        &grad[in_row * channels + channel], contribution, memory_order_relaxed
-    );
+}
+
+[[kernel]] void sparse_pool_relation_max_input_grad_f32_i32(
+    device const float* cotangent [[buffer(0)]],
+    device const float* feats [[buffer(1)]],
+    device const float* pooled [[buffer(2)]],
+    device const int* in_rows [[buffer(3)]],
+    device const int* out_rows [[buffer(4)]],
+    device const int* kernel_ids [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device const int* in_row_offsets [[buffer(8)]],
+    device const int* in_edge_ids [[buffer(9)]],
+    device float* grad [[buffer(10)]],
+    constant const int& reduce [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& out_capacity [[buffer(13)]],
+    constant const int& n_kernels [[buffer(14)]],
+    constant const int& channels [[buffer(15)]],
+    constant const int& cotangent_s0 [[buffer(16)]],
+    constant const int& cotangent_s1 [[buffer(17)]],
+    constant const int& feat_s0 [[buffer(18)]],
+    constant const int& feat_s1 [[buffer(19)]],
+    constant const int& pooled_s0 [[buffer(20)]],
+    constant const int& pooled_s1 [[buffer(21)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    (void)kernel_ids;
+    (void)reduce;
+    (void)n_kernels;
+    int total = in_capacity * channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int in_row = int(elem) / channels;
+    int channel = int(elem) - in_row * channels;
+    float value = 0.0f;
+    int out_count = min(counts[1], out_capacity);
+    float feat_value = feats[in_row * feat_s0 + channel * feat_s1];
+    for (int cursor = in_row_offsets[in_row];
+         cursor < in_row_offsets[in_row + 1];
+         ++cursor) {
+        int edge = in_edge_ids[cursor];
+        if (edge < 0) {
+            continue;
+        }
+        int out_row = out_rows[edge];
+        if (out_row < 0 || out_row >= out_count) {
+            continue;
+        }
+        float pooled_value = pooled[out_row * pooled_s0 + channel * pooled_s1];
+        if (feat_value != pooled_value) {
+            continue;
+        }
+        int tie_count = pool_max_tie_count(
+            feats,
+            in_rows,
+            row_offsets,
+            out_row,
+            channel,
+            pooled_value,
+            feat_s0,
+            feat_s1
+        );
+        if (tie_count == 0) {
+            continue;
+        }
+        value += cotangent[out_row * cotangent_s0 + channel * cotangent_s1] /
+                 float(tie_count);
+    }
+    grad[elem] = value;
 }
 
 [[kernel]] void sparse_pool_relation_jvp_f32_i32(
@@ -154,22 +240,26 @@ inline int pool_edge_rank(
     device const int* kernel_ids [[buffer(5)]],
     device const int* row_offsets [[buffer(6)]],
     device const int* counts [[buffer(7)]],
-    device float* out [[buffer(8)]],
-    constant const int& reduce [[buffer(9)]],
-    constant const int& in_capacity [[buffer(10)]],
-    constant const int& out_capacity [[buffer(11)]],
-    constant const int& n_kernels [[buffer(12)]],
-    constant const int& channels [[buffer(13)]],
-    constant const int& tangent_s0 [[buffer(14)]],
-    constant const int& tangent_s1 [[buffer(15)]],
-    constant const int& feat_s0 [[buffer(16)]],
-    constant const int& feat_s1 [[buffer(17)]],
-    constant const int& pooled_s0 [[buffer(18)]],
-    constant const int& pooled_s1 [[buffer(19)]],
+    device const int* in_row_offsets [[buffer(8)]],
+    device const int* in_edge_ids [[buffer(9)]],
+    device float* out [[buffer(10)]],
+    constant const int& reduce [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& out_capacity [[buffer(13)]],
+    constant const int& n_kernels [[buffer(14)]],
+    constant const int& channels [[buffer(15)]],
+    constant const int& tangent_s0 [[buffer(16)]],
+    constant const int& tangent_s1 [[buffer(17)]],
+    constant const int& feat_s0 [[buffer(18)]],
+    constant const int& feat_s1 [[buffer(19)]],
+    constant const int& pooled_s0 [[buffer(20)]],
+    constant const int& pooled_s1 [[buffer(21)]],
     uint elem [[thread_position_in_grid]]
 ) {
     (void)out_rows;
     (void)in_capacity;
+    (void)in_row_offsets;
+    (void)in_edge_ids;
     int total = out_capacity * channels;
     if (elem >= uint(total)) {
         return;

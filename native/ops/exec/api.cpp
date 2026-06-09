@@ -124,8 +124,11 @@ mx::array sparse_pool_features(
     const mx::array& kernel_ids,
     const mx::array& row_offsets,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
     int out_capacity,
-    int n_kernels
+    int n_kernels,
+    PoolInputLayout input_layout
 ) {
     validate_sparse_pool_features(
         feats,
@@ -134,6 +137,8 @@ mx::array sparse_pool_features(
         kernel_ids,
         row_offsets,
         counts,
+        in_row_offsets,
+        in_edge_ids,
         out_capacity,
         n_kernels
     );
@@ -145,8 +150,11 @@ mx::array sparse_pool_features(
         kernel_ids,
         row_offsets,
         counts,
+        in_row_offsets,
+        in_edge_ids,
         out_capacity,
-        n_kernels
+        n_kernels,
+        input_layout
     );
 }
 

@@ -46,6 +46,8 @@ struct RelationView {
     const int32_t* kernel_ids;
     const int32_t* row_offsets;
     const int32_t* counts;
+    const int32_t* in_row_offsets;
+    const int32_t* in_edge_ids;
 };
 
 RelationView relation_view(const std::vector<mx::array>& inputs) {
@@ -55,6 +57,8 @@ RelationView relation_view(const std::vector<mx::array>& inputs) {
         inputs[3].data<int32_t>(),
         inputs[4].data<int32_t>(),
         inputs[5].data<int32_t>(),
+        inputs[6].data<int32_t>(),
+        inputs[7].data<int32_t>(),
     };
 }
 
@@ -65,6 +69,8 @@ RelationView autodiff_relation_view(const std::vector<mx::array>& inputs) {
         inputs[5].data<int32_t>(),
         inputs[6].data<int32_t>(),
         inputs[7].data<int32_t>(),
+        inputs[8].data<int32_t>(),
+        inputs[9].data<int32_t>(),
     };
 }
 
@@ -80,6 +86,12 @@ std::vector<int32_t> row_degrees(const int32_t* row_offsets, int out_capacity) {
 struct MaxTiePolicy {
     std::vector<int32_t> counts;
     std::vector<int32_t> first_ranks;
+};
+
+struct MaxTieQuery {
+    float pooled_value;
+    int out_row;
+    int channel;
 };
 
 MaxTiePolicy build_max_tie_policy(
@@ -125,6 +137,27 @@ MaxTiePolicy build_max_tie_policy(
         }
     }
     return policy;
+}
+
+int max_tie_count(
+    RelationView relation,
+    const mx::array& feats,
+    MaxTieQuery query
+) {
+    const auto* feat_data = feats.data<float>();
+    auto count = 0;
+    for (int edge = relation.row_offsets[query.out_row];
+         edge < relation.row_offsets[query.out_row + 1];
+         ++edge) {
+        auto in_row = relation.in_rows[edge];
+        auto feat_value = feat_data
+            [static_cast<std::ptrdiff_t>(in_row) * feats.strides(0) +
+             static_cast<std::ptrdiff_t>(query.channel) * feats.strides(1)];
+        if (feat_value == query.pooled_value) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 } // namespace
@@ -215,30 +248,28 @@ void eval_grad(
             const auto& feats = ready[1];
             const auto& pooled = ready[2];
             auto relation = autodiff_relation_view(ready);
-            auto degrees =
-                row_degrees(relation.row_offsets, shape.out_capacity);
-            auto ties =
-                reduce == PoolReduceOp::Max
-                    ? build_max_tie_policy(relation, feats, pooled, shape)
-                    : MaxTiePolicy{};
 
             auto& grad = task_outputs[0];
-            fill_zero(grad);
             auto* grad_data = grad.data<float>();
             const auto* cotangent_data = cotangent.data<float>();
             const auto* feat_data = feats.data<float>();
             const auto* pooled_data = pooled.data<float>();
             auto out_count = std::min(relation.counts[1], shape.out_capacity);
 
-            for (int out_row = 0; out_row < out_count; ++out_row) {
-                for (int edge = relation.row_offsets[out_row];
-                     edge < relation.row_offsets[out_row + 1];
-                     ++edge) {
-                    auto in_row = relation.in_rows[edge];
-                    auto* grad_row =
-                        grad_data +
-                        static_cast<std::ptrdiff_t>(in_row) * shape.channels;
-                    for (int channel = 0; channel < shape.channels; ++channel) {
+            for (int in_row = 0; in_row < shape.in_capacity; ++in_row) {
+                for (int channel = 0; channel < shape.channels; ++channel) {
+                    auto value = 0.0F;
+                    for (int cursor = relation.in_row_offsets[in_row];
+                         cursor < relation.in_row_offsets[in_row + 1];
+                         ++cursor) {
+                        auto edge = relation.in_edge_ids[cursor];
+                        if (edge < 0) {
+                            continue;
+                        }
+                        auto out_row = relation.out_rows[edge];
+                        if (out_row < 0 || out_row >= out_count) {
+                            continue;
+                        }
                         auto scale = 1.0F;
                         if (reduce == PoolReduceOp::Max) {
                             auto feat_value = feat_data
@@ -254,26 +285,35 @@ void eval_grad(
                             if (feat_value != pooled_value) {
                                 continue;
                             }
-                            auto count = ties.counts[channel_key(
-                                out_row, channel, shape.channels
-                            )];
+                            auto count = max_tie_count(
+                                relation,
+                                feats,
+                                MaxTieQuery{
+                                    pooled_value,
+                                    out_row,
+                                    channel,
+                                }
+                            );
                             if (count == 0) {
                                 continue;
                             }
                             scale = 1.0F / float(count);
                         } else if (reduce == PoolReduceOp::Avg) {
-                            scale =
-                                1.0F /
-                                float(std::max(degrees[out_row], int32_t{1}));
+                            auto degree = relation.row_offsets[out_row + 1] -
+                                          relation.row_offsets[out_row];
+                            scale = 1.0F / float(std::max(degree, int32_t{1}));
                         }
-                        grad_row[channel] +=
-                            cotangent_data
-                                [static_cast<std::ptrdiff_t>(out_row) *
-                                     cotangent.strides(0) +
-                                 static_cast<std::ptrdiff_t>(channel) *
-                                     cotangent.strides(1)] *
-                            scale;
+                        value += cotangent_data
+                                     [static_cast<std::ptrdiff_t>(out_row) *
+                                          cotangent.strides(0) +
+                                      static_cast<std::ptrdiff_t>(channel) *
+                                          cotangent.strides(1)] *
+                                 scale;
                     }
+                    auto* grad_row =
+                        grad_data +
+                        static_cast<std::ptrdiff_t>(in_row) * shape.channels;
+                    grad_row[channel] = value;
                 }
             }
         }

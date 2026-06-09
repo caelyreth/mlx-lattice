@@ -145,6 +145,9 @@ def _fused_pool(
         relation.edges.kernel_ids,
         relation.row_offsets,
         relation.counts,
+        relation.in_row_offsets,
+        relation.in_edge_ids,
+        _input_exclusive(spec),
         mode,
         relation.n_out_capacity,
         relation.n_kernels,
@@ -220,6 +223,18 @@ def _validate_pool_dtype(feats: mx.array) -> None:
 def _validate_metal_coord_dtype(x: SparseTensor) -> None:
     if mx.default_device() == mx.gpu and x.coords.dtype != mx.int32:
         raise ValueError('Metal sparse pooling requires int32 coordinates.')
+
+
+def _input_exclusive(spec: KernelSpec) -> bool:
+    return all(
+        stride >= (size - 1) * dilation + 1
+        for stride, size, dilation in zip(
+            spec.stride,
+            spec.size,
+            spec.dilation,
+            strict=True,
+        )
+    )
 
 
 def _mul_stride(lhs: Triple, rhs: Triple) -> Triple:

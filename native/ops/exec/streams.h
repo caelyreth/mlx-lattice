@@ -23,7 +23,9 @@ mx::Stream sparse_pool_features_stream(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& row_offsets,
-    const mx::array& counts
+    const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids
 );
 
 } // namespace mlx_lattice

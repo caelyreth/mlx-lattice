@@ -27,8 +27,11 @@ mx::array make_sparse_pool_features(
     const mx::array& kernel_ids,
     const mx::array& row_offsets,
     const mx::array& counts,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
     int out_capacity,
-    int n_kernels
+    int n_kernels,
+    PoolInputLayout input_layout
 );
 
 } // namespace mlx_lattice

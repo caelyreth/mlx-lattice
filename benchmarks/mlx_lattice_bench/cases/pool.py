@@ -103,12 +103,10 @@ def _compiled(
     kind: PoolKind,
 ) -> Callable[[SparseArrays], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: SparseArrays) -> tuple[Any, tuple[Any, ...]]:
+        base = fixture.tensor()
+
         def fn(feats: mx.array) -> Any:
-            x = SparseTensor(
-                fixture.coords,
-                feats,
-                batch_counts=fixture.batch_counts,
-            )
+            x = base.replace(feats=feats)
             return (
                 _run(kind, x).feats
                 if kind in ('sum', 'max', 'avg')
@@ -124,12 +122,10 @@ def _backward(
     kind: PoolKind,
 ) -> Callable[[SparseArrays], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: SparseArrays) -> tuple[Any, tuple[Any, ...]]:
+        base = fixture.tensor()
+
         def loss(feats: mx.array) -> mx.array:
-            x = SparseTensor(
-                fixture.coords,
-                feats,
-                batch_counts=fixture.batch_counts,
-            )
+            x = base.replace(feats=feats)
             out = _run(kind, x)
             values = out.feats if kind in ('sum', 'max', 'avg') else out
             return mx.sum(values)
