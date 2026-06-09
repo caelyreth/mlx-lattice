@@ -73,7 +73,7 @@ int next_power_of_two(int value) {
     return out;
 }
 
-int relation_hash_capacity(int rows) {
+int coord_hash_capacity(int rows) {
     return next_power_of_two(std::max(rows * 2, 1));
 }
 
@@ -246,8 +246,7 @@ NativeKernelRelation make_kernel_relation(
     auto max_out_rows = rows;
     auto max_edges = max_out_rows * kernel_count;
     auto device = coord_device();
-    auto scratch_rows =
-        is_gpu_device(device) ? relation_hash_capacity(rows) : 0;
+    auto scratch_rows = is_gpu_device(device) ? coord_hash_capacity(rows) : 0;
     auto outputs = make_relation_outputs(
         relation_output_spec(
             max_edges, max_out_rows, coords.dtype(), scratch_rows

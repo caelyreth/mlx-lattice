@@ -50,7 +50,7 @@ inline void write_edge(
     kernel_ids[row] = kernel_id;
 }
 
-inline int relation_coord_hash_i32(int b, int x, int y, int z) {
+inline int coord_hash_i32(int b, int x, int y, int z) {
     uint hash = 2166136261u;
     hash = (hash ^ uint(b)) * 16777619u;
     hash = (hash ^ uint(x)) * 16777619u;
@@ -59,24 +59,24 @@ inline int relation_coord_hash_i32(int b, int x, int y, int z) {
     return int(hash & 0x7fffffffu);
 }
 
-inline int relation_coord_hash_i32(device const int* coords, int row) {
+inline int coord_hash_i32(device const int* coords, int row) {
     int base = row * 4;
-    return relation_coord_hash_i32(
+    return coord_hash_i32(
         coords[base], coords[base + 1], coords[base + 2], coords[base + 3]
     );
 }
 
-inline int relation_coord_hash_i32(thread const int* coord) {
-    return relation_coord_hash_i32(coord[0], coord[1], coord[2], coord[3]);
+inline int coord_hash_i32(thread const int* coord) {
+    return coord_hash_i32(coord[0], coord[1], coord[2], coord[3]);
 }
 
-inline int lookup_relation_row_hash(
+inline int lookup_coord_row_hash(
     device const int* coords,
     device const int* table_rows,
     int table_capacity,
     thread const int* target
 ) {
-    int key = relation_coord_hash_i32(target);
+    int key = coord_hash_i32(target);
     int slot = key & (table_capacity - 1);
     for (int probe = 0; probe < table_capacity; ++probe) {
         int row = table_rows[slot];
@@ -89,6 +89,34 @@ inline int lookup_relation_row_hash(
         slot = (slot + 1) & (table_capacity - 1);
     }
     return -1;
+}
+
+inline void insert_coord_row_hash(
+    device const int* coords,
+    int row,
+    device atomic_int* table_rows,
+    int table_capacity
+) {
+    int slot = coord_hash_i32(coords, row) & (table_capacity - 1);
+    for (int probe = 0; probe < table_capacity; ++probe) {
+        int expected = -1;
+        if (atomic_compare_exchange_weak_explicit(
+                &table_rows[slot],
+                &expected,
+                row,
+                memory_order_relaxed,
+                memory_order_relaxed
+            )) {
+            return;
+        }
+        if (expected >= 0 && coord_equal(coords, expected, coords, row)) {
+            atomic_fetch_min_explicit(
+                &table_rows[slot], row, memory_order_relaxed
+            );
+            return;
+        }
+        slot = (slot + 1) & (table_capacity - 1);
+    }
 }
 
 inline float squared_spatial_distance(

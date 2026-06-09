@@ -154,6 +154,7 @@ void eval(
         auto empty_key = int(0x7fffffff);
         auto table_keys = make_int32_temp(table_capacity);
         auto table_rows = make_int32_temp(table_capacity);
+        encoder.add_temporaries({table_keys, table_rows});
         auto kernel = device.get_kernel(
             "sparse_pool_downsample_coords_hash_i32", library
         );

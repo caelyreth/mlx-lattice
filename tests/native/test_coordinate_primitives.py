@@ -349,6 +349,79 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
     )
 
 
+def test_metal_coordinate_sets_preserve_stable_duplicate_semantics() -> (
+    None
+):
+    def run() -> tuple[
+        list[list[int]],
+        list[list[int]],
+        list[list[int]],
+        list[int],
+        list[list[int]],
+    ]:
+        lhs = mx.array(
+            [
+                [0, 2, 0, 0],
+                [0, -1, 0, 0],
+                [0, 2, 0, 0],
+                [1, 0, 0, 0],
+            ],
+            dtype=mx.int32,
+        )
+        rhs = mx.array(
+            [
+                [0, -1, 0, 0],
+                [0, 3, 0, 0],
+                [0, 3, 0, 0],
+                [1, 0, 0, 0],
+                [1, 1, 0, 0],
+            ],
+            dtype=mx.int32,
+        )
+        queries = mx.array(
+            [[0, 2, 0, 0], [0, -1, 0, 0], [0, 9, 0, 0]],
+            dtype=mx.int32,
+        )
+        empty = mx.array([], dtype=mx.int32).reshape((0, 4))
+        downsampled = downsample_coords(lhs, stride=(2, 1, 1))
+        union = union_coords(lhs, rhs)
+        intersection = intersection_coords(lhs, rhs)
+        lookup = lookup_coords(lhs, queries)
+        empty_union = union_coords(empty, empty)
+        mx.eval(
+            downsampled.coords,
+            downsampled.active_rows,
+            union.coords,
+            union.active_rows,
+            intersection.coords,
+            intersection.active_rows,
+            lookup,
+            empty_union.coords,
+            empty_union.active_rows,
+        )
+        return (
+            _coord_set_rows(downsampled),
+            _coord_set_rows(union),
+            _coord_set_rows(intersection),
+            cast('list[int]', lookup.tolist()),
+            _coord_set_rows(empty_union),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[0, 1, 0, 0], [0, -1, 0, 0], [1, 0, 0, 0]],
+        [
+            [0, 2, 0, 0],
+            [0, -1, 0, 0],
+            [1, 0, 0, 0],
+            [0, 3, 0, 0],
+            [1, 1, 0, 0],
+        ],
+        [[0, -1, 0, 0], [1, 0, 0, 0]],
+        [0, 1, -1],
+        [],
+    )
+
+
 def test_metal_strided_relation_preserves_stable_edge_contract() -> None:
     def run() -> tuple[
         list[list[int]],

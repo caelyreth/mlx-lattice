@@ -16,17 +16,6 @@ namespace mlx_lattice::coords::metal {
 
 namespace {
 
-const char* set_kernel_name(CoordSetOp op) {
-    switch (op) {
-    case CoordSetOp::Downsample:
-        return "downsample_coords_i32";
-    case CoordSetOp::Union:
-        return "union_coords_i32";
-    case CoordSetOp::Intersection:
-        return "intersection_coords_i32";
-    }
-}
-
 int neighbor_relation_op_id(NeighborRelationOp op) {
     switch (op) {
     case NeighborRelationOp::Knn:
@@ -59,11 +48,61 @@ mx::array make_int32_temp(int elements) {
     );
 }
 
+int next_power_of_two(int value) {
+    auto out = 1;
+    while (out < value) {
+        out <<= 1;
+    }
+    return out;
+}
+
+int coord_hash_capacity(int rows) {
+    return next_power_of_two(std::max(rows * 2, 1));
+}
+
+struct CoordHashShape {
+    int rows;
+    int capacity;
+};
+
 template <typename Encoder, typename Kernel>
 void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
     auto threads = std::max<size_t>(elements, 1);
     auto group = std::min(threads, kernel->maxTotalThreadsPerThreadgroup());
     encoder.dispatch_threads(MTL::Size(threads, 1, 1), MTL::Size(group, 1, 1));
+}
+
+template <typename Device, typename Library, typename Encoder>
+void clear_coord_hash(
+    Device& device,
+    Library& library,
+    Encoder& encoder,
+    mx::array& table,
+    int capacity
+) {
+    auto clear = device.get_kernel("coord_hash_clear_i32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(table, 0);
+    encoder.set_bytes(capacity, 1);
+    dispatch_1d(encoder, clear, static_cast<size_t>(capacity));
+}
+
+template <typename Device, typename Library, typename Encoder>
+void insert_coord_hash(
+    Device& device,
+    Library& library,
+    Encoder& encoder,
+    const mx::array& coords,
+    mx::array& table,
+    CoordHashShape shape
+) {
+    auto insert = device.get_kernel("coord_hash_insert_rows_i32", library);
+    encoder.set_compute_pipeline_state(insert);
+    encoder.set_input_array(coords, 0);
+    encoder.set_output_array(table, 1);
+    encoder.set_bytes(shape.rows, 2);
+    encoder.set_bytes(shape.capacity, 3);
+    dispatch_1d(encoder, insert, static_cast<size_t>(shape.rows));
 }
 #endif
 
@@ -123,23 +162,152 @@ void eval_set_coords(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel(set_kernel_name(op), library);
 
-    encoder.set_compute_pipeline_state(kernel);
-    encoder.set_input_array(inputs[0], 0);
-    if (op != CoordSetOp::Downsample) {
-        encoder.set_input_array(inputs[1], 1);
-        encoder.set_output_array(out_coords, 2);
-        encoder.set_output_array(count, 3);
-        encoder.set_bytes(shape.lhs_rows, 4);
-        encoder.set_bytes(shape.rhs_rows, 5);
-    } else {
-        encoder.set_output_array(out_coords, 1);
-        encoder.set_output_array(count, 2);
-        encoder.set_bytes(shape.lhs_rows, 3);
+    if (op == CoordSetOp::Downsample) {
+        auto table_capacity = coord_hash_capacity(shape.lhs_rows);
+        auto table = make_int32_temp(table_capacity);
+        auto selected = make_int32_temp(shape.lhs_rows);
+        encoder.add_temporaries({table, selected});
+        clear_coord_hash(device, library, encoder, table, table_capacity);
+        auto build =
+            device.get_kernel("build_downsample_coord_hash_i32", library);
+        encoder.set_compute_pipeline_state(build);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_output_array(table, 1);
+        encoder.set_bytes(shape.lhs_rows, 2);
+        encoder.set_bytes(table_capacity, 3);
         encoder.set_bytes(stride[0], 4);
         encoder.set_bytes(stride[1], 5);
         encoder.set_bytes(stride[2], 6);
+        dispatch_1d(encoder, build, static_cast<size_t>(shape.lhs_rows));
+
+        auto plan = device.get_kernel("plan_downsample_coord_set_i32", library);
+        encoder.set_compute_pipeline_state(plan);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(table, 1);
+        encoder.set_output_array(selected, 2);
+        encoder.set_bytes(shape.lhs_rows, 3);
+        encoder.set_bytes(table_capacity, 4);
+        encoder.set_bytes(stride[0], 5);
+        encoder.set_bytes(stride[1], 6);
+        encoder.set_bytes(stride[2], 7);
+        dispatch_1d(encoder, plan, static_cast<size_t>(shape.lhs_rows));
+
+        auto compact =
+            device.get_kernel("compact_downsample_coord_set_i32", library);
+        encoder.set_compute_pipeline_state(compact);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(selected, 1);
+        encoder.set_output_array(out_coords, 2);
+        encoder.set_output_array(count, 3);
+        encoder.set_bytes(shape.lhs_rows, 4);
+        encoder.set_bytes(stride[0], 5);
+        encoder.set_bytes(stride[1], 6);
+        encoder.set_bytes(stride[2], 7);
+    } else if (op == CoordSetOp::Union) {
+        auto total_rows = shape.lhs_rows + shape.rhs_rows;
+        auto lhs_table_capacity = coord_hash_capacity(shape.lhs_rows);
+        auto rhs_table_capacity = coord_hash_capacity(shape.rhs_rows);
+        auto lhs_table = make_int32_temp(lhs_table_capacity);
+        auto rhs_table = make_int32_temp(rhs_table_capacity);
+        auto selected = make_int32_temp(total_rows);
+        encoder.add_temporaries({lhs_table, rhs_table, selected});
+        clear_coord_hash(
+            device, library, encoder, lhs_table, lhs_table_capacity
+        );
+        clear_coord_hash(
+            device, library, encoder, rhs_table, rhs_table_capacity
+        );
+        insert_coord_hash(
+            device,
+            library,
+            encoder,
+            inputs[0],
+            lhs_table,
+            CoordHashShape{shape.lhs_rows, lhs_table_capacity}
+        );
+        insert_coord_hash(
+            device,
+            library,
+            encoder,
+            inputs[1],
+            rhs_table,
+            CoordHashShape{shape.rhs_rows, rhs_table_capacity}
+        );
+
+        auto plan = device.get_kernel("plan_union_coord_set_i32", library);
+        encoder.set_compute_pipeline_state(plan);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[1], 1);
+        encoder.set_input_array(lhs_table, 2);
+        encoder.set_input_array(rhs_table, 3);
+        encoder.set_output_array(selected, 4);
+        encoder.set_bytes(shape.lhs_rows, 5);
+        encoder.set_bytes(shape.rhs_rows, 6);
+        encoder.set_bytes(lhs_table_capacity, 7);
+        encoder.set_bytes(rhs_table_capacity, 8);
+        dispatch_1d(encoder, plan, static_cast<size_t>(total_rows));
+
+        auto compact =
+            device.get_kernel("compact_union_coord_set_i32", library);
+        encoder.set_compute_pipeline_state(compact);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[1], 1);
+        encoder.set_input_array(selected, 2);
+        encoder.set_output_array(out_coords, 3);
+        encoder.set_output_array(count, 4);
+        encoder.set_bytes(shape.lhs_rows, 5);
+        encoder.set_bytes(shape.rhs_rows, 6);
+    } else {
+        auto rhs_table_capacity = coord_hash_capacity(shape.rhs_rows);
+        auto lhs_table_capacity = coord_hash_capacity(shape.lhs_rows);
+        auto rhs_table = make_int32_temp(rhs_table_capacity);
+        auto lhs_table = make_int32_temp(lhs_table_capacity);
+        auto selected = make_int32_temp(shape.lhs_rows);
+        encoder.add_temporaries({rhs_table, lhs_table, selected});
+        clear_coord_hash(
+            device, library, encoder, rhs_table, rhs_table_capacity
+        );
+        clear_coord_hash(
+            device, library, encoder, lhs_table, lhs_table_capacity
+        );
+        insert_coord_hash(
+            device,
+            library,
+            encoder,
+            inputs[1],
+            rhs_table,
+            CoordHashShape{shape.rhs_rows, rhs_table_capacity}
+        );
+        insert_coord_hash(
+            device,
+            library,
+            encoder,
+            inputs[0],
+            lhs_table,
+            CoordHashShape{shape.lhs_rows, lhs_table_capacity}
+        );
+        auto plan =
+            device.get_kernel("plan_intersection_coord_set_i32", library);
+        encoder.set_compute_pipeline_state(plan);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[1], 1);
+        encoder.set_input_array(rhs_table, 2);
+        encoder.set_input_array(lhs_table, 3);
+        encoder.set_output_array(selected, 4);
+        encoder.set_bytes(shape.lhs_rows, 5);
+        encoder.set_bytes(rhs_table_capacity, 6);
+        encoder.set_bytes(lhs_table_capacity, 7);
+        dispatch_1d(encoder, plan, static_cast<size_t>(shape.lhs_rows));
+
+        auto compact =
+            device.get_kernel("compact_intersection_coord_set_i32", library);
+        encoder.set_compute_pipeline_state(compact);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(selected, 1);
+        encoder.set_output_array(out_coords, 2);
+        encoder.set_output_array(count, 3);
+        encoder.set_bytes(shape.lhs_rows, 4);
     }
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 #else
@@ -169,22 +337,28 @@ void eval_lookup_coords(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("lookup_coords_i32", library);
-    auto group = std::min(
-        static_cast<size_t>(std::max(shape.query_rows, 1)),
-        kernel->maxTotalThreadsPerThreadgroup()
+    auto table_capacity = coord_hash_capacity(shape.rows);
+    auto table = make_int32_temp(table_capacity);
+    encoder.add_temporary(table);
+    clear_coord_hash(device, library, encoder, table, table_capacity);
+    insert_coord_hash(
+        device,
+        library,
+        encoder,
+        inputs[0],
+        table,
+        CoordHashShape{shape.rows, table_capacity}
     );
 
+    auto kernel = device.get_kernel("lookup_coords_hash_i32", library);
     encoder.set_compute_pipeline_state(kernel);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
-    encoder.set_output_array(out, 2);
-    encoder.set_bytes(shape.rows, 3);
+    encoder.set_input_array(table, 2);
+    encoder.set_output_array(out, 3);
     encoder.set_bytes(shape.query_rows, 4);
-    encoder.dispatch_threads(
-        MTL::Size(static_cast<size_t>(std::max(shape.query_rows, 1)), 1, 1),
-        MTL::Size(group, 1, 1)
-    );
+    encoder.set_bytes(table_capacity, 5);
+    dispatch_1d(encoder, kernel, static_cast<size_t>(shape.query_rows));
 #else
     (void)shape;
     (void)stream;
@@ -214,15 +388,64 @@ void eval_sparse_quantize(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("sparse_quantize_f32_i32", library);
+    auto table_capacity = coord_hash_capacity(rows);
+    auto table = make_int32_temp(table_capacity);
+    auto selected = make_int32_temp(rows);
+    auto representative_voxels = make_int32_temp(rows);
+    encoder.add_temporaries({table, selected, representative_voxels});
+    clear_coord_hash(device, library, encoder, table, table_capacity);
 
-    encoder.set_compute_pipeline_state(kernel);
-    for (int i = 0; i < int(inputs.size()); ++i) {
-        encoder.set_input_array(inputs[i], i);
-    }
-    for (int i = 0; i < int(outputs.size()); ++i) {
-        encoder.set_output_array(outputs[i], i + 3);
-    }
+    auto clear = device.get_kernel("clear_sparse_quantization_i32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(outputs[0], 0);
+    encoder.set_output_array(outputs[1], 1);
+    encoder.set_output_array(outputs[2], 2);
+    encoder.set_output_array(outputs[3], 3);
+    encoder.set_bytes(rows, 4);
+    dispatch_1d(encoder, clear, static_cast<size_t>(rows) * 4);
+
+    auto build = device.get_kernel("build_quantized_point_hash_i32", library);
+    encoder.set_compute_pipeline_state(build);
+    encoder.set_input_array(inputs[0], 0);
+    encoder.set_input_array(inputs[1], 1);
+    encoder.set_input_array(inputs[2], 2);
+    encoder.set_output_array(table, 3);
+    encoder.set_bytes(rows, 4);
+    encoder.set_bytes(table_capacity, 5);
+    encoder.set_bytes(spec.voxel_size[0], 6);
+    encoder.set_bytes(spec.voxel_size[1], 7);
+    encoder.set_bytes(spec.voxel_size[2], 8);
+    encoder.set_bytes(spec.origin[0], 9);
+    encoder.set_bytes(spec.origin[1], 10);
+    encoder.set_bytes(spec.origin[2], 11);
+    dispatch_1d(encoder, build, static_cast<size_t>(rows));
+
+    auto plan = device.get_kernel("plan_quantized_points_i32", library);
+    encoder.set_compute_pipeline_state(plan);
+    encoder.set_input_array(inputs[0], 0);
+    encoder.set_input_array(inputs[1], 1);
+    encoder.set_input_array(inputs[2], 2);
+    encoder.set_input_array(table, 3);
+    encoder.set_output_array(selected, 4);
+    encoder.set_bytes(rows, 5);
+    encoder.set_bytes(table_capacity, 6);
+    encoder.set_bytes(spec.voxel_size[0], 7);
+    encoder.set_bytes(spec.voxel_size[1], 8);
+    encoder.set_bytes(spec.voxel_size[2], 9);
+    encoder.set_bytes(spec.origin[0], 10);
+    encoder.set_bytes(spec.origin[1], 11);
+    encoder.set_bytes(spec.origin[2], 12);
+    dispatch_1d(encoder, plan, static_cast<size_t>(rows));
+
+    auto compact = device.get_kernel("compact_quantized_points_i32", library);
+    encoder.set_compute_pipeline_state(compact);
+    encoder.set_input_array(inputs[0], 0);
+    encoder.set_input_array(inputs[1], 1);
+    encoder.set_input_array(inputs[2], 2);
+    encoder.set_input_array(selected, 3);
+    encoder.set_output_array(outputs[0], 4);
+    encoder.set_output_array(outputs[1], 5);
+    encoder.set_output_array(representative_voxels, 6);
     encoder.set_bytes(rows, 7);
     encoder.set_bytes(spec.voxel_size[0], 8);
     encoder.set_bytes(spec.voxel_size[1], 9);
@@ -231,6 +454,25 @@ void eval_sparse_quantize(
     encoder.set_bytes(spec.origin[1], 12);
     encoder.set_bytes(spec.origin[2], 13);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+    auto map = device.get_kernel("map_quantized_points_i32", library);
+    encoder.set_compute_pipeline_state(map);
+    encoder.set_input_array(inputs[0], 0);
+    encoder.set_input_array(inputs[1], 1);
+    encoder.set_input_array(inputs[2], 2);
+    encoder.set_input_array(table, 3);
+    encoder.set_input_array(representative_voxels, 4);
+    encoder.set_output_array(outputs[2], 5);
+    encoder.set_output_array(outputs[3], 6);
+    encoder.set_bytes(rows, 7);
+    encoder.set_bytes(table_capacity, 8);
+    encoder.set_bytes(spec.voxel_size[0], 9);
+    encoder.set_bytes(spec.voxel_size[1], 10);
+    encoder.set_bytes(spec.voxel_size[2], 11);
+    encoder.set_bytes(spec.origin[0], 12);
+    encoder.set_bytes(spec.origin[1], 13);
+    encoder.set_bytes(spec.origin[2], 14);
+    dispatch_1d(encoder, map, static_cast<size_t>(rows));
 #else
     (void)spec;
     (void)rows;
@@ -260,9 +502,16 @@ void eval_voxelize_features(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("voxelize_features_f32_i32", library);
+    auto elements = shape.voxel_rows * shape.channels;
+    auto clear = device.get_kernel("clear_voxelized_features_f32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(outputs[0], 0);
+    encoder.set_bytes(elements, 1);
+    dispatch_1d(encoder, clear, static_cast<size_t>(elements));
 
-    encoder.set_compute_pipeline_state(kernel);
+    auto scatter =
+        device.get_kernel("scatter_voxelized_features_f32_i32", library);
+    encoder.set_compute_pipeline_state(scatter);
     for (int i = 0; i < int(inputs.size()); ++i) {
         encoder.set_input_array(inputs[i], i);
     }
@@ -271,7 +520,12 @@ void eval_voxelize_features(
     encoder.set_bytes(shape.point_rows, 6);
     encoder.set_bytes(shape.voxel_rows, 7);
     encoder.set_bytes(shape.channels, 8);
-    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+    dispatch_1d(
+        encoder,
+        scatter,
+        static_cast<size_t>(shape.point_rows) *
+            static_cast<size_t>(shape.channels)
+    );
 #else
     (void)reduce;
     (void)shape;
@@ -312,7 +566,12 @@ void eval_voxelize_feature_grad(
     encoder.set_bytes(shape.point_rows, 6);
     encoder.set_bytes(shape.voxel_rows, 7);
     encoder.set_bytes(shape.channels, 8);
-    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(shape.point_rows) *
+            static_cast<size_t>(shape.channels)
+    );
 #else
     (void)reduce;
     (void)shape;
@@ -350,14 +609,16 @@ void eval_generic_kernel_relation(
         outputs.size() > RelationOutputCount) {
         auto table_capacity =
             static_cast<int>(outputs[RelationOutputCount].shape(0));
-        auto clear = device.get_kernel("relation_hash_clear_i32", library);
-        encoder.set_compute_pipeline_state(clear);
-        encoder.set_output_array(outputs[RelationOutputCount], 0);
-        encoder.set_output_array(outputs[RelationCounts], 1);
-        encoder.set_bytes(table_capacity, 2);
-        dispatch_1d(encoder, clear, static_cast<size_t>(table_capacity));
+        clear_coord_hash(
+            device,
+            library,
+            encoder,
+            outputs[RelationOutputCount],
+            table_capacity
+        );
 
-        auto insert = device.get_kernel("relation_hash_insert_i32", library);
+        auto insert =
+            device.get_kernel("coord_hash_insert_active_rows_i32", library);
         encoder.set_compute_pipeline_state(insert);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[2], 1);
@@ -368,11 +629,10 @@ void eval_generic_kernel_relation(
 
         if (!is_identity_forward_relation(stride, padding)) {
             auto out_table = make_int32_temp(table_capacity);
-            encoder.set_compute_pipeline_state(clear);
-            encoder.set_output_array(out_table, 0);
-            encoder.set_output_array(outputs[RelationCounts], 1);
-            encoder.set_bytes(table_capacity, 2);
-            dispatch_1d(encoder, clear, static_cast<size_t>(table_capacity));
+            encoder.add_temporary(out_table);
+            clear_coord_hash(
+                device, library, encoder, out_table, table_capacity
+            );
 
             auto build_outputs = device.get_kernel(
                 "build_strided_forward_output_coords_i32", library

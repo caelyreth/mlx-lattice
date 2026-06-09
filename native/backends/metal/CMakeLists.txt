@@ -30,7 +30,10 @@ if(MLX_LATTICE_HAS_METAL)
     TITLE mlx_lattice
     SOURCES
       ${CMAKE_CURRENT_LIST_DIR}/conv/kernels.metal
+      ${CMAKE_CURRENT_LIST_DIR}/coords/hash.metal
       ${CMAKE_CURRENT_LIST_DIR}/coords/kernels.metal
+      ${CMAKE_CURRENT_LIST_DIR}/coords/quantization.metal
+      ${CMAKE_CURRENT_LIST_DIR}/coords/set.metal
       ${CMAKE_CURRENT_LIST_DIR}/pool/autodiff.metal
       ${CMAKE_CURRENT_LIST_DIR}/pool/forward.metal
       ${CMAKE_CURRENT_LIST_DIR}/pool/topology.metal
