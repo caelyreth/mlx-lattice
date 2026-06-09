@@ -92,38 +92,53 @@ void eval(
             const auto& in_rows = ready[2];
             const auto& out_rows = ready[3];
             const auto& kernel_ids = ready[4];
+            const auto& row_offsets = ready[6];
 
             auto& out = task_outputs[0];
-            fill_zero(out);
             auto* out_data = out.data<float>();
             const auto* feat_data = feats.data<float>();
             const auto* weight_data = weights.data<float>();
             const auto* in_data = in_rows.data<int32_t>();
-            const auto* out_data_rows = out_rows.data<int32_t>();
             const auto* kernel_data = kernel_ids.data<int32_t>();
+            const auto* offset_data = row_offsets.data<int32_t>();
             const auto feat_s0 = feats.strides(0);
             const auto feat_s1 = feats.strides(1);
+            const auto edge_total = edge_count(in_rows, ready[5]);
+            const auto out_count =
+                std::min(ready[5].data<int32_t>()[1], shape.out_capacity);
 
-            for (int edge = 0; edge < edge_count(in_rows, ready[5]); ++edge) {
-                auto in_row = in_data[edge];
-                auto out_row = out_data_rows[edge];
-                auto kernel = kernel_data[edge];
-                if (in_row < 0 || out_row < 0 || kernel < 0 ||
-                    out_row >= shape.out_capacity) {
-                    continue;
-                }
+            (void)out_rows;
+            for (int out_row = 0; out_row < shape.out_capacity; ++out_row) {
                 auto* out_row_data =
                     out_data +
                     static_cast<std::ptrdiff_t>(out_row) * shape.out_channels;
-                for (int ci = 0; ci < shape.in_channels; ++ci) {
-                    auto value = feat_data
-                        [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
-                         static_cast<std::ptrdiff_t>(ci) * feat_s1];
-                    for (int co = 0; co < shape.out_channels; ++co) {
-                        out_row_data[co] +=
-                            value * weight_data[weight_offset(
-                                        weights, shape, kernel, ci, co
-                                    )];
+                std::fill(
+                    out_row_data, out_row_data + shape.out_channels, 0.0F
+                );
+                if (out_row >= out_count) {
+                    continue;
+                }
+                for (int edge = offset_data[out_row];
+                     edge < offset_data[out_row + 1];
+                     ++edge) {
+                    if (edge < 0 || edge >= edge_total) {
+                        continue;
+                    }
+                    auto in_row = in_data[edge];
+                    auto kernel = kernel_data[edge];
+                    if (in_row < 0 || kernel < 0) {
+                        continue;
+                    }
+                    for (int ci = 0; ci < shape.in_channels; ++ci) {
+                        auto value = feat_data
+                            [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
+                             static_cast<std::ptrdiff_t>(ci) * feat_s1];
+                        for (int co = 0; co < shape.out_channels; ++co) {
+                            out_row_data[co] +=
+                                value * weight_data[weight_offset(
+                                            weights, shape, kernel, ci, co
+                                        )];
+                        }
                     }
                 }
             }
@@ -151,8 +166,8 @@ void eval_input_grad(
             const auto& in_rows = ready[2];
             const auto& out_rows = ready[3];
             const auto& kernel_ids = ready[4];
-            const auto& in_row_offsets = ready[6];
-            const auto& in_edge_ids = ready[7];
+            const auto& in_row_offsets = ready[7];
+            const auto& in_edge_ids = ready[8];
 
             auto& grad = task_outputs[0];
             fill_zero(grad);
@@ -225,8 +240,8 @@ void eval_weight_grad(
             const auto& in_rows = ready[2];
             const auto& out_rows = ready[3];
             const auto& kernel_ids = ready[4];
-            const auto& kernel_row_offsets = ready[8];
-            const auto& kernel_edge_ids = ready[9];
+            const auto& kernel_row_offsets = ready[9];
+            const auto& kernel_edge_ids = ready[10];
 
             auto& grad = task_outputs[0];
             fill_zero(grad);

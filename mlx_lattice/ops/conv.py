@@ -152,6 +152,7 @@ def _relation_conv(
         relation.edges.out_rows,
         relation.edges.kernel_ids,
         relation.counts,
+        relation.row_offsets,
         relation.in_row_offsets,
         relation.in_edge_ids,
         relation.kernel_row_offsets,

@@ -21,6 +21,7 @@ mx::array make_sparse_conv_features_input_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& row_offsets,
     const mx::array& in_row_offsets,
     const mx::array& in_edge_ids,
     const mx::array& kernel_row_offsets,
@@ -35,6 +36,7 @@ mx::array make_sparse_conv_features_weight_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& row_offsets,
     const mx::array& in_row_offsets,
     const mx::array& in_edge_ids,
     const mx::array& kernel_row_offsets,
@@ -87,6 +89,7 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[7],
                     primals[8],
                     primals[9],
+                    primals[10],
                     shape_.out_capacity,
                     shape_.n_kernels
                 );
@@ -105,6 +108,7 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[7],
                     primals[8],
                     primals[9],
+                    primals[10],
                     shape_.out_capacity,
                     shape_.n_kernels
                 );
@@ -139,6 +143,7 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[7],
                     primals[8],
                     primals[9],
+                    primals[10],
                     shape_
                 ));
             } else if (argnum == 1) {
@@ -153,6 +158,7 @@ class SparseConvFeatures final : public SparsePrimitive {
                     primals[7],
                     primals[8],
                     primals[9],
+                    primals[10],
                     primals[1].shape(),
                     shape_
                 ));
@@ -279,6 +285,7 @@ mx::array make_sparse_conv_features(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& row_offsets,
     const mx::array& in_row_offsets,
     const mx::array& in_edge_ids,
     const mx::array& kernel_row_offsets,
@@ -305,6 +312,7 @@ mx::array make_sparse_conv_features(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
@@ -318,6 +326,7 @@ mx::array make_sparse_conv_features(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
@@ -340,6 +349,7 @@ mx::array make_sparse_conv_features_input_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& row_offsets,
     const mx::array& in_row_offsets,
     const mx::array& in_edge_ids,
     const mx::array& kernel_row_offsets,
@@ -353,6 +363,7 @@ mx::array make_sparse_conv_features_input_grad(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
@@ -367,6 +378,7 @@ mx::array make_sparse_conv_features_input_grad(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
@@ -387,6 +399,7 @@ mx::array make_sparse_conv_features_weight_grad(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& row_offsets,
     const mx::array& in_row_offsets,
     const mx::array& in_edge_ids,
     const mx::array& kernel_row_offsets,
@@ -401,6 +414,7 @@ mx::array make_sparse_conv_features_weight_grad(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
@@ -415,6 +429,7 @@ mx::array make_sparse_conv_features_weight_grad(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,

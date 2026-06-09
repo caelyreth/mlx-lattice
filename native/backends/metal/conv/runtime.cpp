@@ -29,13 +29,14 @@ template <typename Encoder>
 void bind_common_shape(
     Encoder& encoder,
     const std::vector<mx::array>& inputs,
-    SparseConvShape shape
+    SparseConvShape shape,
+    int first_index
 ) {
     auto edge_capacity = static_cast<int>(inputs[2].shape(0));
-    encoder.set_bytes(edge_capacity, 7);
-    encoder.set_bytes(shape.out_capacity, 8);
-    encoder.set_bytes(shape.in_channels, 9);
-    encoder.set_bytes(shape.out_channels, 10);
+    encoder.set_bytes(edge_capacity, first_index);
+    encoder.set_bytes(shape.out_capacity, first_index + 1);
+    encoder.set_bytes(shape.in_channels, first_index + 2);
+    encoder.set_bytes(shape.out_channels, first_index + 3);
 }
 
 template <typename Encoder>
@@ -74,6 +75,7 @@ void clear_output(
     encoder.set_bytes(total, 1);
     dispatch_1d(encoder, clear, static_cast<size_t>(total));
 }
+
 #endif
 
 } // namespace
@@ -91,23 +93,36 @@ void eval(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    clear_output(encoder, device, library, out);
 
-    auto kernel = device.get_kernel("sparse_relation_conv_f32_i32", library);
+    auto use_vec4 = shape.out_channels % 4 == 0;
+    auto use_gather = use_vec4 || shape.n_kernels == 1;
+    if (!use_gather) {
+        clear_output(encoder, device, library, out);
+    }
+    auto kernel = device.get_kernel(
+        use_vec4 ? "sparse_relation_conv_f32_i32_vec4"
+                 : (use_gather ? "sparse_relation_conv_f32_i32"
+                               : "sparse_relation_conv_atomic_f32_i32"),
+        library
+    );
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < 6; ++index) {
+    for (int index = 0; index < 7; ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 6);
-    bind_common_shape(encoder, inputs, shape);
-    encoder.set_bytes(stride_at(inputs[0], 0), 11);
-    encoder.set_bytes(stride_at(inputs[0], 1), 12);
-    bind_weight_shape(encoder, inputs[1], shape, 13);
+    encoder.set_output_array(out, 7);
+    bind_common_shape(encoder, inputs, shape, 8);
+    encoder.set_bytes(stride_at(inputs[0], 0), 12);
+    encoder.set_bytes(stride_at(inputs[0], 1), 13);
+    bind_weight_shape(encoder, inputs[1], shape, 14);
     dispatch_1d(
         encoder,
         kernel,
-        static_cast<size_t>(inputs[2].shape(0)) *
-            static_cast<size_t>(shape.out_channels)
+        use_vec4 ? static_cast<size_t>(shape.out_capacity) *
+                       static_cast<size_t>(shape.out_channels / 4)
+                 : static_cast<size_t>(
+                       use_gather ? shape.out_capacity
+                                  : static_cast<int>(inputs[2].shape(0))
+                   ) * static_cast<size_t>(shape.out_channels)
     );
 #else
     (void)shape;
@@ -132,26 +147,32 @@ void eval_input_grad(
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
 
-    auto kernel =
-        device.get_kernel("sparse_relation_conv_input_grad_f32_i32", library);
+    auto use_vec4 = shape.in_channels % 4 == 0;
+    auto kernel = device.get_kernel(
+        use_vec4 ? "sparse_relation_conv_input_grad_f32_i32_vec4"
+                 : "sparse_relation_conv_input_grad_f32_i32",
+        library
+    );
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 10);
-    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 11);
-    encoder.set_bytes(shape.out_capacity, 12);
-    encoder.set_bytes(shape.in_capacity, 13);
-    encoder.set_bytes(shape.in_channels, 14);
-    encoder.set_bytes(shape.out_channels, 15);
-    encoder.set_bytes(stride_at(inputs[0], 0), 16);
-    encoder.set_bytes(stride_at(inputs[0], 1), 17);
-    bind_weight_shape(encoder, inputs[1], shape, 18);
+    encoder.set_output_array(out, 11);
+    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 12);
+    encoder.set_bytes(shape.out_capacity, 13);
+    encoder.set_bytes(shape.in_capacity, 14);
+    encoder.set_bytes(shape.in_channels, 15);
+    encoder.set_bytes(shape.out_channels, 16);
+    encoder.set_bytes(stride_at(inputs[0], 0), 17);
+    encoder.set_bytes(stride_at(inputs[0], 1), 18);
+    bind_weight_shape(encoder, inputs[1], shape, 19);
     dispatch_1d(
         encoder,
         kernel,
-        static_cast<size_t>(shape.in_capacity) *
-            static_cast<size_t>(shape.in_channels)
+        use_vec4 ? static_cast<size_t>(shape.in_capacity) *
+                       static_cast<size_t>(shape.in_channels / 4)
+                 : static_cast<size_t>(shape.in_capacity) *
+                       static_cast<size_t>(shape.in_channels)
     );
 #else
     (void)shape;
@@ -175,32 +196,40 @@ void eval_weight_grad(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    clear_output(encoder, device, library, out);
 
-    auto kernel =
-        device.get_kernel("sparse_relation_conv_weight_grad_f32_i32", library);
+    auto use_gather = shape.n_kernels >= 16;
+    if (!use_gather) {
+        clear_output(encoder, device, library, out);
+    }
+    auto kernel = device.get_kernel(
+        use_gather ? "sparse_relation_conv_weight_grad_f32_i32"
+                   : "sparse_relation_conv_weight_grad_atomic_f32_i32",
+        library
+    );
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 10);
-    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 11);
-    encoder.set_bytes(shape.out_capacity, 12);
-    encoder.set_bytes(shape.in_channels, 13);
-    encoder.set_bytes(shape.out_channels, 14);
-    encoder.set_bytes(stride_at(inputs[0], 0), 15);
-    encoder.set_bytes(stride_at(inputs[0], 1), 16);
-    encoder.set_bytes(stride_at(inputs[1], 0), 17);
-    encoder.set_bytes(stride_at(inputs[1], 1), 18);
-    encoder.set_bytes(shape.weight_layout, 19);
-    encoder.set_bytes(shape.kernel_x, 20);
-    encoder.set_bytes(shape.kernel_y, 21);
-    encoder.set_bytes(shape.kernel_z, 22);
+    encoder.set_output_array(out, 11);
+    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 12);
+    encoder.set_bytes(shape.out_capacity, 13);
+    encoder.set_bytes(shape.n_kernels, 14);
+    encoder.set_bytes(shape.in_channels, 15);
+    encoder.set_bytes(shape.out_channels, 16);
+    encoder.set_bytes(stride_at(inputs[0], 0), 17);
+    encoder.set_bytes(stride_at(inputs[0], 1), 18);
+    encoder.set_bytes(stride_at(inputs[1], 0), 19);
+    encoder.set_bytes(stride_at(inputs[1], 1), 20);
+    encoder.set_bytes(shape.weight_layout, 21);
+    encoder.set_bytes(shape.kernel_x, 22);
+    encoder.set_bytes(shape.kernel_y, 23);
+    encoder.set_bytes(shape.kernel_z, 24);
     dispatch_1d(
         encoder,
         kernel,
-        static_cast<size_t>(inputs[2].shape(0)) *
-            static_cast<size_t>(shape.in_channels) *
+        static_cast<size_t>(
+            use_gather ? shape.n_kernels : static_cast<int>(inputs[2].shape(0))
+        ) * static_cast<size_t>(shape.in_channels) *
             static_cast<size_t>(shape.out_channels)
     );
 #else

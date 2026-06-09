@@ -14,6 +14,7 @@ mx::array sparse_conv_features(
     const mx::array& out_rows,
     const mx::array& kernel_ids,
     const mx::array& counts,
+    const mx::array& row_offsets,
     const mx::array& in_row_offsets,
     const mx::array& in_edge_ids,
     const mx::array& kernel_row_offsets,
@@ -57,13 +58,15 @@ mx::array sparse_conv_features(
             "counts must have shape (2,) and int32 dtype."
         );
     }
-    if (in_row_offsets.ndim() != 1 || in_edge_ids.ndim() != 1 ||
-        kernel_row_offsets.ndim() != 1 || kernel_edge_ids.ndim() != 1) {
+    if (row_offsets.ndim() != 1 || in_row_offsets.ndim() != 1 ||
+        in_edge_ids.ndim() != 1 || kernel_row_offsets.ndim() != 1 ||
+        kernel_edge_ids.ndim() != 1) {
         throw std::invalid_argument(
             "relation execution views must be one-dimensional."
         );
     }
-    if (in_row_offsets.dtype() != mx::int32 ||
+    if (row_offsets.dtype() != mx::int32 ||
+        in_row_offsets.dtype() != mx::int32 ||
         in_edge_ids.dtype() != mx::int32 ||
         kernel_row_offsets.dtype() != mx::int32 ||
         kernel_edge_ids.dtype() != mx::int32) {
@@ -75,6 +78,11 @@ mx::array sparse_conv_features(
         kernel_edge_ids.shape(0) != in_rows.shape(0)) {
         throw std::invalid_argument(
             "relation execution edge views must match edge capacity."
+        );
+    }
+    if (row_offsets.shape(0) != out_capacity + 1) {
+        throw std::invalid_argument(
+            "row_offsets length must match out_capacity + 1."
         );
     }
     auto weight_in_channels =
@@ -107,6 +115,7 @@ mx::array sparse_conv_features(
         out_rows,
         kernel_ids,
         counts,
+        row_offsets,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
