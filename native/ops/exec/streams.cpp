@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-#include "backends/metal/exec/runtime.h"
+#include "backends/metal/pool/runtime.h"
 #include "mlx/device.h"
 
 namespace mlx_lattice {
@@ -52,7 +52,7 @@ mx::Stream sparse_pool_stream(
     const mx::array& offsets
 ) {
     auto device = sparse_exec_device();
-    if (is_gpu_device(device) && !exec::metal::can_run_sparse_pool(
+    if (is_gpu_device(device) && !backend::metal::pool::is_supported(
                                      coords, active_rows, feats, offsets
                                  )) {
         throw std::invalid_argument(

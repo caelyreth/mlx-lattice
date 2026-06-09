@@ -1,0 +1,209 @@
+#include "backends/metal/conv/runtime.h"
+
+#include <algorithm>
+#include <stdexcept>
+
+#include "backends/array_utils.h"
+#include "backends/metal/runtime_utils.h"
+
+#ifdef _METAL_
+#include "mlx/backend/metal/device.h"
+#endif
+
+namespace mlx_lattice::backend::metal::conv {
+namespace {
+
+int stride_at(const mx::array& array, int dim) {
+    return static_cast<int>(array.strides(dim));
+}
+
+#ifdef _METAL_
+template <typename Encoder, typename Kernel>
+void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
+    auto threads = std::max<size_t>(elements, 1);
+    auto group = std::min(threads, kernel->maxTotalThreadsPerThreadgroup());
+    encoder.dispatch_threads(MTL::Size(threads, 1, 1), MTL::Size(group, 1, 1));
+}
+
+template <typename Encoder>
+void bind_common_shape(
+    Encoder& encoder,
+    const std::vector<mx::array>& inputs,
+    SparseConvShape shape
+) {
+    auto edge_capacity = static_cast<int>(inputs[2].shape(0));
+    encoder.set_bytes(edge_capacity, 7);
+    encoder.set_bytes(shape.out_capacity, 8);
+    encoder.set_bytes(shape.in_channels, 9);
+    encoder.set_bytes(shape.out_channels, 10);
+}
+
+template <typename Encoder>
+void bind_weight_shape(
+    Encoder& encoder,
+    const mx::array& weights,
+    SparseConvShape shape,
+    int first_index
+) {
+    encoder.set_bytes(stride_at(weights, 0), first_index);
+    encoder.set_bytes(stride_at(weights, 1), first_index + 1);
+    encoder.set_bytes(stride_at(weights, 2), first_index + 2);
+    encoder.set_bytes(
+        weights.ndim() == 5 ? stride_at(weights, 3) : 0, first_index + 3
+    );
+    encoder.set_bytes(
+        weights.ndim() == 5 ? stride_at(weights, 4) : 0, first_index + 4
+    );
+    encoder.set_bytes(shape.weight_layout, first_index + 5);
+    encoder.set_bytes(shape.kernel_x, first_index + 6);
+    encoder.set_bytes(shape.kernel_y, first_index + 7);
+    encoder.set_bytes(shape.kernel_z, first_index + 8);
+}
+
+template <typename Encoder, typename Library>
+void clear_output(
+    Encoder& encoder,
+    mx::metal::Device& device,
+    Library library,
+    mx::array& out
+) {
+    auto clear = device.get_kernel("sparse_relation_conv_clear_f32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(out, 0);
+    auto total = static_cast<int>(out.size());
+    encoder.set_bytes(total, 1);
+    dispatch_1d(encoder, clear, static_cast<size_t>(total));
+}
+#endif
+
+} // namespace
+
+void eval(
+    SparseConvShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+#ifdef _METAL_
+    auto& out = outputs[0];
+    allocate(out);
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+    clear_output(encoder, device, library, out);
+
+    auto kernel = device.get_kernel("sparse_relation_conv_f32_i32", library);
+    encoder.set_compute_pipeline_state(kernel);
+    for (int index = 0; index < int(inputs.size()); ++index) {
+        encoder.set_input_array(inputs[index], index);
+    }
+    encoder.set_output_array(out, 6);
+    bind_common_shape(encoder, inputs, shape);
+    encoder.set_bytes(stride_at(inputs[0], 0), 11);
+    encoder.set_bytes(stride_at(inputs[0], 1), 12);
+    bind_weight_shape(encoder, inputs[1], shape, 13);
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(inputs[2].shape(0)) *
+            static_cast<size_t>(shape.out_channels)
+    );
+#else
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
+void eval_input_grad(
+    SparseConvShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+#ifdef _METAL_
+    auto& out = outputs[0];
+    allocate(out);
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+    clear_output(encoder, device, library, out);
+
+    auto kernel =
+        device.get_kernel("sparse_relation_conv_input_grad_f32_i32", library);
+    encoder.set_compute_pipeline_state(kernel);
+    for (int index = 0; index < int(inputs.size()); ++index) {
+        encoder.set_input_array(inputs[index], index);
+    }
+    encoder.set_output_array(out, 6);
+    bind_common_shape(encoder, inputs, shape);
+    encoder.set_bytes(stride_at(inputs[0], 0), 11);
+    encoder.set_bytes(stride_at(inputs[0], 1), 12);
+    bind_weight_shape(encoder, inputs[1], shape, 13);
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(inputs[2].shape(0)) *
+            static_cast<size_t>(shape.in_channels)
+    );
+#else
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
+void eval_weight_grad(
+    SparseConvShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+#ifdef _METAL_
+    auto& out = outputs[0];
+    allocate(out);
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+    clear_output(encoder, device, library, out);
+
+    auto kernel =
+        device.get_kernel("sparse_relation_conv_weight_grad_f32_i32", library);
+    encoder.set_compute_pipeline_state(kernel);
+    for (int index = 0; index < int(inputs.size()); ++index) {
+        encoder.set_input_array(inputs[index], index);
+    }
+    encoder.set_output_array(out, 6);
+    bind_common_shape(encoder, inputs, shape);
+    encoder.set_bytes(stride_at(inputs[0], 0), 11);
+    encoder.set_bytes(stride_at(inputs[0], 1), 12);
+    encoder.set_bytes(stride_at(inputs[1], 0), 13);
+    encoder.set_bytes(stride_at(inputs[1], 1), 14);
+    encoder.set_bytes(shape.weight_layout, 15);
+    encoder.set_bytes(shape.kernel_x, 16);
+    encoder.set_bytes(shape.kernel_y, 17);
+    encoder.set_bytes(shape.kernel_z, 18);
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(inputs[2].shape(0)) *
+            static_cast<size_t>(shape.in_channels) *
+            static_cast<size_t>(shape.out_channels)
+    );
+#else
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
+} // namespace mlx_lattice::backend::metal::conv

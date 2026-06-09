@@ -4,8 +4,8 @@
 #include <typeinfo>
 #include <vector>
 
-#include "backends/cpu/exec/algorithms.h"
-#include "backends/metal/exec/runtime.h"
+#include "backends/cpu/pool/algorithms.h"
+#include "backends/metal/pool/runtime.h"
 #include "mlx/ops.h"
 #include "ops/exec/primitive.h"
 #include "ops/exec/streams.h"
@@ -56,7 +56,7 @@ class SparsePool final : public SparsePrimitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::cpu::eval_sparse_pool(
+        backend::cpu::pool::eval(
             reduce_, shape_, stride_, padding_, stream(), inputs, outputs
         );
     }
@@ -65,7 +65,7 @@ class SparsePool final : public SparsePrimitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::metal::eval_sparse_pool(
+        backend::metal::pool::eval(
             reduce_, shape_, stride_, padding_, stream(), inputs, outputs
         );
     }
@@ -187,7 +187,7 @@ class SparsePoolGrad : public SparsePrimitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::cpu::eval_sparse_pool_grad(
+        backend::cpu::pool::eval_grad(
             reduce_, shape_, stride_, padding_, stream(), inputs, outputs
         );
     }
@@ -196,7 +196,7 @@ class SparsePoolGrad : public SparsePrimitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::metal::eval_sparse_pool_grad(
+        backend::metal::pool::eval_grad(
             reduce_, shape_, stride_, padding_, stream(), inputs, outputs
         );
     }
@@ -231,7 +231,7 @@ class SparsePoolJvp final : public SparsePoolGrad {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::cpu::eval_sparse_pool_jvp(
+        backend::cpu::pool::eval_jvp(
             reduce_, shape_, stride_, padding_, stream(), inputs, outputs
         );
     }
@@ -240,7 +240,7 @@ class SparsePoolJvp final : public SparsePoolGrad {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::metal::eval_sparse_pool_jvp(
+        backend::metal::pool::eval_jvp(
             reduce_, shape_, stride_, padding_, stream(), inputs, outputs
         );
     }

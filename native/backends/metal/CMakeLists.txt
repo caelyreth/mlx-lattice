@@ -5,8 +5,9 @@ add_library(mlx_lattice_backend_metal STATIC)
 target_sources(
   mlx_lattice_backend_metal
   PRIVATE
+    conv/runtime.cpp
     coords/runtime.cpp
-    exec/runtime.cpp
+    pool/runtime.cpp
     runtime_utils.cpp)
 
 target_include_directories(
@@ -28,8 +29,11 @@ if(MLX_LATTICE_HAS_METAL)
     TARGET mlx_lattice_metallib
     TITLE mlx_lattice
     SOURCES
+      ${CMAKE_CURRENT_LIST_DIR}/conv/kernels.metal
       ${CMAKE_CURRENT_LIST_DIR}/coords/kernels.metal
-      ${CMAKE_CURRENT_LIST_DIR}/exec/kernels.metal
+      ${CMAKE_CURRENT_LIST_DIR}/pool/autodiff.metal
+      ${CMAKE_CURRENT_LIST_DIR}/pool/forward.metal
+      ${CMAKE_CURRENT_LIST_DIR}/pool/topology.metal
     INCLUDE_DIRS ${PROJECT_SOURCE_DIR} ${MLX_INCLUDE_DIRS}
     OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 

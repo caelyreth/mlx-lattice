@@ -4,8 +4,8 @@
 #include <typeinfo>
 #include <vector>
 
-#include "backends/cpu/exec/algorithms.h"
-#include "backends/metal/exec/runtime.h"
+#include "backends/cpu/conv/algorithms.h"
+#include "backends/metal/conv/runtime.h"
 #include "mlx/ops.h"
 #include "ops/exec/primitive.h"
 #include "ops/exec/streams.h"
@@ -44,16 +44,14 @@ class SparseConvFeatures final : public SparsePrimitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::cpu::eval_sparse_conv_features(shape_, stream(), inputs, outputs);
+        backend::cpu::conv::eval(shape_, stream(), inputs, outputs);
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::metal::eval_sparse_conv_features(
-            shape_, stream(), inputs, outputs
-        );
+        backend::metal::conv::eval(shape_, stream(), inputs, outputs);
     }
 
     const char* name() const override { return "lattice::SparseConvFeatures"; }
@@ -170,16 +168,14 @@ class SparseConvFeaturesInputGrad : public SparsePrimitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::cpu::eval_sparse_conv_features_input_grad(
-            shape_, stream(), inputs, outputs
-        );
+        backend::cpu::conv::eval_input_grad(shape_, stream(), inputs, outputs);
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::metal::eval_sparse_conv_features_input_grad(
+        backend::metal::conv::eval_input_grad(
             shape_, stream(), inputs, outputs
         );
     }
@@ -216,16 +212,14 @@ class SparseConvFeaturesWeightGrad final : public SparseConvFeaturesInputGrad {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::cpu::eval_sparse_conv_features_weight_grad(
-            shape_, stream(), inputs, outputs
-        );
+        backend::cpu::conv::eval_weight_grad(shape_, stream(), inputs, outputs);
     }
 
     void eval_gpu(
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        exec::metal::eval_sparse_conv_features_weight_grad(
+        backend::metal::conv::eval_weight_grad(
             shape_, stream(), inputs, outputs
         );
     }

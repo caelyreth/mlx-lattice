@@ -5,37 +5,16 @@
 #include "mlx/stream.h"
 #include "ops/exec/types.h"
 
-namespace mlx_lattice::exec::metal {
+namespace mlx_lattice::backend::metal::pool {
 
-bool can_run_sparse_pool(
+bool is_supported(
     const mx::array& coords,
     const mx::array& active_rows,
     const mx::array& feats,
     const mx::array& offsets
 );
 
-void eval_sparse_conv_features(
-    SparseConvShape shape,
-    const mx::Stream& stream,
-    const std::vector<mx::array>& inputs,
-    std::vector<mx::array>& outputs
-);
-
-void eval_sparse_conv_features_input_grad(
-    SparseConvShape shape,
-    const mx::Stream& stream,
-    const std::vector<mx::array>& inputs,
-    std::vector<mx::array>& outputs
-);
-
-void eval_sparse_conv_features_weight_grad(
-    SparseConvShape shape,
-    const mx::Stream& stream,
-    const std::vector<mx::array>& inputs,
-    std::vector<mx::array>& outputs
-);
-
-void eval_sparse_pool(
+void eval(
     PoolReduceOp reduce,
     SparsePoolShape shape,
     Triple stride,
@@ -45,7 +24,7 @@ void eval_sparse_pool(
     std::vector<mx::array>& outputs
 );
 
-void eval_sparse_pool_grad(
+void eval_grad(
     PoolReduceOp reduce,
     SparsePoolShape shape,
     Triple stride,
@@ -55,7 +34,7 @@ void eval_sparse_pool_grad(
     std::vector<mx::array>& outputs
 );
 
-void eval_sparse_pool_jvp(
+void eval_jvp(
     PoolReduceOp reduce,
     SparsePoolShape shape,
     Triple stride,
@@ -65,4 +44,4 @@ void eval_sparse_pool_jvp(
     std::vector<mx::array>& outputs
 );
 
-} // namespace mlx_lattice::exec::metal
+} // namespace mlx_lattice::backend::metal::pool

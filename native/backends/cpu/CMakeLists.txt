@@ -5,9 +5,10 @@ add_library(mlx_lattice_backend_cpu STATIC)
 target_sources(
   mlx_lattice_backend_cpu
   PRIVATE
+    conv/algorithms.cpp
     coords/algorithms.cpp
-    exec/algorithms.cpp
-    exec/planning.cpp)
+    pool/algorithms.cpp
+    pool/planning.cpp)
 
 target_include_directories(
   mlx_lattice_backend_cpu
