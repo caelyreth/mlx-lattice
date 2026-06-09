@@ -535,20 +535,69 @@ void eval_neighbor_relation(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("build_neighbor_relation_i32", library);
+    auto clear = device.get_kernel("build_neighbor_relation_i32", library);
 
-    encoder.set_compute_pipeline_state(kernel);
-    for (int i = 0; i < int(inputs.size()); ++i) {
-        encoder.set_input_array(inputs[i], i);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_input_array(inputs[3], 0);
+    encoder.set_output_array(outputs[NeighborQueryRows], 1);
+    encoder.set_output_array(outputs[NeighborSourceRows], 2);
+    encoder.set_output_array(outputs[NeighborIds], 3);
+    encoder.set_output_array(outputs[NeighborDistances], 4);
+    encoder.set_output_array(outputs[NeighborCounts], 5);
+    encoder.set_bytes(shape.query_rows, 6);
+    encoder.set_bytes(shape.max_neighbors, 7);
+    dispatch_1d(
+        encoder,
+        clear,
+        static_cast<size_t>(shape.query_rows) *
+            static_cast<size_t>(shape.max_neighbors)
+    );
+
+    if (op == NeighborRelationOp::Knn && shape.max_neighbors <= 16 &&
+        shape.source_rows <= 512) {
+        auto fill = device.get_kernel("fill_knn_relation_topk_i32", library);
+        encoder.set_compute_pipeline_state(fill);
+        for (int i = 0; i < int(inputs.size()); ++i) {
+            encoder.set_input_array(inputs[i], i);
+        }
+        encoder.set_output_array(outputs[NeighborQueryRows], 4);
+        encoder.set_output_array(outputs[NeighborSourceRows], 5);
+        encoder.set_output_array(outputs[NeighborIds], 6);
+        encoder.set_output_array(outputs[NeighborDistances], 7);
+        encoder.set_bytes(shape.source_rows, 8);
+        encoder.set_bytes(shape.query_rows, 9);
+        encoder.set_bytes(shape.max_neighbors, 10);
+        encoder.dispatch_threadgroups(
+            MTL::Size(static_cast<size_t>(shape.query_rows), 1, 1),
+            MTL::Size(128, 1, 1)
+        );
+    } else {
+        auto fill = device.get_kernel("fill_neighbor_relation_i32", library);
+        encoder.set_compute_pipeline_state(fill);
+        for (int i = 0; i < int(inputs.size()); ++i) {
+            encoder.set_input_array(inputs[i], i);
+        }
+        encoder.set_output_array(outputs[NeighborQueryRows], 4);
+        encoder.set_output_array(outputs[NeighborSourceRows], 5);
+        encoder.set_output_array(outputs[NeighborIds], 6);
+        encoder.set_output_array(outputs[NeighborDistances], 7);
+        encoder.set_bytes(neighbor_relation_op_id(op), 8);
+        encoder.set_bytes(shape.source_rows, 9);
+        encoder.set_bytes(shape.query_rows, 10);
+        encoder.set_bytes(shape.max_neighbors, 11);
+        encoder.set_bytes(radius_squared, 12);
+        dispatch_1d(encoder, fill, static_cast<size_t>(shape.query_rows));
     }
-    for (int i = 0; i < int(outputs.size()); ++i) {
-        encoder.set_output_array(outputs[i], i + 4);
-    }
-    encoder.set_bytes(neighbor_relation_op_id(op), 9);
-    encoder.set_bytes(shape.source_rows, 10);
-    encoder.set_bytes(shape.query_rows, 11);
-    encoder.set_bytes(shape.max_neighbors, 12);
-    encoder.set_bytes(radius_squared, 13);
+
+    auto compact = device.get_kernel("compact_neighbor_relation_i32", library);
+    encoder.set_compute_pipeline_state(compact);
+    encoder.set_output_array(outputs[NeighborQueryRows], 0);
+    encoder.set_output_array(outputs[NeighborSourceRows], 1);
+    encoder.set_output_array(outputs[NeighborIds], 2);
+    encoder.set_output_array(outputs[NeighborDistances], 3);
+    encoder.set_output_array(outputs[NeighborCounts], 4);
+    encoder.set_bytes(shape.query_rows, 5);
+    encoder.set_bytes(shape.max_neighbors, 6);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 #else
     (void)op;

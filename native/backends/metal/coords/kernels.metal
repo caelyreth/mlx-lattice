@@ -682,6 +682,35 @@ voxel_reduce_scale(int reduce, device const int* voxel_counts, int voxel_row) {
 // MARK: - neighbor relations
 
 [[kernel]] void build_neighbor_relation_i32(
+    device const int* query_active_rows [[buffer(0)]],
+    device int* query_rows [[buffer(1)]],
+    device int* source_rows [[buffer(2)]],
+    device int* neighbor_ids [[buffer(3)]],
+    device float* distances [[buffer(4)]],
+    device int* counts [[buffer(5)]],
+    constant const int& query_capacity [[buffer(6)]],
+    constant const int& max_neighbors [[buffer(7)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int edge_capacity = query_capacity * max_neighbors;
+    int query_count = min(query_active_rows[0], query_capacity);
+
+    if (elem == 0) {
+        counts[0] = 0;
+        counts[1] = query_count;
+    }
+
+    if (elem >= uint(edge_capacity)) {
+        return;
+    }
+
+    query_rows[elem] = 0;
+    source_rows[elem] = -1;
+    neighbor_ids[elem] = 0;
+    distances[elem] = 0.0f;
+}
+
+[[kernel]] void fill_neighbor_relation_i32(
     device const int* source_coords [[buffer(0)]],
     device const int* query_coords [[buffer(1)]],
     device const int* source_active_rows [[buffer(2)]],
@@ -690,74 +719,220 @@ voxel_reduce_scale(int reduce, device const int* voxel_counts, int voxel_row) {
     device int* source_rows [[buffer(5)]],
     device int* neighbor_ids [[buffer(6)]],
     device float* distances [[buffer(7)]],
-    device int* counts [[buffer(8)]],
-    constant const int& op [[buffer(9)]],
-    constant const int& source_capacity [[buffer(10)]],
-    constant const int& query_capacity [[buffer(11)]],
-    constant const int& max_neighbors [[buffer(12)]],
-    constant const float& radius_squared [[buffer(13)]],
+    constant const int& op [[buffer(8)]],
+    constant const int& source_capacity [[buffer(9)]],
+    constant const int& query_capacity [[buffer(10)]],
+    constant const int& max_neighbors [[buffer(11)]],
+    constant const float& radius_squared [[buffer(12)]],
+    uint query_row [[thread_position_in_grid]]
+) {
+    int source_count = min(source_active_rows[0], source_capacity);
+    int query_count = min(query_active_rows[0], query_capacity);
+    if (query_row >= uint(query_count) || max_neighbors <= 0) {
+        return;
+    }
+
+    int slot_start = int(query_row) * max_neighbors;
+    int selected = 0;
+    for (int source_row = 0; source_row < source_count; ++source_row) {
+        if (!same_batch(
+                query_coords, int(query_row), source_coords, source_row
+            )) {
+            continue;
+        }
+        float distance = squared_spatial_distance(
+            query_coords, int(query_row), source_coords, source_row
+        );
+        if (op == 1 && distance > radius_squared) {
+            continue;
+        }
+
+        int insert_at = selected;
+        for (int rank = 0; rank < selected; ++rank) {
+            int index = slot_start + rank;
+            float existing_distance = distances[index];
+            int existing_source = source_rows[index];
+            if (distance < existing_distance ||
+                (distance == existing_distance &&
+                 source_row < existing_source)) {
+                insert_at = rank;
+                break;
+            }
+        }
+        if (insert_at >= max_neighbors) {
+            continue;
+        }
+
+        int last = min(selected, max_neighbors - 1);
+        for (int rank = last; rank > insert_at; --rank) {
+            int dst = slot_start + rank;
+            int src = dst - 1;
+            source_rows[dst] = source_rows[src];
+            distances[dst] = distances[src];
+        }
+        source_rows[slot_start + insert_at] = source_row;
+        distances[slot_start + insert_at] = distance;
+        selected = min(selected + 1, max_neighbors);
+    }
+
+    for (int rank = 0; rank < selected; ++rank) {
+        int index = slot_start + rank;
+        query_rows[index] = int(query_row);
+        neighbor_ids[index] = rank;
+    }
+}
+
+[[kernel]] void fill_knn_relation_topk_i32(
+    device const int* source_coords [[buffer(0)]],
+    device const int* query_coords [[buffer(1)]],
+    device const int* source_active_rows [[buffer(2)]],
+    device const int* query_active_rows [[buffer(3)]],
+    device int* query_rows [[buffer(4)]],
+    device int* source_rows [[buffer(5)]],
+    device int* neighbor_ids [[buffer(6)]],
+    device float* distances [[buffer(7)]],
+    constant const int& source_capacity [[buffer(8)]],
+    constant const int& query_capacity [[buffer(9)]],
+    constant const int& max_neighbors [[buffer(10)]],
+    uint query_row [[threadgroup_position_in_grid]],
+    uint thread_id [[thread_position_in_threadgroup]]
+) {
+    constexpr int thread_count = 128;
+    constexpr int max_k = 16;
+    threadgroup float group_distances[thread_count * max_k];
+    threadgroup int group_sources[thread_count * max_k];
+
+    int tid = int(thread_id);
+    int source_count = min(source_active_rows[0], source_capacity);
+    int query_count = min(query_active_rows[0], query_capacity);
+    int k = min(max_neighbors, max_k);
+    int slot_start = int(query_row) * max_neighbors;
+
+    float local_distances[max_k];
+    int local_sources[max_k];
+    for (int rank = 0; rank < max_k; ++rank) {
+        local_distances[rank] = 0.0f;
+        local_sources[rank] = -1;
+    }
+
+    int selected = 0;
+    if (query_row < uint(query_count) && max_neighbors > 0) {
+        for (int source_row = tid; source_row < source_count;
+             source_row += thread_count) {
+            if (!same_batch(
+                    query_coords, int(query_row), source_coords, source_row
+                )) {
+                continue;
+            }
+            float distance = squared_spatial_distance(
+                query_coords, int(query_row), source_coords, source_row
+            );
+            int insert_at = selected;
+            for (int rank = 0; rank < selected; ++rank) {
+                if (distance < local_distances[rank] ||
+                    (distance == local_distances[rank] &&
+                     source_row < local_sources[rank])) {
+                    insert_at = rank;
+                    break;
+                }
+            }
+            if (insert_at >= k) {
+                continue;
+            }
+            int last = min(selected, k - 1);
+            for (int rank = last; rank > insert_at; --rank) {
+                local_distances[rank] = local_distances[rank - 1];
+                local_sources[rank] = local_sources[rank - 1];
+            }
+            local_distances[insert_at] = distance;
+            local_sources[insert_at] = source_row;
+            selected = min(selected + 1, k);
+        }
+    }
+
+    int group_base = tid * max_k;
+    for (int rank = 0; rank < max_k; ++rank) {
+        group_distances[group_base + rank] = local_distances[rank];
+        group_sources[group_base + rank] = local_sources[rank];
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    if (tid != 0 || query_row >= uint(query_count) || max_neighbors <= 0) {
+        return;
+    }
+
+    int final_selected = 0;
+    for (int candidate = 0; candidate < thread_count * max_k; ++candidate) {
+        int source_row = group_sources[candidate];
+        if (source_row < 0) {
+            continue;
+        }
+        float distance = group_distances[candidate];
+        int insert_at = final_selected;
+        for (int rank = 0; rank < final_selected; ++rank) {
+            int index = slot_start + rank;
+            float existing_distance = distances[index];
+            int existing_source = source_rows[index];
+            if (distance < existing_distance ||
+                (distance == existing_distance &&
+                 source_row < existing_source)) {
+                insert_at = rank;
+                break;
+            }
+        }
+        if (insert_at >= k) {
+            continue;
+        }
+        int last = min(final_selected, k - 1);
+        for (int rank = last; rank > insert_at; --rank) {
+            int dst = slot_start + rank;
+            int src = dst - 1;
+            source_rows[dst] = source_rows[src];
+            distances[dst] = distances[src];
+        }
+        source_rows[slot_start + insert_at] = source_row;
+        distances[slot_start + insert_at] = distance;
+        final_selected = min(final_selected + 1, k);
+    }
+
+    for (int rank = 0; rank < final_selected; ++rank) {
+        int index = slot_start + rank;
+        query_rows[index] = int(query_row);
+        neighbor_ids[index] = rank;
+    }
+}
+
+[[kernel]] void compact_neighbor_relation_i32(
+    device int* query_rows [[buffer(0)]],
+    device int* source_rows [[buffer(1)]],
+    device int* neighbor_ids [[buffer(2)]],
+    device float* distances [[buffer(3)]],
+    device int* counts [[buffer(4)]],
+    constant const int& query_capacity [[buffer(5)]],
+    constant const int& max_neighbors [[buffer(6)]],
     uint elem [[thread_position_in_grid]]
 ) {
     if (elem != 0) {
         return;
     }
 
-    int edge_capacity = query_capacity * max_neighbors;
-    for (int edge = 0; edge < edge_capacity; ++edge) {
-        query_rows[edge] = 0;
-        source_rows[edge] = 0;
-        neighbor_ids[edge] = 0;
-        distances[edge] = 0.0f;
-    }
-
-    int source_count = min(source_active_rows[0], source_capacity);
-    int query_count = min(query_active_rows[0], query_capacity);
-    int edge_count = 0;
+    int out_edge = 0;
+    int query_count = counts[1];
     for (int query_row = 0; query_row < query_count; ++query_row) {
-        int query_start = edge_count;
-        for (int neighbor = 0; neighbor < max_neighbors; ++neighbor) {
-            int best_source = -1;
-            float best_distance = 0.0f;
-            for (int source_row = 0; source_row < source_count; ++source_row) {
-                if (!same_batch(
-                        query_coords, query_row, source_coords, source_row
-                    )) {
-                    continue;
-                }
-                bool used = false;
-                for (int previous = query_start; previous < edge_count;
-                     ++previous) {
-                    if (source_rows[previous] == source_row) {
-                        used = true;
-                        break;
-                    }
-                }
-                if (used) {
-                    continue;
-                }
-                float distance = squared_spatial_distance(
-                    query_coords, query_row, source_coords, source_row
-                );
-                if (op == 1 && distance > radius_squared) {
-                    continue;
-                }
-                if (best_source < 0 || distance < best_distance ||
-                    (distance == best_distance && source_row < best_source)) {
-                    best_source = source_row;
-                    best_distance = distance;
-                }
-            }
-            if (best_source < 0) {
+        int slot_start = query_row * max_neighbors;
+        for (int rank = 0; rank < max_neighbors; ++rank) {
+            int index = slot_start + rank;
+            int source_row = source_rows[index];
+            if (source_row < 0) {
                 break;
             }
-            query_rows[edge_count] = query_row;
-            source_rows[edge_count] = best_source;
-            neighbor_ids[edge_count] = neighbor;
-            distances[edge_count] = best_distance;
-            edge_count += 1;
+            query_rows[out_edge] = query_row;
+            source_rows[out_edge] = source_row;
+            neighbor_ids[out_edge] = rank;
+            distances[out_edge] = distances[index];
+            out_edge += 1;
         }
     }
-
-    counts[0] = edge_count;
-    counts[1] = query_count;
+    counts[0] = out_edge;
+    (void)query_capacity;
 }
