@@ -22,6 +22,8 @@ mx::array make_sparse_pool_grad(
     const mx::array& coords,
     const mx::array& active_rows,
     const mx::array& offsets,
+    const mx::array& out_coords,
+    const mx::array& counts,
     Triple stride,
     Triple padding,
     SparsePoolShape shape
@@ -35,6 +37,8 @@ mx::array make_sparse_pool_jvp(
     const mx::array& coords,
     const mx::array& active_rows,
     const mx::array& offsets,
+    const mx::array& out_coords,
+    const mx::array& counts,
     Triple stride,
     Triple padding,
     SparsePoolShape shape
@@ -95,6 +99,8 @@ class SparsePool final : public SparsePrimitive {
                     primals[0],
                     primals[1],
                     primals[3],
+                    outputs.coords,
+                    outputs.counts,
                     stride_,
                     padding_,
                     shape_
@@ -140,6 +146,8 @@ class SparsePool final : public SparsePrimitive {
                     primals[0],
                     primals[1],
                     primals[3],
+                    outputs[SparseOutCoords],
+                    outputs[SparseCounts],
                     stride_,
                     padding_,
                     shape_
@@ -300,6 +308,8 @@ mx::array make_sparse_pool_grad(
     const mx::array& coords,
     const mx::array& active_rows,
     const mx::array& offsets,
+    const mx::array& out_coords,
+    const mx::array& counts,
     Triple stride,
     Triple padding,
     SparsePoolShape shape
@@ -316,6 +326,8 @@ mx::array make_sparse_pool_grad(
         coords,
         active_rows,
         offsets,
+        out_coords,
+        counts,
     };
     return mx::array::make_arrays(
         {mx::Shape{shape.in_capacity, shape.channels}},
@@ -333,6 +345,8 @@ mx::array make_sparse_pool_jvp(
     const mx::array& coords,
     const mx::array& active_rows,
     const mx::array& offsets,
+    const mx::array& out_coords,
+    const mx::array& counts,
     Triple stride,
     Triple padding,
     SparsePoolShape shape
@@ -347,6 +361,8 @@ mx::array make_sparse_pool_jvp(
         coords,
         active_rows,
         offsets,
+        out_coords,
+        counts,
     };
     return mx::array::make_arrays(
         {mx::Shape{shape.out_capacity, shape.channels}},

@@ -279,6 +279,62 @@ def test_metal_pooling_jvp_matches_cpu_contract_when_available() -> None:
     )
 
 
+def test_metal_strided_pooling_autodiff_uses_forward_topology() -> None:
+    def run() -> tuple[
+        list[list[float]],
+        list[list[float]],
+        list[list[float]],
+        list[list[float]],
+        list[list[float]],
+    ]:
+        coords = mx.array(
+            [[0, row, 0, 0] for row in range(8)],
+            dtype=mx.int32,
+        )
+        feats = mx.array(
+            [[float(row)] for row in range(1, 9)],
+            dtype=mx.float32,
+        )
+        tangent = mx.array(
+            [[float(row * 10)] for row in range(1, 9)],
+            dtype=mx.float32,
+        )
+
+        def summed(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return sum_pool3d(x, kernel_size=2, stride=2).feats
+
+        def averaged(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return avg_pool3d(x, kernel_size=2, stride=2).feats
+
+        def maxed(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return max_pool3d(x, kernel_size=2, stride=2).feats
+
+        sum_grad = mx.grad(lambda value: mx.sum(summed(value)))(feats)
+        avg_grad = mx.grad(lambda value: mx.sum(averaged(value)))(feats)
+        max_grad = mx.grad(lambda value: mx.sum(maxed(value)))(feats)
+        _, avg_jvp = mx.jvp(averaged, [feats], [tangent])
+        _, max_jvp = mx.jvp(maxed, [feats], [tangent])
+        mx.eval(sum_grad, avg_grad, max_grad, avg_jvp[0], max_jvp[0])
+        return (
+            sum_grad.tolist(),
+            avg_grad.tolist(),
+            max_grad.tolist(),
+            avg_jvp[0][:4].tolist(),
+            max_jvp[0][:4].tolist(),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[1.0]] * 8,
+        [[0.5]] * 8,
+        [[0.0], [1.0], [0.0], [1.0], [0.0], [1.0], [0.0], [1.0]],
+        [[15.0], [35.0], [55.0], [75.0]],
+        [[20.0], [40.0], [60.0], [80.0]],
+    )
+
+
 def test_metal_pooling_respects_active_rows_capacity_contract() -> None:
     def run() -> tuple[list[list[int]], list[list[float]], list[int]]:
         coords = mx.array(

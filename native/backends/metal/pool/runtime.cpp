@@ -77,23 +77,23 @@ void bind_autodiff_shape(
     SparsePoolShape shape,
     const PoolGeometry& geometry
 ) {
-    encoder.set_bytes(reduce_id(reduce), 7);
-    encoder.set_bytes(shape.in_capacity, 8);
-    encoder.set_bytes(shape.out_capacity, 9);
-    encoder.set_bytes(shape.n_kernels, 10);
-    encoder.set_bytes(shape.channels, 11);
-    encoder.set_bytes(geometry.stride[0], 12);
-    encoder.set_bytes(geometry.stride[1], 13);
-    encoder.set_bytes(geometry.stride[2], 14);
-    encoder.set_bytes(geometry.padding[0], 15);
-    encoder.set_bytes(geometry.padding[1], 16);
-    encoder.set_bytes(geometry.padding[2], 17);
-    encoder.set_bytes(stride_at(inputs[0], 0), 18);
-    encoder.set_bytes(stride_at(inputs[0], 1), 19);
-    encoder.set_bytes(stride_at(inputs[1], 0), 20);
-    encoder.set_bytes(stride_at(inputs[1], 1), 21);
-    encoder.set_bytes(stride_at(inputs[2], 0), 22);
-    encoder.set_bytes(stride_at(inputs[2], 1), 23);
+    encoder.set_bytes(reduce_id(reduce), 9);
+    encoder.set_bytes(shape.in_capacity, 10);
+    encoder.set_bytes(shape.out_capacity, 11);
+    encoder.set_bytes(shape.n_kernels, 12);
+    encoder.set_bytes(shape.channels, 13);
+    encoder.set_bytes(geometry.stride[0], 14);
+    encoder.set_bytes(geometry.stride[1], 15);
+    encoder.set_bytes(geometry.stride[2], 16);
+    encoder.set_bytes(geometry.padding[0], 17);
+    encoder.set_bytes(geometry.padding[1], 18);
+    encoder.set_bytes(geometry.padding[2], 19);
+    encoder.set_bytes(stride_at(inputs[0], 0), 20);
+    encoder.set_bytes(stride_at(inputs[0], 1), 21);
+    encoder.set_bytes(stride_at(inputs[1], 0), 22);
+    encoder.set_bytes(stride_at(inputs[1], 1), 23);
+    encoder.set_bytes(stride_at(inputs[2], 0), 24);
+    encoder.set_bytes(stride_at(inputs[2], 1), 25);
 }
 #endif
 
@@ -278,16 +278,28 @@ void eval_grad(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("sparse_pool_grad_f32_i32_serial", library);
+    auto clear = device.get_kernel("sparse_pool_autodiff_clear_f32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(out, 0);
+    auto total = static_cast<int>(out.size());
+    encoder.set_bytes(total, 1);
+    dispatch_1d(encoder, clear, static_cast<size_t>(total));
+
+    auto kernel = device.get_kernel("sparse_pool_grad_f32_i32", library);
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 6);
+    encoder.set_output_array(out, 8);
     bind_autodiff_shape(
         encoder, inputs, reduce, shape, PoolGeometry{stride, padding}
     );
-    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(shape.out_capacity) *
+            static_cast<size_t>(shape.channels)
+    );
 #else
     (void)reduce;
     (void)shape;
@@ -316,16 +328,21 @@ void eval_jvp(
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("sparse_pool_jvp_f32_i32_serial", library);
+    auto kernel = device.get_kernel("sparse_pool_jvp_f32_i32", library);
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < int(inputs.size()); ++index) {
         encoder.set_input_array(inputs[index], index);
     }
-    encoder.set_output_array(out, 6);
+    encoder.set_output_array(out, 8);
     bind_autodiff_shape(
         encoder, inputs, reduce, shape, PoolGeometry{stride, padding}
     );
-    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(shape.out_capacity) *
+            static_cast<size_t>(shape.channels)
+    );
 #else
     (void)reduce;
     (void)shape;
