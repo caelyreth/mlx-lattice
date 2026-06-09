@@ -1,14 +1,12 @@
 #include "backends/metal/coords/runtime.h"
 
-#include <dlfcn.h>
-
 #include <algorithm>
-#include <filesystem>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
 
-#include "mlx/device.h"
+#include "backends/array_utils.h"
+#include "backends/metal/runtime_utils.h"
 #include "mlx/stream.h"
 
 #ifdef _METAL_
@@ -18,19 +16,6 @@
 namespace mlx_lattice::coords::metal {
 
 namespace {
-
-// MARK: - library
-
-std::string binary_dir() {
-    static std::string dir = [] {
-        Dl_info info;
-        if (!dladdr(reinterpret_cast<void*>(&binary_dir), &info)) {
-            throw std::runtime_error("Unable to resolve native module path.");
-        }
-        return std::filesystem::path(info.dli_fname).parent_path().string();
-    }();
-    return dir;
-}
 
 const char* set_kernel_name(CoordSetOp op) {
     switch (op) {
@@ -69,29 +54,7 @@ void require_i32_inputs(
     }
 }
 
-void allocate(mx::array& output) {
-    output.set_data(mx::allocator::malloc(output.nbytes()));
-}
-
-void allocate_all(std::vector<mx::array>& outputs) {
-    for (auto& output : outputs) {
-        allocate(output);
-    }
-}
-
 } // namespace
-
-// MARK: - availability
-
-bool supports(const mx::array& coords) {
-#if MLX_LATTICE_HAS_METAL
-    return coords.dtype() == mx::int32 && mx::is_available(mx::Device::gpu) &&
-           mx::default_device() == mx::Device(mx::Device::gpu);
-#else
-    (void)coords;
-    return false;
-#endif
-}
 
 // MARK: - set ops
 
@@ -111,11 +74,12 @@ void eval_set_coords(
 #ifdef _METAL_
     auto& out_coords = outputs[0];
     auto& count = outputs[1];
-    allocate(out_coords);
-    allocate(count);
+    backend::allocate(out_coords);
+    backend::allocate(count);
 
     auto& device = mx::metal::device(stream.device);
-    auto library = device.get_library("mlx_lattice", binary_dir());
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
     auto kernel = device.get_kernel(set_kernel_name(op), library);
 
@@ -157,10 +121,11 @@ void eval_lookup_coords(
 
 #ifdef _METAL_
     auto& out = outputs[0];
-    allocate(out);
+    backend::allocate(out);
 
     auto& device = mx::metal::device(stream.device);
-    auto library = device.get_library("mlx_lattice", binary_dir());
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
     auto kernel = device.get_kernel("lookup_coords_i32", library);
     auto group = std::min(
@@ -202,10 +167,11 @@ void eval_generic_kernel_relation(
     require_i32_inputs(inputs, {"coords", "kernel offsets", "active rows"});
 
 #ifdef _METAL_
-    allocate_all(outputs);
+    backend::allocate_all(outputs);
 
     auto& device = mx::metal::device(stream.device);
-    auto library = device.get_library("mlx_lattice", binary_dir());
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
     auto kernel = device.get_kernel(relation_kernel_name(op), library);
 
@@ -249,12 +215,13 @@ void eval_generative_kernel_relation(
     require_i32_inputs(inputs, {"coords", "kernel offsets", "active rows"});
 
 #ifdef _METAL_
-    allocate_all(outputs);
+    backend::allocate_all(outputs);
 
     auto thread_count = std::max(rows * kernel_count, 1);
 
     auto& device = mx::metal::device(stream.device);
-    auto library = device.get_library("mlx_lattice", binary_dir());
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
     auto kernel =
         device.get_kernel("build_generative_kernel_relation_i32", library);

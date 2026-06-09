@@ -20,10 +20,11 @@ from tests.support import (
     active_feats,
     assert_nested_close,
     mx,
+    run_with_gpu_default,
 )
 
 
-def test_local_pooling_uses_kernel_relation_edge_reductions() -> None:
+def test_local_pooling_uses_fused_native_neighborhood_reductions() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
@@ -81,6 +82,165 @@ def test_local_pooling_modes_are_autogradable() -> None:
         [[0.8333333730697632], [1.3333333730697632], [0.8333333730697632]],
     )
     assert mx.grad(max_loss)(feats).tolist() == [[0.0], [1.0], [2.0]]
+
+
+def test_metal_local_pooling_matches_cpu_contract_when_available() -> None:
+    def run() -> tuple[
+        list[list[float]],
+        list[list[float]],
+        list[list[float]],
+    ]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array(
+            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]],
+            dtype=mx.float32,
+        )
+        x = SparseTensor(coords, feats)
+
+        summed = sum_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+        maxed = max_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+        averaged = avg_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+        mx.eval(summed.feats, maxed.feats, averaged.feats)
+        return (
+            active_feats(summed).tolist(),
+            active_feats(maxed).tolist(),
+            active_feats(averaged).tolist(),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[3.0, 30.0], [6.0, 60.0], [5.0, 50.0]],
+        [[2.0, 20.0], [3.0, 30.0], [3.0, 30.0]],
+        [[1.5, 15.0], [2.0, 20.0], [2.5, 25.0]],
+    )
+
+
+def test_metal_pooling_gradients_match_cpu_contract_when_available() -> (
+    None
+):
+    def run() -> tuple[
+        list[list[float]], list[list[float]], list[list[float]]
+    ]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+
+        def sum_loss(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return mx.sum(
+                sum_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+            )
+
+        def avg_loss(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return mx.sum(
+                avg_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+            )
+
+        def max_loss(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return mx.sum(
+                max_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+            )
+
+        sum_grad = mx.grad(sum_loss)(feats)
+        avg_grad = mx.grad(avg_loss)(feats)
+        max_grad = mx.grad(max_loss)(feats)
+        mx.eval(sum_grad, avg_grad, max_grad)
+        return sum_grad.tolist(), avg_grad.tolist(), max_grad.tolist()
+
+    sum_grad, avg_grad, max_grad = run_with_gpu_default(run)
+    assert sum_grad == [[2.0], [3.0], [2.0]]
+    assert_nested_close(
+        avg_grad,
+        [[0.8333333730697632], [1.3333333730697632], [0.8333333730697632]],
+    )
+    assert max_grad == [[0.0], [1.0], [2.0]]
+
+
+def test_metal_pooling_jvp_matches_cpu_contract_when_available() -> None:
+    def run() -> tuple[
+        list[list[float]], list[list[float]], list[list[float]]
+    ]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+        tangent = mx.ones_like(feats)
+
+        def summed(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return sum_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+        def averaged(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return avg_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+        def maxed(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return max_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+        _, sum_jvp = mx.jvp(summed, [feats], [tangent])
+        _, avg_jvp = mx.jvp(averaged, [feats], [tangent])
+        _, max_jvp = mx.jvp(maxed, [feats], [tangent])
+        mx.eval(sum_jvp[0], avg_jvp[0], max_jvp[0])
+        return sum_jvp[0].tolist(), avg_jvp[0].tolist(), max_jvp[0].tolist()
+
+    assert run_with_gpu_default(run) == (
+        [[2.0], [3.0], [2.0]],
+        [[1.0], [1.0], [1.0]],
+        [[1.0], [1.0], [1.0]],
+    )
+
+
+def test_metal_pooling_respects_active_rows_capacity_contract() -> None:
+    def run() -> tuple[list[list[int]], list[list[float]], list[int]]:
+        coords = mx.array(
+            [
+                [0, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 99, 0, 0],
+                [0, 100, 0, 0],
+            ],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [100.0], [200.0]], dtype=mx.float32)
+        x = SparseTensor(
+            coords,
+            feats,
+            active_rows=mx.array([2], dtype=mx.int32),
+        )
+
+        out = sum_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+        mx.eval(out.coords, out.feats, out.active_rows)
+        return (
+            active_coords(out),
+            active_feats(out).tolist(),
+            out.active_rows.tolist(),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[0, 0, 0, 0], [0, 1, 0, 0]],
+        [[3.0], [3.0]],
+        [2],
+    )
+
+
+def test_metal_pooling_rejects_unsupported_coord_dtype() -> None:
+    def run() -> None:
+        x = SparseTensor(
+            mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int64),
+            mx.array([[1.0], [2.0]], dtype=mx.float32),
+        )
+        with pytest.raises(ValueError, match='Metal sparse pooling'):
+            sum_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+
+    run_with_gpu_default(run)
 
 
 def test_strided_pooling_updates_output_stride_and_manager_context() -> (

@@ -6,7 +6,9 @@ target_sources(
   mlx_lattice_ops_exec
   PRIVATE
     api.cpp
-    dispatch.cpp
+    conv.cpp
+    pool.cpp
+    streams.cpp
     validation.cpp)
 
 target_include_directories(

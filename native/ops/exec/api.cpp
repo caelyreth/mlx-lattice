@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "ops/coords.h"
-#include "ops/exec/dispatch.h"
+#include "ops/exec/factories.h"
 #include "ops/exec/validation.h"
 
 namespace mlx_lattice {
@@ -50,7 +50,7 @@ NativeSparseTensorOutput sparse_conv(
             "weight spatial kernel shape must match kernel_size."
         );
     }
-    return dispatch_sparse_conv(
+    return make_sparse_conv(
         op,
         coords,
         active_rows,
@@ -73,7 +73,7 @@ NativeSparseTensorOutput sparse_pool(
     Triple dilation
 ) {
     validate_sparse_pool(coords, active_rows, feats);
-    return dispatch_sparse_pool(
+    return make_sparse_pool(
         op,
         coords,
         active_rows,

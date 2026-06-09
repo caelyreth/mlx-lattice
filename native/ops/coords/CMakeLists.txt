@@ -6,8 +6,11 @@ target_sources(
   mlx_lattice_ops_coords
   PRIVATE
     api.cpp
-    dispatch.cpp
+    lookup.cpp
+    offsets.cpp
     relations.cpp
+    set.cpp
+    streams.cpp
     validation.cpp)
 
 target_include_directories(

@@ -7,8 +7,6 @@
 
 namespace mlx_lattice::coords::metal {
 
-bool supports(const mx::array& coords);
-
 void eval_set_coords(
     CoordSetOp op,
     Triple stride,

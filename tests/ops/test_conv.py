@@ -31,7 +31,7 @@ def test_conv3d_pointwise_matches_dense_linear_contract() -> None:
     assert_same_sparse_identity(out, x)
 
 
-def test_conv3d_generic_matches_native_edge_spmm_reference() -> None:
+def test_conv3d_generic_matches_fused_native_reference() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
@@ -107,6 +107,190 @@ def test_subm_conv3d_consumes_lazy_gpu_default_weight() -> None:
         out = subm_conv3d(x, weight, kernel_size=(3, 1, 1))
 
         assert active_feats(out).tolist() == [[3.0], [6.0], [5.0]]
+
+    run_with_gpu_default(run)
+
+
+def test_metal_convolution_modes_match_cpu_contract_when_available() -> (
+    None
+):
+    def run() -> tuple[
+        list[list[float]],
+        list[list[float]],
+        list[list[int]],
+        list[list[float]],
+        list[list[int]],
+        list[list[float]],
+    ]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+        x = SparseTensor(coords, feats)
+        weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+            1, 3, 1, 1, 1
+        )
+
+        generic = conv3d(x, weight, kernel_size=(3, 1, 1))
+        subm = subm_conv3d(x, mx.ones_like(weight), kernel_size=(3, 1, 1))
+
+        transposed_input = SparseTensor(
+            mx.array([[0, 1, 0, 0]], dtype=mx.int32),
+            mx.array([[4.0]], dtype=mx.float32),
+            stride=(2, 1, 1),
+        )
+        transpose_weight = mx.array([2.0, 3.0], dtype=mx.float32).reshape(
+            1, 2, 1, 1, 1
+        )
+        transposed = conv_transpose3d(
+            transposed_input,
+            transpose_weight,
+            kernel_size=(2, 1, 1),
+            stride=(2, 1, 1),
+        )
+        generated = generative_conv_transpose3d(
+            transposed_input,
+            transpose_weight,
+            kernel_size=(2, 1, 1),
+            stride=(2, 1, 1),
+        )
+        mx.eval(
+            generic.coords,
+            generic.feats,
+            generic.active_rows,
+            subm.feats,
+            transposed.coords,
+            transposed.feats,
+            generated.coords,
+            generated.feats,
+        )
+        return (
+            active_feats(generic).tolist(),
+            subm.feats.tolist(),
+            active_coords(transposed),
+            active_feats(transposed).tolist(),
+            active_coords(generated),
+            active_feats(generated).tolist(),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[8.0], [14.0], [8.0]],
+        [[3.0], [6.0], [5.0]],
+        [[0, 2, 0, 0], [0, 3, 0, 0]],
+        [[8.0], [12.0]],
+        [[0, 2, 0, 0], [0, 3, 0, 0]],
+        [[8.0], [12.0]],
+    )
+
+
+def test_metal_convolution_gradients_match_cpu_contract_when_available() -> (
+    None
+):
+    def run() -> tuple[list[list[float]], object]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+        weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+            1,
+            3,
+            1,
+            1,
+            1,
+        )
+
+        def loss(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return mx.sum(
+                conv3d(x, weight_arg, kernel_size=(3, 1, 1)).feats
+            )
+
+        grad_feats, grad_weight = mx.grad(loss, argnums=(0, 1))(
+            feats, weight
+        )
+        mx.eval(grad_feats, grad_weight)
+        return grad_feats.tolist(), grad_weight.tolist()
+
+    assert run_with_gpu_default(run) == (
+        [[3.0], [6.0], [5.0]],
+        [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]],
+    )
+
+
+def test_metal_convolution_jvp_matches_cpu_contract_when_available() -> (
+    None
+):
+    def run() -> list[list[float]]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+        tangent = mx.ones_like(feats)
+        weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+            1,
+            3,
+            1,
+            1,
+            1,
+        )
+
+        def features(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return conv3d(x, weight, kernel_size=(3, 1, 1)).feats
+
+        _, jvps = mx.jvp(features, [feats], [tangent])
+        mx.eval(jvps[0])
+        return jvps[0].tolist()
+
+    assert run_with_gpu_default(run) == [[5.0], [6.0], [3.0]]
+
+
+def test_metal_convolution_respects_active_rows_capacity_contract() -> None:
+    def run() -> tuple[list[list[int]], list[list[float]], list[int]]:
+        coords = mx.array(
+            [
+                [0, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 99, 0, 0],
+                [0, 100, 0, 0],
+            ],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [100.0], [200.0]], dtype=mx.float32)
+        x = SparseTensor(
+            coords,
+            feats,
+            active_rows=mx.array([2], dtype=mx.int32),
+        )
+        weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
+
+        out = conv3d(x, weight, kernel_size=(3, 1, 1))
+        mx.eval(out.coords, out.feats, out.active_rows)
+        return (
+            active_coords(out),
+            active_feats(out).tolist(),
+            out.active_rows.tolist(),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[0, 0, 0, 0], [0, 1, 0, 0]],
+        [[3.0], [3.0]],
+        [2],
+    )
+
+
+def test_metal_convolution_rejects_unsupported_coord_dtype() -> None:
+    def run() -> None:
+        x = SparseTensor(
+            mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int64),
+            mx.array([[1.0], [2.0]], dtype=mx.float32),
+        )
+        weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
+        with pytest.raises(ValueError, match='Metal sparse convolution'):
+            conv3d(x, weight, kernel_size=(3, 1, 1))
 
     run_with_gpu_default(run)
 

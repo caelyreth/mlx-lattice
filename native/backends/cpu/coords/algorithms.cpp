@@ -9,7 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "mlx/backend/cpu/encoder.h"
+#include "backends/array_utils.h"
+#include "backends/cpu/schedule.h"
 
 namespace mlx_lattice::coords::cpu {
 
@@ -30,39 +31,6 @@ struct CoordHash {
         return seed;
     }
 };
-
-// MARK: - arrays
-
-void allocate(mx::array& out) {
-    out.set_data(mx::allocator::malloc(out.nbytes()));
-}
-
-void allocate_all(std::vector<mx::array>& outputs) {
-    for (auto& output : outputs) {
-        allocate(output);
-    }
-}
-
-template <typename Fn>
-void schedule(
-    const mx::Stream& stream,
-    const std::vector<mx::array>& inputs,
-    std::vector<mx::array>& outputs,
-    Fn fn
-) {
-    auto& encoder = mx::cpu::get_command_encoder(stream);
-    for (const auto& input : inputs) {
-        encoder.set_input_array(input);
-    }
-    for (auto& output : outputs) {
-        encoder.set_output_array(output);
-    }
-    encoder.dispatch([task_inputs = inputs,
-                      task_outputs = outputs,
-                      fn = std::move(fn)]() mutable {
-        fn(task_inputs, task_outputs);
-    });
-}
 
 std::vector<Coord> read_coords(const mx::array& coords) {
     std::vector<Coord> out;
@@ -430,8 +398,8 @@ void eval_set_coords(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    allocate_all(outputs);
-    schedule(
+    backend::allocate_all(outputs);
+    backend::schedule_cpu(
         stream,
         inputs,
         outputs,
@@ -463,8 +431,8 @@ void eval_lookup_coords(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    allocate_all(outputs);
-    schedule(
+    backend::allocate_all(outputs);
+    backend::schedule_cpu(
         stream,
         inputs,
         outputs,
@@ -485,8 +453,8 @@ void eval_generic_kernel_relation(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    allocate_all(outputs);
-    schedule(
+    backend::allocate_all(outputs);
+    backend::schedule_cpu(
         stream,
         inputs,
         outputs,
@@ -529,8 +497,8 @@ void eval_generative_kernel_relation(
     const std::vector<mx::array>& inputs,
     std::vector<mx::array>& outputs
 ) {
-    allocate_all(outputs);
-    schedule(
+    backend::allocate_all(outputs);
+    backend::schedule_cpu(
         stream,
         inputs,
         outputs,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
+
 from mlx_lattice.core import CoordinateManager, SparseTensor
 from mlx_lattice.ops import (
     build_generative_relation,
@@ -194,3 +196,19 @@ def test_metal_coordinate_primitives_match_cpu_contract_when_available() -> (
         [0, 0, 1, 1, 1, 2, 2],
         [7, 3],
     )
+
+
+def test_metal_coordinate_primitives_reject_unsupported_coord_dtype() -> (
+    None
+):
+    def run() -> None:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0]],
+            dtype=mx.int64,
+        )
+        relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
+        assert relation.out_coords is not None
+        with pytest.raises(ValueError, match='Metal coordinate kernels'):
+            mx.eval(relation.out_coords, relation.counts)
+
+    run_with_gpu_default(run)

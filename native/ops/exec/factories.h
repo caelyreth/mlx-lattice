@@ -5,7 +5,7 @@
 
 namespace mlx_lattice {
 
-NativeSparseTensorOutput dispatch_sparse_conv(
+NativeSparseTensorOutput make_sparse_conv(
     SparseMapOp op,
     const mx::array& coords,
     const mx::array& active_rows,
@@ -16,7 +16,7 @@ NativeSparseTensorOutput dispatch_sparse_conv(
     Triple padding
 );
 
-NativeSparseTensorOutput dispatch_sparse_pool(
+NativeSparseTensorOutput make_sparse_pool(
     PoolReduceOp reduce,
     const mx::array& coords,
     const mx::array& active_rows,
