@@ -84,6 +84,58 @@ def test_local_pooling_modes_are_autogradable() -> None:
     assert mx.grad(max_loss)(feats).tolist() == [[0.0], [1.0], [2.0]]
 
 
+def test_max_pool3d_tie_policy_matches_mlx_transform_contract() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[2.0], [2.0], [1.0]], dtype=mx.float32)
+    tangent = mx.array([[10.0], [20.0], [30.0]], dtype=mx.float32)
+
+    def pooled(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return max_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+    def loss(feats_arg: mx.array) -> mx.array:
+        return mx.sum(pooled(feats_arg))
+
+    outputs, grads = mx.vjp(
+        pooled,
+        [feats],
+        [mx.ones((3, 1), dtype=mx.float32)],
+    )
+    _, jvps = mx.jvp(pooled, [feats], [tangent])
+
+    assert outputs[0].tolist() == [[2.0], [2.0], [2.0]]
+    assert mx.grad(loss)(feats).tolist() == [[1.0], [2.0], [0.0]]
+    assert grads[0].tolist() == [[1.0], [2.0], [0.0]]
+    assert jvps[0].tolist() == [[10.0], [10.0], [20.0]]
+
+
+def test_pooling_modes_are_compatible_with_mx_compile() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+
+    def summed(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return sum_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+    def averaged(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return avg_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+    def maxed(feats_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return max_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+    assert mx.compile(summed)(feats).tolist() == [[3.0], [6.0], [5.0]]
+    assert mx.compile(averaged)(feats).tolist() == [[1.5], [2.0], [2.5]]
+    assert mx.compile(maxed)(feats).tolist() == [[2.0], [3.0], [3.0]]
+
+
 def test_metal_local_pooling_matches_cpu_contract_when_available() -> None:
     def run() -> tuple[
         list[list[float]],
@@ -160,6 +212,35 @@ def test_metal_pooling_gradients_match_cpu_contract_when_available() -> (
         [[0.8333333730697632], [1.3333333730697632], [0.8333333730697632]],
     )
     assert max_grad == [[0.0], [1.0], [2.0]]
+
+
+def test_metal_max_pool_tie_policy_matches_cpu_contract_when_available() -> (
+    None
+):
+    def run() -> tuple[list[list[float]], list[list[float]]]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[2.0], [2.0], [1.0]], dtype=mx.float32)
+        tangent = mx.array([[10.0], [20.0], [30.0]], dtype=mx.float32)
+
+        def pooled(feats_arg: mx.array) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return max_pool3d(x, kernel_size=(3, 1, 1), stride=1).feats
+
+        def loss(feats_arg: mx.array) -> mx.array:
+            return mx.sum(pooled(feats_arg))
+
+        grad = mx.grad(loss)(feats)
+        _, jvps = mx.jvp(pooled, [feats], [tangent])
+        mx.eval(grad, jvps[0])
+        return grad.tolist(), jvps[0].tolist()
+
+    assert run_with_gpu_default(run) == (
+        [[1.0], [2.0], [0.0]],
+        [[10.0], [10.0], [20.0]],
+    )
 
 
 def test_metal_pooling_jvp_matches_cpu_contract_when_available() -> None:

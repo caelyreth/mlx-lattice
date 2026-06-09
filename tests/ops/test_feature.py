@@ -102,6 +102,56 @@ def test_normalization_feature_ops_apply_affine_parameters() -> None:
     assert_same_sparse_identity(rms, x)
 
 
+def test_feature_ops_support_grad_vjp_jvp_and_compile() -> None:
+    coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
+    feats = mx.array([[-1.0, 2.0], [3.0, -4.0]], dtype=mx.float32)
+    weight = mx.array([[2.0, 3.0], [5.0, 7.0]], dtype=mx.float32)
+    bias = mx.array([1.0, -1.0], dtype=mx.float32)
+
+    def features(
+        feats_arg: mx.array,
+        weight_arg: mx.array,
+        bias_arg: mx.array,
+    ) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return relu(linear(x, weight_arg, bias_arg)).feats
+
+    def loss(
+        feats_arg: mx.array,
+        weight_arg: mx.array,
+        bias_arg: mx.array,
+    ) -> mx.array:
+        return mx.sum(features(feats_arg, weight_arg, bias_arg))
+
+    grad_feats, grad_weight, grad_bias = mx.grad(
+        loss,
+        argnums=(0, 1, 2),
+    )(feats, weight, bias)
+    outputs, vjps = mx.vjp(
+        features,
+        [feats, weight, bias],
+        [mx.ones((2, 2), dtype=mx.float32)],
+    )
+    _, jvps = mx.jvp(
+        features,
+        [feats, weight, bias],
+        [mx.ones_like(feats), mx.ones_like(weight), mx.ones_like(bias)],
+    )
+    compiled = mx.compile(features)
+
+    assert outputs[0].tolist() == [[5.0, 8.0], [0.0, 0.0]]
+    assert grad_feats.tolist() == [[7.0, 10.0], [0.0, 0.0]]
+    assert grad_weight.tolist() == [[-1.0, 2.0], [-1.0, 2.0]]
+    assert grad_bias.tolist() == [1.0, 1.0]
+    assert [value.tolist() for value in vjps] == [
+        [[7.0, 10.0], [0.0, 0.0]],
+        [[-1.0, 2.0], [-1.0, 2.0]],
+        [1.0, 1.0],
+    ]
+    assert jvps[0].tolist() == [[7.0, 14.0], [0.0, 0.0]]
+    assert compiled(feats, weight, bias).tolist() == outputs[0].tolist()
+
+
 def test_feature_ops_reject_invalid_contracts() -> None:
     x = _tensor()
 

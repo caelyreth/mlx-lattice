@@ -242,6 +242,99 @@ inline int degree_for_forward_out_row(
     return max(degree, 1);
 }
 
+inline int max_pool_tie_count_for_forward_out_row_channel(
+    device const int* coords,
+    device const int* offsets,
+    device const float* feats,
+    int rows,
+    int kernels,
+    int out_row,
+    int channel,
+    float pooled_value,
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int pad_x,
+    int pad_y,
+    int pad_z,
+    int feat_s0,
+    int feat_s1
+) {
+    int count = 0;
+    for (int probe_in = 0; probe_in < rows; ++probe_in) {
+        for (int probe_kernel = 0; probe_kernel < kernels; ++probe_kernel) {
+            int candidate[4];
+            int probe_out = -1;
+            if (valid_forward_relation_coord(
+                    coords,
+                    rows,
+                    probe_kernel,
+                    offsets,
+                    stride_x,
+                    stride_y,
+                    stride_z,
+                    pad_x,
+                    pad_y,
+                    pad_z,
+                    probe_in,
+                    candidate,
+                    probe_out
+                ) &&
+                probe_out == out_row &&
+                feats[probe_in * feat_s0 + channel * feat_s1] == pooled_value) {
+                count += 1;
+            }
+        }
+    }
+    return count;
+}
+
+inline int max_pool_first_rank_for_forward_out_row_channel(
+    device const int* coords,
+    device const int* offsets,
+    device const float* feats,
+    int rows,
+    int kernels,
+    int out_row,
+    int channel,
+    float pooled_value,
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int pad_x,
+    int pad_y,
+    int pad_z,
+    int feat_s0,
+    int feat_s1
+) {
+    for (int probe_in = 0; probe_in < rows; ++probe_in) {
+        for (int probe_kernel = 0; probe_kernel < kernels; ++probe_kernel) {
+            int candidate[4];
+            int probe_out = -1;
+            if (valid_forward_relation_coord(
+                    coords,
+                    rows,
+                    probe_kernel,
+                    offsets,
+                    stride_x,
+                    stride_y,
+                    stride_z,
+                    pad_x,
+                    pad_y,
+                    pad_z,
+                    probe_in,
+                    candidate,
+                    probe_out
+                ) &&
+                probe_out == out_row &&
+                feats[probe_in * feat_s0 + channel * feat_s1] == pooled_value) {
+                return probe_in * kernels + probe_kernel;
+            }
+        }
+    }
+    return -1;
+}
+
 inline int weight_offset(
     int kernel_id,
     int in_channel,

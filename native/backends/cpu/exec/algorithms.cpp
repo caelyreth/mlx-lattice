@@ -81,6 +81,63 @@ std::ptrdiff_t dense_weight_offset(
            in_channel;
 }
 
+struct MaxTiePolicy {
+    std::vector<int32_t> counts;
+    std::vector<int32_t> first_ranks;
+};
+
+int pool_edge_rank(const Edge& edge, const SparsePoolShape& shape) {
+    return edge[0] * shape.n_kernels + edge[2];
+}
+
+std::size_t pool_channel_key(int out_row, int channel, int channels) {
+    return static_cast<std::size_t>(out_row) *
+               static_cast<std::size_t>(channels) +
+           static_cast<std::size_t>(channel);
+}
+
+MaxTiePolicy build_max_tie_policy(
+    const Plan& plan,
+    const mx::array& feats,
+    const mx::array& pooled,
+    SparsePoolShape shape
+) {
+    auto size = static_cast<std::size_t>(shape.out_capacity) *
+                static_cast<std::size_t>(shape.channels);
+    MaxTiePolicy policy{
+        std::vector<int32_t>(size, 0),
+        std::vector<int32_t>(size, std::numeric_limits<int32_t>::max()),
+    };
+
+    const auto* feat_data = feats.data<float>();
+    const auto* pooled_data = pooled.data<float>();
+    const auto feat_s0 = feats.strides(0);
+    const auto feat_s1 = feats.strides(1);
+    const auto pooled_s0 = pooled.strides(0);
+    const auto pooled_s1 = pooled.strides(1);
+
+    for (auto edge : plan.edges) {
+        auto in_row = edge[0];
+        auto out_row = edge[1];
+        auto rank = pool_edge_rank(edge, shape);
+        for (int channel = 0; channel < shape.channels; ++channel) {
+            auto feat_value = feat_data
+                [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
+                 static_cast<std::ptrdiff_t>(channel) * feat_s1];
+            auto pooled_value = pooled_data
+                [static_cast<std::ptrdiff_t>(out_row) * pooled_s0 +
+                 static_cast<std::ptrdiff_t>(channel) * pooled_s1];
+            if (feat_value != pooled_value) {
+                continue;
+            }
+            auto key = pool_channel_key(out_row, channel, shape.channels);
+            policy.counts[key] += 1;
+            policy.first_ranks[key] = std::min(policy.first_ranks[key], rank);
+        }
+    }
+    return policy;
+}
+
 } // namespace
 
 void eval_sparse_conv(
@@ -369,6 +426,10 @@ void eval_sparse_pool_grad(
                 padding
             );
             auto degrees = pool_degrees(plan, shape.out_capacity);
+            auto max_ties =
+                reduce == PoolReduceOp::Max
+                    ? build_max_tie_policy(plan, feats, pooled, shape)
+                    : MaxTiePolicy{};
             auto& grad = task_outputs[0];
             fill_zero(grad);
             auto* grad_data = grad.data<float>();
@@ -397,13 +458,21 @@ void eval_sparse_pool_grad(
                     auto pooled_value = pooled_data
                         [static_cast<std::ptrdiff_t>(out_row) * pooled_s0 +
                          static_cast<std::ptrdiff_t>(channel) * pooled_s1];
-                    if (reduce == PoolReduceOp::Max &&
-                        feat_value != pooled_value) {
-                        continue;
+                    auto scale = 1.0F;
+                    if (reduce == PoolReduceOp::Max) {
+                        if (feat_value != pooled_value) {
+                            continue;
+                        }
+                        auto key =
+                            pool_channel_key(out_row, channel, shape.channels);
+                        auto tie_count = max_ties.counts[key];
+                        if (tie_count == 0) {
+                            continue;
+                        }
+                        scale = 1.0F / float(tie_count);
+                    } else if (reduce == PoolReduceOp::Avg) {
+                        scale = 1.0F / float(denom);
                     }
-                    auto scale = reduce == PoolReduceOp::Avg
-                                     ? 1.0F / float(denom)
-                                     : 1.0F;
                     auto cotangent_value = cotangent_data
                         [static_cast<std::ptrdiff_t>(out_row) * cotangent_s0 +
                          static_cast<std::ptrdiff_t>(channel) * cotangent_s1];
@@ -448,6 +517,10 @@ void eval_sparse_pool_jvp(
                 padding
             );
             auto degrees = pool_degrees(plan, shape.out_capacity);
+            auto max_ties =
+                reduce == PoolReduceOp::Max
+                    ? build_max_tie_policy(plan, feats, pooled, shape)
+                    : MaxTiePolicy{};
             auto& out = task_outputs[0];
             fill_zero(out);
             auto* out_data = out.data<float>();
@@ -476,13 +549,20 @@ void eval_sparse_pool_jvp(
                     auto pooled_value = pooled_data
                         [static_cast<std::ptrdiff_t>(out_row) * pooled_s0 +
                          static_cast<std::ptrdiff_t>(channel) * pooled_s1];
-                    if (reduce == PoolReduceOp::Max &&
-                        feat_value != pooled_value) {
-                        continue;
+                    auto scale = 1.0F;
+                    if (reduce == PoolReduceOp::Max) {
+                        if (feat_value != pooled_value) {
+                            continue;
+                        }
+                        auto key =
+                            pool_channel_key(out_row, channel, shape.channels);
+                        if (pool_edge_rank(edge, shape) !=
+                            max_ties.first_ranks[key]) {
+                            continue;
+                        }
+                    } else if (reduce == PoolReduceOp::Avg) {
+                        scale = 1.0F / float(denom);
                     }
-                    auto scale = reduce == PoolReduceOp::Avg
-                                     ? 1.0F / float(denom)
-                                     : 1.0F;
                     auto tangent_value = tangent_data
                         [static_cast<std::ptrdiff_t>(in_row) * tangent_s0 +
                          static_cast<std::ptrdiff_t>(channel) * tangent_s1];

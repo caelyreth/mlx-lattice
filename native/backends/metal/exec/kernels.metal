@@ -584,10 +584,37 @@ using namespace metal;
                 float feat_value = feats[in_row * feat_s0 + channel * feat_s1];
                 float pooled_value =
                     pooled[out_row * pooled_s0 + channel * pooled_s1];
-                if (reduce == 1 && feat_value != pooled_value) {
-                    continue;
+                float scale = 1.0f;
+                if (reduce == 1) {
+                    if (feat_value != pooled_value) {
+                        continue;
+                    }
+                    int tie_count =
+                        max_pool_tie_count_for_forward_out_row_channel(
+                            coords,
+                            offsets,
+                            feats,
+                            rows,
+                            n_kernels,
+                            out_row,
+                            channel,
+                            pooled_value,
+                            stride_x,
+                            stride_y,
+                            stride_z,
+                            pad_x,
+                            pad_y,
+                            pad_z,
+                            feat_s0,
+                            feat_s1
+                        );
+                    if (tie_count == 0) {
+                        continue;
+                    }
+                    scale = 1.0f / float(tie_count);
+                } else if (reduce == 2) {
+                    scale = 1.0f / float(degree);
                 }
-                float scale = reduce == 2 ? 1.0f / float(degree) : 1.0f;
                 grad[in_index] +=
                     cotangent[out_row * cotangent_s0 + channel * cotangent_s1] *
                     scale;
@@ -668,10 +695,36 @@ using namespace metal;
                 float feat_value = feats[in_row * feat_s0 + channel * feat_s1];
                 float pooled_value =
                     pooled[out_row * pooled_s0 + channel * pooled_s1];
-                if (reduce == 1 && feat_value != pooled_value) {
-                    continue;
+                float scale = 1.0f;
+                if (reduce == 1) {
+                    if (feat_value != pooled_value) {
+                        continue;
+                    }
+                    int first_rank =
+                        max_pool_first_rank_for_forward_out_row_channel(
+                            coords,
+                            offsets,
+                            feats,
+                            rows,
+                            n_kernels,
+                            out_row,
+                            channel,
+                            pooled_value,
+                            stride_x,
+                            stride_y,
+                            stride_z,
+                            pad_x,
+                            pad_y,
+                            pad_z,
+                            feat_s0,
+                            feat_s1
+                        );
+                    if (in_row * n_kernels + kernel_id != first_rank) {
+                        continue;
+                    }
+                } else if (reduce == 2) {
+                    scale = 1.0f / float(degree);
                 }
-                float scale = reduce == 2 ? 1.0f / float(degree) : 1.0f;
                 out[out_row * channels + channel] +=
                     tangent[in_row * tangent_s0 + channel * tangent_s1] * scale;
             }

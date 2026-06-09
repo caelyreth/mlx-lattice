@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import mlx.nn as mxnn
+
 import mlx_lattice
 from mlx_lattice import SparseTensor
 from mlx_lattice import nn as lnn
@@ -144,6 +146,223 @@ def test_sparse_operator_modules_are_autogradable() -> None:
 
     assert mx.grad(conv_loss)(feats).tolist() == [[3.0], [6.0], [5.0]]
     assert mx.grad(pool_loss)(feats).tolist() == [[2.0], [3.0], [2.0]]
+
+
+def test_feature_modules_support_mlx_transform_surface() -> None:
+    coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
+    feats = mx.array([[-1.0, 2.0], [3.0, -4.0]], dtype=mx.float32)
+    tangent = mx.ones_like(feats)
+    module = lnn.Linear(2, 2)
+    module.weight = mx.array(
+        [[2.0, 3.0], [5.0, 7.0]],
+        dtype=mx.float32,
+    )
+    module.bias = mx.array([1.0, -1.0], dtype=mx.float32)
+    relu = lnn.ReLU()
+
+    def features(feats_arg: mx.array) -> mx.array:
+        return relu(module(SparseTensor(coords, feats_arg))).feats
+
+    def loss(model: lnn.Linear, feats_arg: mx.array) -> mx.array:
+        return mx.sum(relu(model(SparseTensor(coords, feats_arg))).feats)
+
+    value, param_grads = mxnn.value_and_grad(module, loss)(module, feats)
+    outputs, input_vjps = mx.vjp(
+        features,
+        [feats],
+        [mx.ones((2, 2), dtype=mx.float32)],
+    )
+    _, input_jvps = mx.jvp(features, [feats], [tangent])
+    compiled = mx.compile(features)
+
+    assert value.tolist() == 13.0
+    assert outputs[0].tolist() == [[5.0, 8.0], [0.0, 0.0]]
+    assert param_grads['weight'].tolist() == [
+        [-1.0, 2.0],
+        [-1.0, 2.0],
+    ]
+    assert param_grads['bias'].tolist() == [1.0, 1.0]
+    assert input_vjps[0].tolist() == [[7.0, 10.0], [0.0, 0.0]]
+    assert input_jvps[0].tolist() == [[5.0, 12.0], [0.0, 0.0]]
+    assert compiled(feats).tolist() == outputs[0].tolist()
+
+
+def test_convolution_modules_support_mlx_transform_surface_across_modes() -> (
+    None
+):
+    conv_coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    conv_feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    conv_weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        3,
+        1,
+        1,
+        1,
+    )
+    transpose_coords = mx.array([[0, 1, 0, 0]], dtype=mx.int32)
+    transpose_feats = mx.array([[4.0]], dtype=mx.float32)
+    transpose_weight = mx.array([2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        2,
+        1,
+        1,
+        1,
+    )
+
+    cases = [
+        (
+            lnn.Conv3d(1, 1, kernel_size=(3, 1, 1), bias=False),
+            conv_coords,
+            conv_feats,
+            (1, 1, 1),
+            conv_weight,
+            [[8.0], [14.0], [8.0]],
+            [[3.0], [6.0], [5.0]],
+            [[5.0], [6.0], [3.0]],
+            [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]],
+        ),
+        (
+            lnn.SubmConv3d(1, 1, kernel_size=(3, 1, 1), bias=False),
+            conv_coords,
+            conv_feats,
+            (1, 1, 1),
+            conv_weight,
+            [[8.0], [14.0], [8.0]],
+            [[3.0], [6.0], [5.0]],
+            [[5.0], [6.0], [3.0]],
+            [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]],
+        ),
+        (
+            lnn.ConvTranspose3d(
+                1,
+                1,
+                kernel_size=(2, 1, 1),
+                stride=(2, 1, 1),
+                bias=False,
+            ),
+            transpose_coords,
+            transpose_feats,
+            (2, 1, 1),
+            transpose_weight,
+            [[8.0], [12.0]],
+            [[5.0]],
+            [[2.0], [3.0]],
+            [[[[[4.0]]], [[[4.0]]]]],
+        ),
+        (
+            lnn.GenerativeConvTranspose3d(
+                1,
+                1,
+                kernel_size=(2, 1, 1),
+                stride=(2, 1, 1),
+                bias=False,
+            ),
+            transpose_coords,
+            transpose_feats,
+            (2, 1, 1),
+            transpose_weight,
+            [[8.0], [12.0]],
+            [[5.0]],
+            [[2.0], [3.0]],
+            [[[[[4.0]]], [[[4.0]]]]],
+        ),
+    ]
+
+    def make_features(
+        module: object,
+        coords: mx.array,
+        stride: tuple[int, int, int],
+    ):
+        def features(feats_arg: mx.array) -> mx.array:
+            return module(
+                SparseTensor(coords, feats_arg, stride=stride)
+            ).feats
+
+        return features
+
+    def make_loss(coords: mx.array, stride: tuple[int, int, int]):
+        def loss(model: object, feats_arg: mx.array) -> mx.array:
+            return mx.sum(
+                model(SparseTensor(coords, feats_arg, stride=stride)).feats
+            )
+
+        return loss
+
+    for (
+        module,
+        coords,
+        feats,
+        stride,
+        weight,
+        expected_out,
+        expected_input_grad,
+        expected_jvp,
+        expected_weight_grad,
+    ) in cases:
+        module.weight = weight
+        features = make_features(module, coords, stride)
+        loss = make_loss(coords, stride)
+
+        value, param_grads = mxnn.value_and_grad(module, loss)(
+            module,
+            feats,
+        )
+        outputs, input_vjps = mx.vjp(
+            features,
+            [feats],
+            [mx.ones_like(mx.array(expected_out, dtype=mx.float32))],
+        )
+        _, input_jvps = mx.jvp(features, [feats], [mx.ones_like(feats)])
+        compiled = mx.compile(features)
+
+        assert outputs[0].tolist() == expected_out
+        assert value.tolist() == mx.sum(outputs[0]).tolist()
+        assert input_vjps[0].tolist() == expected_input_grad
+        assert input_jvps[0].tolist() == expected_jvp
+        assert param_grads['weight'].tolist() == expected_weight_grad
+        assert compiled(feats).tolist() == expected_out
+
+
+def test_pool_modules_support_mlx_transform_surface() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[2.0], [2.0], [1.0]], dtype=mx.float32)
+    tangent = mx.array([[10.0], [20.0], [30.0]], dtype=mx.float32)
+    max_pool = lnn.MaxPool3d(kernel_size=(3, 1, 1), stride=1)
+
+    def maxed(feats_arg: mx.array) -> mx.array:
+        return max_pool(SparseTensor(coords, feats_arg)).feats
+
+    outputs, input_vjps = mx.vjp(
+        maxed,
+        [feats],
+        [mx.ones((3, 1), dtype=mx.float32)],
+    )
+    _, input_jvps = mx.jvp(maxed, [feats], [tangent])
+
+    assert outputs[0].tolist() == [[2.0], [2.0], [2.0]]
+    assert input_vjps[0].tolist() == [[1.0], [2.0], [0.0]]
+    assert input_jvps[0].tolist() == [[10.0], [10.0], [20.0]]
+    assert mx.compile(maxed)(feats).tolist() == outputs[0].tolist()
+
+    def summed(feats_arg: mx.array) -> mx.array:
+        module = lnn.SumPool3d(kernel_size=(3, 1, 1), stride=1)
+        return module(SparseTensor(coords, feats_arg)).feats
+
+    def averaged(feats_arg: mx.array) -> mx.array:
+        module = lnn.AvgPool3d(kernel_size=(3, 1, 1), stride=1)
+        return module(SparseTensor(coords, feats_arg)).feats
+
+    assert mx.compile(summed)(feats).tolist() == [[4.0], [5.0], [3.0]]
+    assert_nested_close(
+        mx.compile(averaged)(feats).tolist(),
+        [[2.0], [5.0 / 3.0], [1.5]],
+    )
 
 
 def test_transpose_and_pool_modules_wrap_sparse_policies() -> None:

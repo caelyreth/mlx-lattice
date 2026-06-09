@@ -78,6 +78,183 @@ def test_conv3d_generic_path_is_autogradable_for_features_and_weights() -> (
     assert grad_weight.tolist() == [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]]
 
 
+def test_convolution_modes_are_autogradable_for_features_and_weights() -> (
+    None
+):
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        3,
+        1,
+        1,
+        1,
+    )
+
+    def subm_loss(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return mx.sum(
+            subm_conv3d(x, weight_arg, kernel_size=(3, 1, 1)).feats
+        )
+
+    subm_grad_feats, subm_grad_weight = mx.grad(
+        subm_loss,
+        argnums=(0, 1),
+    )(feats, weight)
+
+    assert subm_grad_feats.tolist() == [[3.0], [6.0], [5.0]]
+    assert subm_grad_weight.tolist() == [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]]
+
+    transpose_coords = mx.array([[0, 1, 0, 0]], dtype=mx.int32)
+    transpose_feats = mx.array([[4.0]], dtype=mx.float32)
+    transpose_weight = mx.array([2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        2,
+        1,
+        1,
+        1,
+    )
+
+    def transpose_loss(
+        feats_arg: mx.array,
+        weight_arg: mx.array,
+    ) -> mx.array:
+        x = SparseTensor(transpose_coords, feats_arg, stride=(2, 1, 1))
+        return mx.sum(
+            conv_transpose3d(
+                x,
+                weight_arg,
+                kernel_size=(2, 1, 1),
+                stride=(2, 1, 1),
+            ).feats
+        )
+
+    def generative_loss(
+        feats_arg: mx.array,
+        weight_arg: mx.array,
+    ) -> mx.array:
+        x = SparseTensor(transpose_coords, feats_arg, stride=(2, 1, 1))
+        return mx.sum(
+            generative_conv_transpose3d(
+                x,
+                weight_arg,
+                kernel_size=(2, 1, 1),
+                stride=(2, 1, 1),
+            ).feats
+        )
+
+    expected_weight_grad = [[[[[4.0]]], [[[4.0]]]]]
+    for loss in (transpose_loss, generative_loss):
+        grad_feats, grad_weight = mx.grad(loss, argnums=(0, 1))(
+            transpose_feats,
+            transpose_weight,
+        )
+        assert grad_feats.tolist() == [[5.0]]
+        assert grad_weight.tolist() == expected_weight_grad
+
+
+def test_conv3d_generic_supports_explicit_vjp_and_jvp_transforms() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    tangent = mx.ones_like(feats)
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        3,
+        1,
+        1,
+        1,
+    )
+    weight_tangent = mx.ones_like(weight)
+
+    def features(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        x = SparseTensor(coords, feats_arg)
+        return conv3d(x, weight_arg, kernel_size=(3, 1, 1)).feats
+
+    outputs, grads = mx.vjp(
+        features,
+        [feats, weight],
+        [mx.ones((3, 1), dtype=mx.float32)],
+    )
+    _, jvps = mx.jvp(
+        features,
+        [feats, weight],
+        [tangent, weight_tangent],
+    )
+
+    assert outputs[0].tolist() == [[8.0], [14.0], [8.0]]
+    assert grads[0].tolist() == [[3.0], [6.0], [5.0]]
+    assert grads[1].tolist() == [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]]
+    assert jvps[0].tolist() == [[8.0], [12.0], [8.0]]
+
+
+def test_convolution_modes_are_compatible_with_mx_compile() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
+
+    def generic(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        return conv3d(
+            SparseTensor(coords, feats_arg),
+            weight_arg,
+            kernel_size=(3, 1, 1),
+        ).feats
+
+    def subm(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        return subm_conv3d(
+            SparseTensor(coords, feats_arg),
+            weight_arg,
+            kernel_size=(3, 1, 1),
+        ).feats
+
+    for fn in (generic, subm):
+        compiled = mx.compile(fn)
+        assert compiled(feats, weight).tolist() == [[3.0], [6.0], [5.0]]
+
+    transpose_coords = mx.array([[0, 1, 0, 0]], dtype=mx.int32)
+    transpose_feats = mx.array([[4.0]], dtype=mx.float32)
+    transpose_weight = mx.array([2.0, 3.0], dtype=mx.float32).reshape(
+        1,
+        2,
+        1,
+        1,
+        1,
+    )
+
+    def transposed(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        x = SparseTensor(transpose_coords, feats_arg, stride=(2, 1, 1))
+        return conv_transpose3d(
+            x,
+            weight_arg,
+            kernel_size=(2, 1, 1),
+            stride=(2, 1, 1),
+        ).feats
+
+    def generated(feats_arg: mx.array, weight_arg: mx.array) -> mx.array:
+        x = SparseTensor(transpose_coords, feats_arg, stride=(2, 1, 1))
+        return generative_conv_transpose3d(
+            x,
+            weight_arg,
+            kernel_size=(2, 1, 1),
+            stride=(2, 1, 1),
+        ).feats
+
+    for fn in (transposed, generated):
+        compiled = mx.compile(fn)
+        assert compiled(
+            transpose_feats,
+            transpose_weight,
+        ).tolist() == [[8.0], [12.0]]
+
+
 def test_conv3d_strided_updates_output_stride_and_coordinates() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 0, 0]],
@@ -216,6 +393,121 @@ def test_metal_convolution_gradients_match_cpu_contract_when_available() -> (
     assert run_with_gpu_default(run) == (
         [[3.0], [6.0], [5.0]],
         [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]],
+    )
+
+
+def test_metal_convolution_mode_gradients_match_cpu_contract_when_available() -> (
+    None
+):
+    def run() -> tuple[
+        list[list[float]],
+        object,
+        list[list[float]],
+        object,
+        list[list[float]],
+        object,
+    ]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+        weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+            1,
+            3,
+            1,
+            1,
+            1,
+        )
+
+        def subm_loss(
+            feats_arg: mx.array,
+            weight_arg: mx.array,
+        ) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return mx.sum(
+                subm_conv3d(
+                    x,
+                    weight_arg,
+                    kernel_size=(3, 1, 1),
+                ).feats
+            )
+
+        subm_grad_feats, subm_grad_weight = mx.grad(
+            subm_loss,
+            argnums=(0, 1),
+        )(feats, weight)
+
+        transpose_coords = mx.array([[0, 1, 0, 0]], dtype=mx.int32)
+        transpose_feats = mx.array([[4.0]], dtype=mx.float32)
+        transpose_weight = mx.array([2.0, 3.0], dtype=mx.float32).reshape(
+            1,
+            2,
+            1,
+            1,
+            1,
+        )
+
+        def transpose_loss(
+            feats_arg: mx.array,
+            weight_arg: mx.array,
+        ) -> mx.array:
+            x = SparseTensor(transpose_coords, feats_arg, stride=(2, 1, 1))
+            return mx.sum(
+                conv_transpose3d(
+                    x,
+                    weight_arg,
+                    kernel_size=(2, 1, 1),
+                    stride=(2, 1, 1),
+                ).feats
+            )
+
+        def generative_loss(
+            feats_arg: mx.array,
+            weight_arg: mx.array,
+        ) -> mx.array:
+            x = SparseTensor(transpose_coords, feats_arg, stride=(2, 1, 1))
+            return mx.sum(
+                generative_conv_transpose3d(
+                    x,
+                    weight_arg,
+                    kernel_size=(2, 1, 1),
+                    stride=(2, 1, 1),
+                ).feats
+            )
+
+        transpose_grad_feats, transpose_grad_weight = mx.grad(
+            transpose_loss,
+            argnums=(0, 1),
+        )(transpose_feats, transpose_weight)
+        generative_grad_feats, generative_grad_weight = mx.grad(
+            generative_loss,
+            argnums=(0, 1),
+        )(transpose_feats, transpose_weight)
+        mx.eval(
+            subm_grad_feats,
+            subm_grad_weight,
+            transpose_grad_feats,
+            transpose_grad_weight,
+            generative_grad_feats,
+            generative_grad_weight,
+        )
+        return (
+            subm_grad_feats.tolist(),
+            subm_grad_weight.tolist(),
+            transpose_grad_feats.tolist(),
+            transpose_grad_weight.tolist(),
+            generative_grad_feats.tolist(),
+            generative_grad_weight.tolist(),
+        )
+
+    assert run_with_gpu_default(run) == (
+        [[3.0], [6.0], [5.0]],
+        [[[[[3.0]]], [[[6.0]]], [[[5.0]]]]],
+        [[5.0]],
+        [[[[[4.0]]], [[[4.0]]]]],
+        [[5.0]],
+        [[[[[4.0]]], [[[4.0]]]]],
     )
 
 
