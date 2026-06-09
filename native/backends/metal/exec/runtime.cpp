@@ -65,6 +65,15 @@ bool is_identity_forward_coords(Triple stride, Triple padding) {
 }
 
 #ifdef _METAL_
+mx::array make_int32_temp(int elements) {
+    auto count = std::max(elements, 1);
+    return mx::array(
+        mx::allocator::malloc(static_cast<size_t>(count) * sizeof(int32_t)),
+        mx::Shape{count},
+        mx::int32
+    );
+}
+
 template <typename Encoder, typename Kernel>
 void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
     auto threads = std::max<size_t>(elements, 1);
@@ -183,73 +192,119 @@ void eval_sparse_conv(
         encoder.set_bytes(feat_total, 4);
         dispatch_1d(encoder, clear, std::max(coord_elements, feat_elements));
 
-        auto coords_kernel = device.get_kernel(
-            is_identity_forward_coords(stride, padding)
-                ? "sparse_forward_identity_coords_i32"
-                : "sparse_conv_forward_coords_i32",
-            library
+        auto max_edges = shape.out_capacity * shape.n_kernels;
+        if (is_identity_forward_coords(stride, padding)) {
+            auto plan_in_rows = make_int32_temp(max_edges);
+            encoder.add_temporary(plan_in_rows);
+
+            auto plan =
+                device.get_kernel("sparse_conv_identity_plan_i32", library);
+            encoder.set_compute_pipeline_state(plan);
+            encoder.set_input_array(inputs[0], 0);
+            encoder.set_input_array(inputs[1], 1);
+            encoder.set_input_array(inputs[4], 2);
+            encoder.set_output_array(outputs[SparseOutCoords], 3);
+            encoder.set_output_array(outputs[SparseCounts], 4);
+            encoder.set_output_array(plan_in_rows, 5);
+            encoder.set_bytes(shape.in_capacity, 6);
+            encoder.set_bytes(shape.n_kernels, 7);
+            dispatch_1d(
+                encoder,
+                plan,
+                std::max(coord_elements, static_cast<size_t>(max_edges))
+            );
+
+            auto gather = device.get_kernel(
+                "sparse_conv_identity_plan_gather_f32_i32", library
+            );
+            encoder.set_compute_pipeline_state(gather);
+            encoder.set_input_array(inputs[2], 0);
+            encoder.set_input_array(inputs[3], 1);
+            encoder.set_input_array(plan_in_rows, 2);
+            encoder.set_input_array(outputs[SparseCounts], 3);
+            encoder.set_output_array(outputs[SparseOutFeats], 4);
+            encoder.set_bytes(shape.out_capacity, 5);
+            encoder.set_bytes(shape.n_kernels, 6);
+            encoder.set_bytes(shape.in_channels, 7);
+            encoder.set_bytes(shape.out_channels, 8);
+            encoder.set_bytes(stride_at(inputs[2], 0), 9);
+            encoder.set_bytes(stride_at(inputs[2], 1), 10);
+            encoder.set_bytes(stride_at(inputs[3], 0), 11);
+            encoder.set_bytes(stride_at(inputs[3], 1), 12);
+            encoder.set_bytes(stride_at(inputs[3], 2), 13);
+            encoder.set_bytes(
+                inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 14
+            );
+            encoder.set_bytes(
+                inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 15
+            );
+            encoder.set_bytes(shape.weight_layout, 16);
+            encoder.set_bytes(shape.kernel_x, 17);
+            encoder.set_bytes(shape.kernel_y, 18);
+            encoder.set_bytes(shape.kernel_z, 19);
+            dispatch_1d(encoder, gather, feat_elements);
+            return;
+        }
+
+        auto plan_in_rows = make_int32_temp(max_edges);
+        auto plan_kernel_ids = make_int32_temp(max_edges);
+        auto plan_row_offsets = make_int32_temp(shape.out_capacity + 1);
+        encoder.add_temporaries(
+            {plan_in_rows, plan_kernel_ids, plan_row_offsets}
         );
-        encoder.set_compute_pipeline_state(coords_kernel);
+
+        auto plan = device.get_kernel("sparse_conv_forward_plan_i32", library);
+        encoder.set_compute_pipeline_state(plan);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
         encoder.set_input_array(inputs[4], 2);
         encoder.set_output_array(outputs[SparseOutCoords], 3);
         encoder.set_output_array(outputs[SparseCounts], 4);
-        encoder.set_bytes(shape.in_capacity, 5);
-        encoder.set_bytes(shape.n_kernels, 6);
-        if (!is_identity_forward_coords(stride, padding)) {
-            encoder.set_bytes(stride[0], 7);
-            encoder.set_bytes(stride[1], 8);
-            encoder.set_bytes(stride[2], 9);
-            encoder.set_bytes(padding[0], 10);
-            encoder.set_bytes(padding[1], 11);
-            encoder.set_bytes(padding[2], 12);
-        }
-        dispatch_1d(
-            encoder,
-            coords_kernel,
-            is_identity_forward_coords(stride, padding)
-                ? static_cast<size_t>(shape.in_capacity) * 4
-                : static_cast<size_t>(shape.in_capacity)
-        );
-
-        auto gather =
-            device.get_kernel("sparse_conv_forward_gather_f32_i32", library);
-        encoder.set_compute_pipeline_state(gather);
-        encoder.set_input_array(inputs[0], 0);
-        encoder.set_input_array(inputs[1], 1);
-        encoder.set_input_array(inputs[2], 2);
-        encoder.set_input_array(inputs[3], 3);
-        encoder.set_input_array(inputs[4], 4);
-        encoder.set_input_array(outputs[SparseOutCoords], 5);
-        encoder.set_input_array(outputs[SparseCounts], 6);
-        encoder.set_output_array(outputs[SparseOutFeats], 7);
+        encoder.set_output_array(plan_in_rows, 5);
+        encoder.set_output_array(plan_kernel_ids, 6);
+        encoder.set_output_array(plan_row_offsets, 7);
         encoder.set_bytes(shape.in_capacity, 8);
         encoder.set_bytes(shape.out_capacity, 9);
         encoder.set_bytes(shape.n_kernels, 10);
-        encoder.set_bytes(shape.in_channels, 11);
-        encoder.set_bytes(shape.out_channels, 12);
-        encoder.set_bytes(stride[0], 13);
-        encoder.set_bytes(stride[1], 14);
-        encoder.set_bytes(stride[2], 15);
-        encoder.set_bytes(padding[0], 16);
-        encoder.set_bytes(padding[1], 17);
-        encoder.set_bytes(padding[2], 18);
-        encoder.set_bytes(stride_at(inputs[2], 0), 19);
-        encoder.set_bytes(stride_at(inputs[2], 1), 20);
-        encoder.set_bytes(stride_at(inputs[3], 0), 21);
-        encoder.set_bytes(stride_at(inputs[3], 1), 22);
-        encoder.set_bytes(stride_at(inputs[3], 2), 23);
+        encoder.set_bytes(stride[0], 11);
+        encoder.set_bytes(stride[1], 12);
+        encoder.set_bytes(stride[2], 13);
+        encoder.set_bytes(padding[0], 14);
+        encoder.set_bytes(padding[1], 15);
+        encoder.set_bytes(padding[2], 16);
+        auto identity = is_identity_forward_coords(stride, padding) ? 1 : 0;
+        encoder.set_bytes(identity, 17);
+        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+        auto gather = device.get_kernel(
+            "sparse_conv_forward_plan_gather_f32_i32", library
+        );
+        encoder.set_compute_pipeline_state(gather);
+        encoder.set_input_array(inputs[2], 0);
+        encoder.set_input_array(inputs[3], 1);
+        encoder.set_input_array(plan_in_rows, 2);
+        encoder.set_input_array(plan_kernel_ids, 3);
+        encoder.set_input_array(plan_row_offsets, 4);
+        encoder.set_input_array(outputs[SparseCounts], 5);
+        encoder.set_output_array(outputs[SparseOutFeats], 6);
+        encoder.set_bytes(shape.out_capacity, 7);
+        encoder.set_bytes(shape.in_channels, 8);
+        encoder.set_bytes(shape.out_channels, 9);
+        encoder.set_bytes(stride_at(inputs[2], 0), 10);
+        encoder.set_bytes(stride_at(inputs[2], 1), 11);
+        encoder.set_bytes(stride_at(inputs[3], 0), 12);
+        encoder.set_bytes(stride_at(inputs[3], 1), 13);
+        encoder.set_bytes(stride_at(inputs[3], 2), 14);
         encoder.set_bytes(
-            inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 24
+            inputs[3].ndim() == 5 ? stride_at(inputs[3], 3) : 0, 15
         );
         encoder.set_bytes(
-            inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 25
+            inputs[3].ndim() == 5 ? stride_at(inputs[3], 4) : 0, 16
         );
-        encoder.set_bytes(shape.weight_layout, 26);
-        encoder.set_bytes(shape.kernel_x, 27);
-        encoder.set_bytes(shape.kernel_y, 28);
-        encoder.set_bytes(shape.kernel_z, 29);
+        encoder.set_bytes(shape.weight_layout, 17);
+        encoder.set_bytes(shape.kernel_x, 18);
+        encoder.set_bytes(shape.kernel_y, 19);
+        encoder.set_bytes(shape.kernel_z, 20);
         dispatch_1d(encoder, gather, feat_elements);
         return;
     }
