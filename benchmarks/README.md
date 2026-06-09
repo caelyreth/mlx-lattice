@@ -16,7 +16,7 @@ uv run --all-packages mlx-lattice-bench --device all
 uv run --all-packages mlx-lattice-bench --group conv --group pool
 uv run --all-packages mlx-lattice-bench --mode compiled_hot
 uv run --all-packages mlx-lattice-bench --mode backward
-uv run --all-packages mlx-lattice-bench --output results.json
+uv run --all-packages mlx-lattice-bench --output smoke.json
 ```
 
 After `uv sync --all-packages`, the shorter form also works:
@@ -78,11 +78,14 @@ claim map-reuse timing until the public API exposes a reusable semantic plan.
 ## Reports
 
 Console output streams per-case progress, including effective sparse workload
-metadata after each completed result, then prints a compact table. ANSI color
-is automatic for terminals; use `--color always` or `--color never` to
-override it. Editable native-extension rebuild output is hidden during
-benchmark startup by default; pass `--show-build-log` when diagnosing
-build/install behavior.
+metadata after each completed result. Final benchmark reports are written under
+`benchmarks/results`, which is ignored by git. Each run writes a JSON report and
+a plain text summary table. If `--output` is omitted, the suite creates a
+timestamped JSON filename; if `--output` is relative, it resolves below
+`benchmarks/results`. ANSI color is automatic for terminals; use
+`--color always` or `--color never` to override it. Editable native-extension
+rebuild output is hidden during benchmark startup by default; pass
+`--show-build-log` when diagnosing build/install behavior.
 
 Sparse workload metadata is collected after timed evaluation, so host reads of
 lazy scalar counts do not affect latency samples. The key fields are:

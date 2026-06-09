@@ -39,6 +39,15 @@ def write_json(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
 
 
+def write_summary(
+    path: Path,
+    *,
+    results: list[BenchmarkResult],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(table(results, color=False) + '\n')
+
+
 def table(results: list[BenchmarkResult], *, color: bool = False) -> str:
     if not results:
         return _style('No benchmark results.', color, '33')

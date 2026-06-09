@@ -8,12 +8,15 @@ import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any
 
 from mlx_lattice_bench.catalog import GROUPS, MODES, PRESETS
 from mlx_lattice_bench.console import make_console
+
+_RESULTS_DIR = Path('benchmarks/results')
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,8 +25,8 @@ class _Runtime:
     available_devices: Any
     default_device: Any
     run_cases: Any
-    table: Any
     write_json: Any
+    write_summary: Any
 
 
 def main() -> None:
@@ -46,6 +49,7 @@ def main() -> None:
     devices = runtime.available_devices(args.device)
     total = _count_runs(cases, modes, devices, args.case_filter)
     console.set_total(total)
+    json_path, summary_path = _report_paths(args)
 
     results = []
     for device in devices:
@@ -65,9 +69,9 @@ def main() -> None:
                 )
             )
 
-    print(runtime.table(results, color=console.use_color))
-    if args.output is not None:
-        runtime.write_json(Path(args.output), results=results)
+    runtime.write_json(json_path, results=results)
+    runtime.write_summary(summary_path, results=results)
+    console.report(json_path, summary_path)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -105,7 +109,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument('--warmup', type=int, default=5)
     parser.add_argument('--repeats', type=int, default=20)
-    parser.add_argument('--output', help='write JSON report to this path')
+    parser.add_argument(
+        '--output',
+        help=(
+            'JSON report filename/path; relative paths resolve under '
+            'benchmarks/results'
+        ),
+    )
     parser.add_argument(
         '--color',
         choices=('auto', 'always', 'never'),
@@ -115,7 +125,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--quiet',
         action='store_true',
-        help='hide per-case progress and print only the final report',
+        help='hide progress output; reports are still written to files',
     )
     parser.add_argument(
         '--show-build-log',
@@ -151,7 +161,7 @@ def _import_runtime(*, preload_native: bool) -> _Runtime:
     from mlx_lattice_bench.cases import all_cases
     from mlx_lattice_bench.devices import available_devices, default_device
     from mlx_lattice_bench.harness import run_cases
-    from mlx_lattice_bench.report import table, write_json
+    from mlx_lattice_bench.report import write_json, write_summary
 
     if preload_native:
         _preload_native_extension()
@@ -161,8 +171,8 @@ def _import_runtime(*, preload_native: bool) -> _Runtime:
         available_devices=available_devices,
         default_device=default_device,
         run_cases=run_cases,
-        table=table,
         write_json=write_json,
+        write_summary=write_summary,
     )
 
 
@@ -199,6 +209,34 @@ def _count_runs(
             for _params in case.params:
                 total += sum(1 for mode in modes if case.supports(mode))
     return total
+
+
+def _report_paths(args: argparse.Namespace) -> tuple[Path, Path]:
+    json_path = _json_report_path(args)
+    summary_path = json_path.with_suffix('.summary.txt')
+    return json_path, summary_path
+
+
+def _json_report_path(args: argparse.Namespace) -> Path:
+    if args.output is not None:
+        path = Path(args.output)
+        if not path.is_absolute():
+            path = _RESULTS_DIR / path
+        if path.suffix == '':
+            path = path.with_suffix('.json')
+        return path
+
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    groups = _slug(args.group or GROUPS)
+    modes = _slug(args.mode or ('cold_op', 'hot_op'))
+    return (
+        _RESULTS_DIR
+        / f'{stamp}-{args.preset}-{args.device}-{groups}-{modes}.json'
+    )
+
+
+def _slug(values: Sequence[str]) -> str:
+    return '-'.join(value.replace('_', '-') for value in values)
 
 
 class _CapturedOutput(AbstractContextManager['_CapturedOutput']):

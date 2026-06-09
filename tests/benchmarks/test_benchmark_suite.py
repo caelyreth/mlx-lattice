@@ -5,8 +5,8 @@ import json
 from mlx_lattice_bench.cases import GROUPS, all_cases
 from mlx_lattice_bench.datasets import PointArrays, point_arrays
 from mlx_lattice_bench.harness import BenchmarkCase, run_case, run_cases
-from mlx_lattice_bench.report import write_json
-from mlx_lattice_bench.run import _parser
+from mlx_lattice_bench.report import write_json, write_summary
+from mlx_lattice_bench.run import _parser, _report_paths
 
 from mlx_lattice.ops import voxelize
 from tests.support import mx
@@ -130,6 +130,15 @@ def test_cli_explicit_modes_do_not_append_default_modes() -> None:
     assert args.mode == ['backward']
 
 
+def test_cli_report_paths_resolve_under_results_dir() -> None:
+    args = _parser().parse_args(['--output', 'smoke'])
+
+    json_path, summary_path = _report_paths(args)
+
+    assert json_path.as_posix() == 'benchmarks/results/smoke.json'
+    assert summary_path.as_posix() == 'benchmarks/results/smoke.summary.txt'
+
+
 def test_json_report_contains_environment_and_samples(tmp_path) -> None:
     case = BenchmarkCase(
         name='test_voxelize',
@@ -158,6 +167,12 @@ def test_json_report_contains_environment_and_samples(tmp_path) -> None:
     assert payload['results'][0]['case'] == 'test_voxelize'
     assert payload['results'][0]['workload']['points'] == 4
     assert payload['results'][0]['samples_ms']
+
+    summary_path = tmp_path / 'bench.summary.txt'
+    write_summary(summary_path, results=[result])
+    summary = summary_path.read_text()
+    assert 'test_voxelize' in summary
+    assert 'median_ms' in summary
 
 
 def _run_voxelize(fixture: PointArrays) -> object:
