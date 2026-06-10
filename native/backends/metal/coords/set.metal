@@ -141,6 +141,112 @@ inline int lookup_downsample_row_hash(
     count[0] = out_count;
 }
 
+[[kernel]] void compact_strided_relation_output_coords_i32(
+    device const int* coords [[buffer(0)]],
+    device const int* selected [[buffer(1)]],
+    device int* out_coords [[buffer(2)]],
+    device int* counts [[buffer(3)]],
+    constant const int& rows [[buffer(4)]],
+    constant const int& stride_x [[buffer(5)]],
+    constant const int& stride_y [[buffer(6)]],
+    constant const int& stride_z [[buffer(7)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    if (elem != 0) {
+        return;
+    }
+    int out_count = 0;
+    for (int row = 0; row < rows; ++row) {
+        if (selected[row] == 0) {
+            continue;
+        }
+        int candidate[4];
+        downsample_coord(coords, row, stride_x, stride_y, stride_z, candidate);
+        write_coord(out_coords, out_count++, candidate);
+    }
+    counts[0] = 0;
+    counts[1] = out_count;
+}
+
+[[kernel]] void build_strided_relation_output_hash_i32(
+    device const int* coords [[buffer(0)]],
+    device const int* active_rows [[buffer(1)]],
+    device atomic_int* table_rows [[buffer(2)]],
+    constant const int& rows [[buffer(3)]],
+    constant const int& table_capacity [[buffer(4)]],
+    constant const int& stride_x [[buffer(5)]],
+    constant const int& stride_y [[buffer(6)]],
+    constant const int& stride_z [[buffer(7)]],
+    uint row [[thread_position_in_grid]]
+) {
+    int logical_rows = min(active_rows[0], rows);
+    if (row >= uint(logical_rows)) {
+        return;
+    }
+
+    int candidate[4];
+    downsample_coord(coords, int(row), stride_x, stride_y, stride_z, candidate);
+    int slot = coord_hash_i32(candidate) & (table_capacity - 1);
+    for (int probe = 0; probe < table_capacity; ++probe) {
+        int expected = -1;
+        if (atomic_compare_exchange_weak_explicit(
+                &table_rows[slot],
+                &expected,
+                int(row),
+                memory_order_relaxed,
+                memory_order_relaxed
+            )) {
+            return;
+        }
+        int stored[4];
+        downsample_coord(
+            coords, expected, stride_x, stride_y, stride_z, stored
+        );
+        if (candidate[0] == stored[0] && candidate[1] == stored[1] &&
+            candidate[2] == stored[2] && candidate[3] == stored[3]) {
+            atomic_fetch_min_explicit(
+                &table_rows[slot], int(row), memory_order_relaxed
+            );
+            return;
+        }
+        slot = (slot + 1) & (table_capacity - 1);
+    }
+}
+
+[[kernel]] void plan_strided_relation_output_coords_i32(
+    device const int* coords [[buffer(0)]],
+    device const int* active_rows [[buffer(1)]],
+    device const int* table_rows [[buffer(2)]],
+    device int* selected [[buffer(3)]],
+    constant const int& rows [[buffer(4)]],
+    constant const int& table_capacity [[buffer(5)]],
+    constant const int& stride_x [[buffer(6)]],
+    constant const int& stride_y [[buffer(7)]],
+    constant const int& stride_z [[buffer(8)]],
+    uint row [[thread_position_in_grid]]
+) {
+    if (row >= uint(rows)) {
+        return;
+    }
+    int logical_rows = min(active_rows[0], rows);
+    if (row >= uint(logical_rows)) {
+        selected[row] = 0;
+        return;
+    }
+
+    int candidate[4];
+    downsample_coord(coords, int(row), stride_x, stride_y, stride_z, candidate);
+    selected[row] = lookup_downsample_row_hash(
+                        coords,
+                        table_rows,
+                        table_capacity,
+                        candidate,
+                        stride_x,
+                        stride_y,
+                        stride_z
+                    ) == int(row);
+}
+
 [[kernel]] void plan_union_coord_set_i32(
     device const int* lhs [[buffer(0)]],
     device const int* rhs [[buffer(1)]],

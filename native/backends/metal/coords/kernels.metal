@@ -56,36 +56,47 @@ using namespace metal;
 
 // MARK: - generic relations
 
-[[kernel]] void build_identity_forward_relation_plan_i32(
+[[kernel]] void build_identity_forward_relation_slots_i32(
     device const int* coords [[buffer(0)]],
     device const int* kernel_offsets [[buffer(1)]],
     device const int* active_rows [[buffer(2)]],
     device const int* table_rows [[buffer(3)]],
-    device int* planned_in_rows [[buffer(4)]],
-    device int* out_coords [[buffer(5)]],
-    constant const int& rows [[buffer(6)]],
-    constant const int& kernel_count [[buffer(7)]],
-    constant const int& table_capacity [[buffer(8)]],
+    device int* in_rows [[buffer(4)]],
+    device int* out_rows [[buffer(5)]],
+    device int* kernel_ids [[buffer(6)]],
+    device int* row_offsets [[buffer(7)]],
+    device int* out_coords [[buffer(8)]],
+    device int* counts [[buffer(9)]],
+    constant const int& rows [[buffer(10)]],
+    constant const int& kernel_count [[buffer(11)]],
+    constant const int& table_capacity [[buffer(12)]],
     uint elem [[thread_position_in_grid]]
 ) {
-    int logical_rows = min(active_rows[0], rows);
+    int out_count = min(active_rows[0], rows);
+    int edge_count = out_count * kernel_count;
+
+    if (elem == 0) {
+        counts[0] = edge_count;
+        counts[1] = out_count;
+    }
+
+    if (elem <= uint(rows)) {
+        int row = int(elem);
+        row_offsets[row] = min(row, out_count) * kernel_count;
+    }
+
     int coord_total = rows * 4;
     if (elem < uint(coord_total)) {
         int row = int(elem) / 4;
-        out_coords[elem] = row < logical_rows ? coords[elem] : 0;
+        out_coords[elem] = row < out_count ? coords[elem] : 0;
     }
 
-    int relation_total = rows * kernel_count;
-    if (elem >= uint(relation_total)) {
-        return;
-    }
-    int kernel_id = int(elem) / rows;
-    int out_row = int(elem) - kernel_id * rows;
-    if (out_row >= logical_rows) {
-        planned_in_rows[elem] = -1;
+    if (elem >= uint(edge_count)) {
         return;
     }
 
+    int out_row = int(elem) / kernel_count;
+    int kernel_id = int(elem) - out_row * kernel_count;
     int out_base = out_row * 4;
     int offset_base = kernel_id * 3;
     int candidate[4] = {
@@ -94,131 +105,52 @@ using namespace metal;
         coords[out_base + 2] + kernel_offsets[offset_base + 1],
         coords[out_base + 3] + kernel_offsets[offset_base + 2],
     };
-    planned_in_rows[elem] =
+    int in_row =
         lookup_coord_row_hash(coords, table_rows, table_capacity, candidate);
+    in_rows[elem] = in_row;
+    out_rows[elem] = out_row;
+    kernel_ids[elem] = in_row >= 0 ? kernel_id : -1;
 }
 
-[[kernel]] void build_identity_forward_relation_compact_i32(
-    device const int* planned_in_rows [[buffer(0)]],
-    device int* in_rows [[buffer(1)]],
-    device int* out_rows [[buffer(2)]],
-    device int* kernel_ids [[buffer(3)]],
-    device int* row_offsets [[buffer(4)]],
-    device int* counts [[buffer(5)]],
-    device const int* active_rows [[buffer(6)]],
-    constant const int& rows [[buffer(7)]],
-    constant const int& kernel_count [[buffer(8)]],
-    uint elem [[thread_position_in_grid]]
-) {
-    if (elem != 0) {
-        return;
-    }
-
-    int edge_count = 0;
-    int out_count = min(active_rows[0], rows);
-    for (int out_row = 0; out_row < out_count; ++out_row) {
-        row_offsets[out_row] = edge_count;
-        for (int kernel_id = 0; kernel_id < kernel_count; ++kernel_id) {
-            int kernel_base = kernel_id * rows;
-            int in_row = planned_in_rows[kernel_base + out_row];
-            if (in_row < 0) {
-                continue;
-            }
-            write_edge(
-                in_rows,
-                out_rows,
-                kernel_ids,
-                edge_count,
-                in_row,
-                out_row,
-                kernel_id
-            );
-            edge_count += 1;
-        }
-    }
-    for (int out_row = out_count; out_row <= rows; ++out_row) {
-        row_offsets[out_row] = edge_count;
-    }
-    counts[0] = edge_count;
-    counts[1] = out_count;
-}
-
-[[kernel]] void build_strided_forward_output_coords_i32(
-    device const int* coords [[buffer(0)]],
-    device const int* active_rows [[buffer(1)]],
-    device int* table_rows [[buffer(2)]],
-    device int* out_coords [[buffer(3)]],
-    device int* counts [[buffer(4)]],
-    constant const int& rows [[buffer(5)]],
-    constant const int& table_capacity [[buffer(6)]],
-    constant const int& stride_x [[buffer(7)]],
-    constant const int& stride_y [[buffer(8)]],
-    constant const int& stride_z [[buffer(9)]],
-    uint elem [[thread_position_in_grid]]
-) {
-    if (elem != 0) {
-        return;
-    }
-
-    int logical_rows = min(active_rows[0], rows);
-    int out_count = 0;
-    for (int row = 0; row < logical_rows; ++row) {
-        int base = row * 4;
-        int candidate[4] = {
-            coords[base],
-            floor_div_int(coords[base + 1], stride_x),
-            floor_div_int(coords[base + 2], stride_y),
-            floor_div_int(coords[base + 3], stride_z),
-        };
-        int slot = coord_hash_i32(candidate) & (table_capacity - 1);
-        for (int probe = 0; probe < table_capacity; ++probe) {
-            int out_row = table_rows[slot];
-            if (out_row < 0) {
-                table_rows[slot] = out_count;
-                write_coord(out_coords, out_count, candidate);
-                out_count += 1;
-                break;
-            }
-            if (coord4_equal(candidate, out_coords, out_row)) {
-                break;
-            }
-            slot = (slot + 1) & (table_capacity - 1);
-        }
-    }
-    counts[1] = out_count;
-}
-
-[[kernel]] void build_strided_forward_relation_plan_i32(
+[[kernel]] void build_strided_forward_relation_slots_i32(
     device const int* coords [[buffer(0)]],
     device const int* kernel_offsets [[buffer(1)]],
     device const int* out_coords [[buffer(2)]],
-    device const int* counts [[buffer(3)]],
+    device int* counts [[buffer(3)]],
     device const int* table_rows [[buffer(4)]],
-    device int* planned_in_rows [[buffer(5)]],
-    constant const int& rows [[buffer(6)]],
-    constant const int& kernel_count [[buffer(7)]],
-    constant const int& table_capacity [[buffer(8)]],
-    constant const int& stride_x [[buffer(9)]],
-    constant const int& stride_y [[buffer(10)]],
-    constant const int& stride_z [[buffer(11)]],
-    constant const int& pad_x [[buffer(12)]],
-    constant const int& pad_y [[buffer(13)]],
-    constant const int& pad_z [[buffer(14)]],
+    device int* in_rows [[buffer(5)]],
+    device int* out_rows [[buffer(6)]],
+    device int* kernel_ids [[buffer(7)]],
+    device int* row_offsets [[buffer(8)]],
+    constant const int& rows [[buffer(9)]],
+    constant const int& kernel_count [[buffer(10)]],
+    constant const int& table_capacity [[buffer(11)]],
+    constant const int& stride_x [[buffer(12)]],
+    constant const int& stride_y [[buffer(13)]],
+    constant const int& stride_z [[buffer(14)]],
+    constant const int& pad_x [[buffer(15)]],
+    constant const int& pad_y [[buffer(16)]],
+    constant const int& pad_z [[buffer(17)]],
     uint elem [[thread_position_in_grid]]
 ) {
-    int relation_total = rows * kernel_count;
-    if (elem >= uint(relation_total)) {
-        return;
-    }
-
-    int kernel_id = int(elem) / rows;
-    int out_row = int(elem) - kernel_id * rows;
     int out_count = min(counts[1], rows);
-    if (out_row >= out_count) {
-        planned_in_rows[elem] = -1;
+    int edge_count = out_count * kernel_count;
+
+    if (elem == 0) {
+        counts[0] = edge_count;
+    }
+
+    if (elem <= uint(rows)) {
+        int row = int(elem);
+        row_offsets[row] = min(row, out_count) * kernel_count;
+    }
+
+    if (elem >= uint(edge_count)) {
         return;
     }
 
+    int out_row = int(elem) / kernel_count;
+    int kernel_id = int(elem) - out_row * kernel_count;
     int out_base = out_row * 4;
     int offset_base = kernel_id * 3;
     int candidate[4] = {
@@ -230,51 +162,99 @@ using namespace metal;
         out_coords[out_base + 3] * stride_z + kernel_offsets[offset_base + 2] -
             pad_z,
     };
-    planned_in_rows[elem] =
+    int in_row =
         lookup_coord_row_hash(coords, table_rows, table_capacity, candidate);
+    in_rows[elem] = in_row;
+    out_rows[elem] = out_row;
+    kernel_ids[elem] = in_row >= 0 ? kernel_id : -1;
 }
 
-[[kernel]] void build_strided_forward_relation_compact_i32(
-    device const int* planned_in_rows [[buffer(0)]],
-    device int* in_rows [[buffer(1)]],
-    device int* out_rows [[buffer(2)]],
-    device int* kernel_ids [[buffer(3)]],
-    device int* row_offsets [[buffer(4)]],
-    device int* counts [[buffer(5)]],
-    constant const int& rows [[buffer(6)]],
-    constant const int& kernel_count [[buffer(7)]],
+[[kernel]] void count_forward_relation_slot_rows_i32(
+    device const int* slot_in_rows [[buffer(0)]],
+    device const int* slot_kernel_ids [[buffer(1)]],
+    device int* row_offsets [[buffer(2)]],
+    device const int* counts [[buffer(3)]],
+    constant const int& rows [[buffer(4)]],
+    constant const int& kernel_count [[buffer(5)]],
+    uint row [[thread_position_in_grid]]
+) {
+    if (row == 0) {
+        row_offsets[0] = 0;
+    }
+    int out_count = min(counts[1], rows);
+    if (row >= uint(rows)) {
+        return;
+    }
+    if (row >= uint(out_count)) {
+        row_offsets[int(row) + 1] = 0;
+        return;
+    }
+
+    int start = int(row) * kernel_count;
+    int degree = 0;
+    for (int kernel_id = 0; kernel_id < kernel_count; ++kernel_id) {
+        int edge = start + kernel_id;
+        if (slot_in_rows[edge] >= 0 && slot_kernel_ids[edge] >= 0) {
+            ++degree;
+        }
+    }
+    row_offsets[int(row) + 1] = degree;
+}
+
+[[kernel]] void prefix_forward_relation_slot_rows_i32(
+    device int* row_offsets [[buffer(0)]],
+    device int* counts [[buffer(1)]],
+    constant const int& rows [[buffer(2)]],
     uint elem [[thread_position_in_grid]]
 ) {
     if (elem != 0) {
         return;
     }
-
-    int edge_count = 0;
     int out_count = min(counts[1], rows);
-    for (int out_row = 0; out_row < out_count; ++out_row) {
-        row_offsets[out_row] = edge_count;
-        for (int kernel_id = 0; kernel_id < kernel_count; ++kernel_id) {
-            int kernel_base = kernel_id * rows;
-            int in_row = planned_in_rows[kernel_base + out_row];
-            if (in_row < 0) {
-                continue;
-            }
-            write_edge(
-                in_rows,
-                out_rows,
-                kernel_ids,
-                edge_count,
-                in_row,
-                out_row,
-                kernel_id
-            );
-            edge_count += 1;
+    int total = 0;
+    for (int row = 0; row < out_count; ++row) {
+        int degree = row_offsets[row + 1];
+        row_offsets[row] = total;
+        total += degree;
+    }
+    for (int row = out_count; row <= rows; ++row) {
+        row_offsets[row] = total;
+    }
+    counts[0] = total;
+}
+
+[[kernel]] void compact_forward_relation_slots_i32(
+    device const int* slot_in_rows [[buffer(0)]],
+    device const int* slot_out_rows [[buffer(1)]],
+    device const int* slot_kernel_ids [[buffer(2)]],
+    device const int* row_offsets [[buffer(3)]],
+    device const int* counts [[buffer(4)]],
+    device int* in_rows [[buffer(5)]],
+    device int* out_rows [[buffer(6)]],
+    device int* kernel_ids [[buffer(7)]],
+    constant const int& rows [[buffer(8)]],
+    constant const int& kernel_count [[buffer(9)]],
+    uint row [[thread_position_in_grid]]
+) {
+    int out_count = min(counts[1], rows);
+    if (row >= uint(out_count)) {
+        return;
+    }
+
+    int slot_start = int(row) * kernel_count;
+    int dst = row_offsets[int(row)];
+    for (int kernel_id = 0; kernel_id < kernel_count; ++kernel_id) {
+        int slot = slot_start + kernel_id;
+        int in_row = slot_in_rows[slot];
+        int slot_kernel_id = slot_kernel_ids[slot];
+        if (in_row < 0 || slot_kernel_id < 0) {
+            continue;
         }
+        in_rows[dst] = in_row;
+        out_rows[dst] = slot_out_rows[slot];
+        kernel_ids[dst] = slot_kernel_id;
+        ++dst;
     }
-    for (int out_row = out_count; out_row <= rows; ++out_row) {
-        row_offsets[out_row] = edge_count;
-    }
-    counts[0] = edge_count;
 }
 
 [[kernel]] void build_transposed_direct_relation_i32(

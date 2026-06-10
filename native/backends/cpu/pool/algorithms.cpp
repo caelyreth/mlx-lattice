@@ -74,11 +74,14 @@ RelationView autodiff_relation_view(const std::vector<mx::array>& inputs) {
     };
 }
 
-std::vector<int32_t> row_degrees(const int32_t* row_offsets, int out_capacity) {
+int32_t row_degree(RelationView relation, int out_row) {
+    return relation.row_offsets[out_row + 1] - relation.row_offsets[out_row];
+}
+
+std::vector<int32_t> row_degrees(RelationView relation, int out_capacity) {
     std::vector<int32_t> out(static_cast<std::size_t>(out_capacity), 0);
     for (int row = 0; row < out_capacity; ++row) {
-        out[static_cast<std::size_t>(row)] =
-            row_offsets[row + 1] - row_offsets[row];
+        out[static_cast<std::size_t>(row)] = row_degree(relation, row);
     }
     return out;
 }
@@ -213,8 +216,7 @@ void eval(
             if (reduce != PoolReduceOp::Avg) {
                 return;
             }
-            auto degrees =
-                row_degrees(relation.row_offsets, shape.out_capacity);
+            auto degrees = row_degrees(relation, shape.out_capacity);
             for (int row = 0; row < out_count; ++row) {
                 auto scale = 1.0F / float(std::max(degrees[row], int32_t{1}));
                 auto* out_row_data =
@@ -299,8 +301,7 @@ void eval_grad(
                             }
                             scale = 1.0F / float(count);
                         } else if (reduce == PoolReduceOp::Avg) {
-                            auto degree = relation.row_offsets[out_row + 1] -
-                                          relation.row_offsets[out_row];
+                            auto degree = row_degree(relation, out_row);
                             scale = 1.0F / float(std::max(degree, int32_t{1}));
                         }
                         value += cotangent_data
@@ -340,8 +341,7 @@ void eval_jvp(
             const auto& feats = ready[1];
             const auto& pooled = ready[2];
             auto relation = autodiff_relation_view(ready);
-            auto degrees =
-                row_degrees(relation.row_offsets, shape.out_capacity);
+            auto degrees = row_degrees(relation, shape.out_capacity);
             auto ties =
                 reduce == PoolReduceOp::Max
                     ? build_max_tie_policy(relation, feats, pooled, shape)

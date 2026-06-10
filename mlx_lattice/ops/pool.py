@@ -167,6 +167,19 @@ def _fused_pool(
 def _stack_batch_reductions(x: SparseTensor, *, mode: PoolMode) -> mx.array:
     _validate_pool_dtype(x.feats)
     counts = _require_batch_counts(x)
+    if len(counts) == 1:
+        if mode == 'sum':
+            return mx.sum(x.feats, axis=0, keepdims=True)
+        if mode == 'avg':
+            denom = mx.array(max(counts[0], 1), dtype=x.feats.dtype)
+            return mx.sum(x.feats, axis=0, keepdims=True) / denom
+        if mode == 'max':
+            if counts[0] == 0:
+                raise ValueError(
+                    'global_max_pool does not support empty batches.'
+                )
+            return mx.max(x.feats, axis=0, keepdims=True)
+
     batch_ids = _batch_ids(counts)
     shape = (len(counts), x.channels)
 

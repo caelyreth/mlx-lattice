@@ -66,6 +66,17 @@ struct CoordHashShape {
     int capacity;
 };
 
+struct ForwardRelationSlotArrays {
+    const mx::array& in_rows;
+    const mx::array& out_rows;
+    const mx::array& kernel_ids;
+};
+
+struct RelationSlotShape {
+    int rows;
+    int kernel_count;
+};
+
 template <typename Encoder, typename Kernel>
 void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
     auto threads = std::max<size_t>(elements, 1);
@@ -173,6 +184,50 @@ void build_kernel_relation_views(
     encoder.set_bytes(in_capacity, 8);
     encoder.set_bytes(kernel_count, 9);
     dispatch_1d(encoder, fill, static_cast<size_t>(edge_capacity));
+}
+
+template <typename Device, typename Library, typename Encoder>
+void compact_forward_relation_slots(
+    Device& device,
+    Library& library,
+    Encoder& encoder,
+    ForwardRelationSlotArrays slots,
+    std::vector<mx::array>& outputs,
+    RelationSlotShape shape
+) {
+    auto count =
+        device.get_kernel("count_forward_relation_slot_rows_i32", library);
+    encoder.set_compute_pipeline_state(count);
+    encoder.set_input_array(slots.in_rows, 0);
+    encoder.set_input_array(slots.kernel_ids, 1);
+    encoder.set_output_array(outputs[RelationRowOffsets], 2);
+    encoder.set_input_array(outputs[RelationCounts], 3);
+    encoder.set_bytes(shape.rows, 4);
+    encoder.set_bytes(shape.kernel_count, 5);
+    dispatch_1d(encoder, count, static_cast<size_t>(shape.rows));
+
+    auto prefix =
+        device.get_kernel("prefix_forward_relation_slot_rows_i32", library);
+    encoder.set_compute_pipeline_state(prefix);
+    encoder.set_output_array(outputs[RelationRowOffsets], 0);
+    encoder.set_output_array(outputs[RelationCounts], 1);
+    encoder.set_bytes(shape.rows, 2);
+    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+    auto compact =
+        device.get_kernel("compact_forward_relation_slots_i32", library);
+    encoder.set_compute_pipeline_state(compact);
+    encoder.set_input_array(slots.in_rows, 0);
+    encoder.set_input_array(slots.out_rows, 1);
+    encoder.set_input_array(slots.kernel_ids, 2);
+    encoder.set_input_array(outputs[RelationRowOffsets], 3);
+    encoder.set_input_array(outputs[RelationCounts], 4);
+    encoder.set_output_array(outputs[RelationInRows], 5);
+    encoder.set_output_array(outputs[RelationOutRows], 6);
+    encoder.set_output_array(outputs[RelationKernelIds], 7);
+    encoder.set_bytes(shape.rows, 8);
+    encoder.set_bytes(shape.kernel_count, 9);
+    dispatch_1d(encoder, compact, static_cast<size_t>(shape.rows));
 }
 #endif
 
@@ -707,111 +762,154 @@ void eval_generic_kernel_relation(
 
         if (!is_identity_forward_relation(stride, padding)) {
             auto out_table = make_int32_temp(table_capacity);
-            encoder.add_temporary(out_table);
+            auto selected = make_int32_temp(rows);
+            encoder.add_temporaries({out_table, selected});
             clear_coord_hash(
                 device, library, encoder, out_table, table_capacity
             );
 
             auto build_outputs = device.get_kernel(
-                "build_strided_forward_output_coords_i32", library
+                "build_strided_relation_output_hash_i32", library
             );
             encoder.set_compute_pipeline_state(build_outputs);
             encoder.set_input_array(inputs[0], 0);
             encoder.set_input_array(inputs[2], 1);
             encoder.set_output_array(out_table, 2);
-            encoder.set_output_array(outputs[RelationOutCoords], 3);
-            encoder.set_output_array(outputs[RelationCounts], 4);
-            encoder.set_bytes(rows, 5);
-            encoder.set_bytes(table_capacity, 6);
-            encoder.set_bytes(stride[0], 7);
-            encoder.set_bytes(stride[1], 8);
-            encoder.set_bytes(stride[2], 9);
+            encoder.set_bytes(rows, 3);
+            encoder.set_bytes(table_capacity, 4);
+            encoder.set_bytes(stride[0], 5);
+            encoder.set_bytes(stride[1], 6);
+            encoder.set_bytes(stride[2], 7);
+            dispatch_1d(encoder, build_outputs, static_cast<size_t>(rows));
+
+            auto plan_outputs = device.get_kernel(
+                "plan_strided_relation_output_coords_i32", library
+            );
+            encoder.set_compute_pipeline_state(plan_outputs);
+            encoder.set_input_array(inputs[0], 0);
+            encoder.set_input_array(inputs[2], 1);
+            encoder.set_input_array(out_table, 2);
+            encoder.set_output_array(selected, 3);
+            encoder.set_bytes(rows, 4);
+            encoder.set_bytes(table_capacity, 5);
+            encoder.set_bytes(stride[0], 6);
+            encoder.set_bytes(stride[1], 7);
+            encoder.set_bytes(stride[2], 8);
+            dispatch_1d(encoder, plan_outputs, static_cast<size_t>(rows));
+
+            auto compact_outputs = device.get_kernel(
+                "compact_strided_relation_output_coords_i32", library
+            );
+            encoder.set_compute_pipeline_state(compact_outputs);
+            encoder.set_input_array(inputs[0], 0);
+            encoder.set_input_array(selected, 1);
+            encoder.set_output_array(outputs[RelationOutCoords], 2);
+            encoder.set_output_array(outputs[RelationCounts], 3);
+            encoder.set_bytes(rows, 4);
+            encoder.set_bytes(stride[0], 5);
+            encoder.set_bytes(stride[1], 6);
+            encoder.set_bytes(stride[2], 7);
             encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
 
-            auto planned_rows = make_int32_temp(rows * kernel_count);
-            encoder.add_temporary(planned_rows);
-            auto plan = device.get_kernel(
-                "build_strided_forward_relation_plan_i32", library
+            auto slot_in_rows = make_int32_temp(rows * kernel_count);
+            auto slot_out_rows = make_int32_temp(rows * kernel_count);
+            auto slot_kernel_ids = make_int32_temp(rows * kernel_count);
+            encoder.add_temporaries(
+                {slot_in_rows, slot_out_rows, slot_kernel_ids}
             );
-            encoder.set_compute_pipeline_state(plan);
+
+            auto slots = device.get_kernel(
+                "build_strided_forward_relation_slots_i32", library
+            );
+            encoder.set_compute_pipeline_state(slots);
             encoder.set_input_array(inputs[0], 0);
             encoder.set_input_array(inputs[1], 1);
             encoder.set_input_array(outputs[RelationOutCoords], 2);
-            encoder.set_input_array(outputs[RelationCounts], 3);
+            encoder.set_output_array(outputs[RelationCounts], 3);
             encoder.set_input_array(outputs[RelationOutputCount], 4);
-            encoder.set_output_array(planned_rows, 5);
-            encoder.set_bytes(rows, 6);
-            encoder.set_bytes(kernel_count, 7);
-            encoder.set_bytes(table_capacity, 8);
-            encoder.set_bytes(stride[0], 9);
-            encoder.set_bytes(stride[1], 10);
-            encoder.set_bytes(stride[2], 11);
-            encoder.set_bytes(padding[0], 12);
-            encoder.set_bytes(padding[1], 13);
-            encoder.set_bytes(padding[2], 14);
+            encoder.set_output_array(slot_in_rows, 5);
+            encoder.set_output_array(slot_out_rows, 6);
+            encoder.set_output_array(slot_kernel_ids, 7);
+            encoder.set_output_array(outputs[RelationRowOffsets], 8);
+            encoder.set_bytes(rows, 9);
+            encoder.set_bytes(kernel_count, 10);
+            encoder.set_bytes(table_capacity, 11);
+            encoder.set_bytes(stride[0], 12);
+            encoder.set_bytes(stride[1], 13);
+            encoder.set_bytes(stride[2], 14);
+            encoder.set_bytes(padding[0], 15);
+            encoder.set_bytes(padding[1], 16);
+            encoder.set_bytes(padding[2], 17);
             dispatch_1d(
                 encoder,
-                plan,
-                static_cast<size_t>(rows) * static_cast<size_t>(kernel_count)
+                slots,
+                std::max(
+                    static_cast<size_t>(rows + 1),
+                    static_cast<size_t>(rows) *
+                        static_cast<size_t>(kernel_count)
+                )
             );
-
-            auto compact = device.get_kernel(
-                "build_strided_forward_relation_compact_i32", library
+            compact_forward_relation_slots(
+                device,
+                library,
+                encoder,
+                ForwardRelationSlotArrays{
+                    .in_rows = slot_in_rows,
+                    .out_rows = slot_out_rows,
+                    .kernel_ids = slot_kernel_ids,
+                },
+                outputs,
+                RelationSlotShape{.rows = rows, .kernel_count = kernel_count}
             );
-            encoder.set_compute_pipeline_state(compact);
-            encoder.set_input_array(planned_rows, 0);
-            encoder.set_output_array(outputs[RelationInRows], 1);
-            encoder.set_output_array(outputs[RelationOutRows], 2);
-            encoder.set_output_array(outputs[RelationKernelIds], 3);
-            encoder.set_output_array(outputs[RelationRowOffsets], 4);
-            encoder.set_output_array(outputs[RelationCounts], 5);
-            encoder.set_bytes(rows, 6);
-            encoder.set_bytes(kernel_count, 7);
-            encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
             build_kernel_relation_views(
                 device, library, encoder, outputs, rows, kernel_count
             );
             return;
         }
 
-        auto planned_rows = make_int32_temp(rows * kernel_count);
-        encoder.add_temporary(planned_rows);
-        auto plan = device.get_kernel(
-            "build_identity_forward_relation_plan_i32", library
+        auto slot_in_rows = make_int32_temp(rows * kernel_count);
+        auto slot_out_rows = make_int32_temp(rows * kernel_count);
+        auto slot_kernel_ids = make_int32_temp(rows * kernel_count);
+        encoder.add_temporaries({slot_in_rows, slot_out_rows, slot_kernel_ids});
+
+        auto slots = device.get_kernel(
+            "build_identity_forward_relation_slots_i32", library
         );
-        encoder.set_compute_pipeline_state(plan);
+        encoder.set_compute_pipeline_state(slots);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
         encoder.set_input_array(inputs[2], 2);
         encoder.set_input_array(outputs[RelationOutputCount], 3);
-        encoder.set_output_array(planned_rows, 4);
-        encoder.set_output_array(outputs[RelationOutCoords], 5);
-        encoder.set_bytes(rows, 6);
-        encoder.set_bytes(kernel_count, 7);
-        encoder.set_bytes(table_capacity, 8);
+        encoder.set_output_array(slot_in_rows, 4);
+        encoder.set_output_array(slot_out_rows, 5);
+        encoder.set_output_array(slot_kernel_ids, 6);
+        encoder.set_output_array(outputs[RelationRowOffsets], 7);
+        encoder.set_output_array(outputs[RelationOutCoords], 8);
+        encoder.set_output_array(outputs[RelationCounts], 9);
+        encoder.set_bytes(rows, 10);
+        encoder.set_bytes(kernel_count, 11);
+        encoder.set_bytes(table_capacity, 12);
         dispatch_1d(
             encoder,
-            plan,
+            slots,
             std::max(
-                static_cast<size_t>(rows) * 4,
-                static_cast<size_t>(rows) * static_cast<size_t>(kernel_count)
+                {static_cast<size_t>(rows + 1),
+                 static_cast<size_t>(rows) * 4,
+                 static_cast<size_t>(rows) * static_cast<size_t>(kernel_count)}
             )
         );
-
-        auto compact = device.get_kernel(
-            "build_identity_forward_relation_compact_i32", library
+        compact_forward_relation_slots(
+            device,
+            library,
+            encoder,
+            ForwardRelationSlotArrays{
+                .in_rows = slot_in_rows,
+                .out_rows = slot_out_rows,
+                .kernel_ids = slot_kernel_ids,
+            },
+            outputs,
+            RelationSlotShape{.rows = rows, .kernel_count = kernel_count}
         );
-        encoder.set_compute_pipeline_state(compact);
-        encoder.set_input_array(planned_rows, 0);
-        encoder.set_output_array(outputs[RelationInRows], 1);
-        encoder.set_output_array(outputs[RelationOutRows], 2);
-        encoder.set_output_array(outputs[RelationKernelIds], 3);
-        encoder.set_output_array(outputs[RelationRowOffsets], 4);
-        encoder.set_output_array(outputs[RelationCounts], 5);
-        encoder.set_input_array(inputs[2], 6);
-        encoder.set_bytes(rows, 7);
-        encoder.set_bytes(kernel_count, 8);
-        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
         build_kernel_relation_views(
             device, library, encoder, outputs, rows, kernel_count
         );
