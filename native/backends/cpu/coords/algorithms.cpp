@@ -39,14 +39,16 @@ struct VoxelFeatureInputs {
     const mx::array& active_rows;
 };
 
+// FNV-1a hash matching Metal coord_hash_i32 for cross-platform consistency.
+// See native/backends/metal/coords/common.metal:53-60.
 struct CoordHash {
     size_t operator()(const Coord& coord) const {
-        size_t seed = 0;
-        for (auto value : coord) {
-            auto part = std::hash<int64_t>{}(value);
-            seed ^= part + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-        }
-        return seed;
+        uint32_t hash = 2166136261u;
+        hash = (hash ^ static_cast<uint32_t>(coord[0])) * 16777619u;
+        hash = (hash ^ static_cast<uint32_t>(coord[1])) * 16777619u;
+        hash = (hash ^ static_cast<uint32_t>(coord[2])) * 16777619u;
+        hash = (hash ^ static_cast<uint32_t>(coord[3])) * 16777619u;
+        return static_cast<size_t>(hash & 0x7fffffffu);
     }
 };
 
