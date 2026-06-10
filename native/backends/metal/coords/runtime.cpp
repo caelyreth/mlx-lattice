@@ -77,6 +77,11 @@ struct RelationSlotShape {
     int kernel_count;
 };
 
+struct NeighborRowOutputs {
+    mx::array& offsets;
+    mx::array& counts;
+};
+
 struct StableCompactBuffers {
     mx::array local_offsets;
     mx::array block_offsets;
@@ -166,6 +171,58 @@ void encode_relation_compact_offsets(
     encoder.set_output_array(counts, 1);
     encoder.set_bytes(buffers.blocks, 2);
     encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+}
+
+template <typename Device, typename Library, typename Encoder>
+void encode_neighbor_row_offsets(
+    Device& device,
+    Library& library,
+    Encoder& encoder,
+    NeighborRowOutputs outputs,
+    int query_rows
+) {
+    if (query_rows < kParallelCompactThreshold) {
+        auto prefix =
+            device.get_kernel("prefix_neighbor_row_offsets_i32", library);
+        encoder.set_compute_pipeline_state(prefix);
+        encoder.set_output_array(outputs.offsets, 0);
+        encoder.set_output_array(outputs.counts, 1);
+        encoder.set_bytes(query_rows, 2);
+        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+        return;
+    }
+
+    auto buffers = make_stable_compact_buffers(query_rows);
+    encoder.add_temporaries({buffers.local_offsets, buffers.block_offsets});
+    auto scan =
+        device.get_kernel("scan_relation_row_degrees_blocks_i32", library);
+    encoder.set_compute_pipeline_state(scan);
+    encoder.set_input_array(outputs.offsets, 0);
+    encoder.set_output_array(buffers.local_offsets, 1);
+    encoder.set_output_array(buffers.block_offsets, 2);
+    encoder.set_bytes(query_rows, 3);
+    encoder.dispatch_threadgroups(
+        MTL::Size(static_cast<size_t>(buffers.blocks), 1, 1),
+        MTL::Size(kStableCompactBlockSize, 1, 1)
+    );
+
+    auto prefix =
+        device.get_kernel("prefix_coord_set_selected_blocks_i32", library);
+    encoder.set_compute_pipeline_state(prefix);
+    encoder.set_output_array(buffers.block_offsets, 0);
+    encoder.set_output_array(outputs.counts, 1);
+    encoder.set_bytes(buffers.blocks, 2);
+    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+    auto finalize =
+        device.get_kernel("finalize_forward_relation_row_offsets_i32", library);
+    encoder.set_compute_pipeline_state(finalize);
+    encoder.set_input_array(buffers.local_offsets, 0);
+    encoder.set_input_array(buffers.block_offsets, 1);
+    encoder.set_output_array(outputs.offsets, 2);
+    encoder.set_input_array(outputs.counts, 3);
+    encoder.set_bytes(query_rows, 4);
+    dispatch_1d(encoder, finalize, static_cast<size_t>(query_rows) + size_t{1});
 }
 
 template <typename Device, typename Library, typename Encoder>
@@ -1390,6 +1447,11 @@ void eval_neighbor_relation(
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
     auto clear = device.get_kernel("build_neighbor_relation_i32", library);
+    constexpr int kKnnHashThreshold = 512;
+    auto use_knn_hash = op == NeighborRelationOp::Knn &&
+                        shape.max_neighbors <= 16 &&
+                        shape.source_rows > kKnnHashThreshold;
+    auto use_radius_hash = op == NeighborRelationOp::Radius;
 
     encoder.set_compute_pipeline_state(clear);
     encoder.set_input_array(inputs[3], 0);
@@ -1404,12 +1466,13 @@ void eval_neighbor_relation(
     dispatch_1d(
         encoder,
         clear,
-        static_cast<size_t>(shape.query_rows) *
-            static_cast<size_t>(shape.max_neighbors)
+        use_knn_hash || use_radius_hash
+            ? size_t{1}
+            : static_cast<size_t>(shape.query_rows) *
+                  static_cast<size_t>(shape.max_neighbors)
     );
 
-    if (op == NeighborRelationOp::Knn && shape.max_neighbors <= 16 &&
-        shape.source_rows > 512) {
+    if (use_knn_hash) {
         auto table_capacity = coord_hash_capacity(shape.source_rows);
         auto table = make_int32_temp(table_capacity);
         encoder.add_temporary(table);
@@ -1445,13 +1508,13 @@ void eval_neighbor_relation(
         encoder.set_bytes(table_capacity, 10);
         dispatch_1d(encoder, count, static_cast<size_t>(shape.query_rows));
 
-        auto prefix =
-            device.get_kernel("prefix_neighbor_row_offsets_i32", library);
-        encoder.set_compute_pipeline_state(prefix);
-        encoder.set_output_array(outputs[NeighborRowOffsets], 0);
-        encoder.set_output_array(outputs[NeighborCounts], 1);
-        encoder.set_bytes(shape.query_rows, 2);
-        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+        encode_neighbor_row_offsets(
+            device,
+            library,
+            encoder,
+            {outputs[NeighborRowOffsets], outputs[NeighborCounts]},
+            shape.query_rows
+        );
 
         auto fill =
             device.get_kernel("fill_knn_relation_compact_hash_i32", library);
@@ -1475,7 +1538,7 @@ void eval_neighbor_relation(
     }
 
     if (op == NeighborRelationOp::Knn && shape.max_neighbors <= 16 &&
-        shape.source_rows <= 512) {
+        !use_knn_hash) {
         auto fill = device.get_kernel("fill_knn_relation_topk_i32", library);
         encoder.set_compute_pipeline_state(fill);
         for (int i = 0; i < int(inputs.size()); ++i) {
@@ -1492,7 +1555,7 @@ void eval_neighbor_relation(
             MTL::Size(static_cast<size_t>(shape.query_rows), 1, 1),
             MTL::Size(128, 1, 1)
         );
-    } else if (op == NeighborRelationOp::Radius) {
+    } else if (use_radius_hash) {
         auto table_capacity = coord_hash_capacity(shape.source_rows);
         auto table = make_int32_temp(table_capacity);
         encoder.add_temporary(table);
@@ -1526,13 +1589,13 @@ void eval_neighbor_relation(
         encoder.set_bytes(table_capacity, 11);
         dispatch_1d(encoder, count, static_cast<size_t>(shape.query_rows));
 
-        auto prefix =
-            device.get_kernel("prefix_neighbor_row_offsets_i32", library);
-        encoder.set_compute_pipeline_state(prefix);
-        encoder.set_output_array(outputs[NeighborRowOffsets], 0);
-        encoder.set_output_array(outputs[NeighborCounts], 1);
-        encoder.set_bytes(shape.query_rows, 2);
-        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+        encode_neighbor_row_offsets(
+            device,
+            library,
+            encoder,
+            {outputs[NeighborRowOffsets], outputs[NeighborCounts]},
+            shape.query_rows
+        );
 
         auto fill =
             device.get_kernel("fill_radius_relation_compact_hash_i32", library);

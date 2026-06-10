@@ -1085,49 +1085,61 @@ using namespace metal;
     int query_base = int(query_row) * 4;
     int slot_start = row_offsets[query_row];
     int selected = 0;
-    for (int dz = -search_radius; dz <= search_radius; ++dz) {
-        for (int dy = -search_radius; dy <= search_radius; ++dy) {
-            for (int dx = -search_radius; dx <= search_radius; ++dx) {
-                int target[4];
-                target[0] = query_coords[query_base];
-                target[1] = query_coords[query_base + 1] + dx;
-                target[2] = query_coords[query_base + 2] + dy;
-                target[3] = query_coords[query_base + 3] + dz;
-                int source_row = lookup_coord_row_hash(
-                    source_coords, source_table, table_capacity, target
-                );
-                if (source_row < 0 || source_row >= source_capacity ||
-                    source_row >= source_active_rows[0]) {
-                    continue;
-                }
-
-                float distance = float(dx * dx + dy * dy + dz * dz);
-                int insert_at = selected;
-                for (int rank = 0; rank < selected; ++rank) {
-                    int index = slot_start + rank;
-                    float existing_distance = distances[index];
-                    int existing_source = source_rows[index];
-                    if (distance < existing_distance ||
-                        (distance == existing_distance &&
-                         source_row < existing_source)) {
-                        insert_at = rank;
-                        break;
+    for (int shell = 0; shell <= search_radius; ++shell) {
+        for (int dz = -shell; dz <= shell; ++dz) {
+            for (int dy = -shell; dy <= shell; ++dy) {
+                for (int dx = -shell; dx <= shell; ++dx) {
+                    if (max(max(abs(dx), abs(dy)), abs(dz)) != shell) {
+                        continue;
                     }
-                }
-                if (insert_at >= max_neighbors) {
-                    continue;
-                }
+                    int target[4];
+                    target[0] = query_coords[query_base];
+                    target[1] = query_coords[query_base + 1] + dx;
+                    target[2] = query_coords[query_base + 2] + dy;
+                    target[3] = query_coords[query_base + 3] + dz;
+                    int source_row = lookup_coord_row_hash(
+                        source_coords, source_table, table_capacity, target
+                    );
+                    if (source_row < 0 || source_row >= source_capacity ||
+                        source_row >= source_active_rows[0]) {
+                        continue;
+                    }
 
-                int last = min(selected, max_neighbors - 1);
-                for (int rank = last; rank > insert_at; --rank) {
-                    int dst = slot_start + rank;
-                    int src = dst - 1;
-                    source_rows[dst] = source_rows[src];
-                    distances[dst] = distances[src];
+                    float distance = float(dx * dx + dy * dy + dz * dz);
+                    int insert_at = selected;
+                    for (int rank = 0; rank < selected; ++rank) {
+                        int index = slot_start + rank;
+                        float existing_distance = distances[index];
+                        int existing_source = source_rows[index];
+                        if (distance < existing_distance ||
+                            (distance == existing_distance &&
+                             source_row < existing_source)) {
+                            insert_at = rank;
+                            break;
+                        }
+                    }
+                    if (insert_at >= max_neighbors) {
+                        continue;
+                    }
+
+                    int last = min(selected, max_neighbors - 1);
+                    for (int rank = last; rank > insert_at; --rank) {
+                        int dst = slot_start + rank;
+                        int src = dst - 1;
+                        source_rows[dst] = source_rows[src];
+                        distances[dst] = distances[src];
+                    }
+                    source_rows[slot_start + insert_at] = source_row;
+                    distances[slot_start + insert_at] = distance;
+                    selected = min(selected + 1, max_neighbors);
                 }
-                source_rows[slot_start + insert_at] = source_row;
-                distances[slot_start + insert_at] = distance;
-                selected = min(selected + 1, max_neighbors);
+            }
+        }
+        if (selected >= max_neighbors) {
+            float kth_distance = distances[slot_start + max_neighbors - 1];
+            float next_min_distance = float((shell + 1) * (shell + 1));
+            if (next_min_distance > kth_distance) {
+                break;
             }
         }
     }
