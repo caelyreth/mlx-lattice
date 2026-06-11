@@ -3,740 +3,1255 @@
 using namespace metal;
 
 #include "native/backends/metal/conv/common.metal"
+#include "native/backends/metal/conv/dense_kernels.metal"
 
-#define LATTICE_CONV_UNUSED_DENSE_FORWARD_ARGS()                               \
-    (void)out_rows;                                                            \
-    (void)in_channels;                                                         \
-    (void)out_channels;                                                        \
-    (void)weight_s1;                                                           \
-    (void)weight_s2;                                                           \
-    (void)weight_s3;                                                           \
-    (void)weight_s4;                                                           \
-    (void)weight_layout;                                                       \
-    (void)kernel_x;                                                            \
-    (void)kernel_y;                                                            \
-    (void)kernel_z
+[[kernel]] void sparse_relation_conv_f32_i32_cout16_dense_c16(
+    device const float* feats [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device float* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout16_impl<float, 16>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_CONV_UNUSED_DENSE_INPUT_GRAD_ARGS()                            \
-    (void)in_rows;                                                             \
-    (void)row_offsets;                                                         \
-    (void)in_channels;                                                         \
-    (void)out_channels;                                                        \
-    (void)weight_s1;                                                           \
-    (void)weight_s2;                                                           \
-    (void)weight_s3;                                                           \
-    (void)weight_s4;                                                           \
-    (void)weight_layout;                                                       \
-    (void)kernel_x;                                                            \
-    (void)kernel_y;                                                            \
-    (void)kernel_z
+[[kernel]] void sparse_relation_conv_f16_i32_cout16_dense_c16(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout16_impl<half, 16>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DENSE_WEIGHT4_F32(WEIGHTS, WS0, CHANNELS, KID, CI, CO_BASE)    \
-    float4(                                                                    \
-        (WEIGHTS)[((CO_BASE) + 0) * (WS0) + (KID) * (CHANNELS) + (CI)],        \
-        (WEIGHTS)[((CO_BASE) + 1) * (WS0) + (KID) * (CHANNELS) + (CI)],        \
-        (WEIGHTS)[((CO_BASE) + 2) * (WS0) + (KID) * (CHANNELS) + (CI)],        \
-        (WEIGHTS)[((CO_BASE) + 3) * (WS0) + (KID) * (CHANNELS) + (CI)]         \
-    )
+[[kernel]] void sparse_relation_conv_f32_i32_cout4_dense_c32(
+    device const float* feats [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device float* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout4_impl<float, 32>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DENSE_WEIGHT4_F16(WEIGHTS, WS0, CHANNELS, KID, CI, CO_BASE)    \
-    float4(                                                                    \
-        float((WEIGHTS)[((CO_BASE) + 0) * (WS0) + (KID) * (CHANNELS) + (CI)]), \
-        float((WEIGHTS)[((CO_BASE) + 1) * (WS0) + (KID) * (CHANNELS) + (CI)]), \
-        float((WEIGHTS)[((CO_BASE) + 2) * (WS0) + (KID) * (CHANNELS) + (CI)]), \
-        float((WEIGHTS)[((CO_BASE) + 3) * (WS0) + (KID) * (CHANNELS) + (CI)])  \
-    )
+[[kernel]] void sparse_relation_conv_f16_i32_cout4_dense_c32(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout4_impl<half, 32>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DENSE_WEIGHT_CI4_F32(WEIGHTS, WS0, CHANNELS, KID, CO, CI_BASE) \
-    float4(                                                                    \
-        (WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 0],          \
-        (WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 1],          \
-        (WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 2],          \
-        (WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 3]           \
-    )
+[[kernel]] void sparse_relation_conv_f32_i32_cout4_dense_c64(
+    device const float* feats [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device float* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout4_impl<float, 64>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DENSE_WEIGHT_CI4_F16(WEIGHTS, WS0, CHANNELS, KID, CO, CI_BASE) \
-    float4(                                                                    \
-        float((WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 0]),   \
-        float((WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 1]),   \
-        float((WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 2]),   \
-        float((WEIGHTS)[(CO) * (WS0) + (KID) * (CHANNELS) + (CI_BASE) + 3])    \
-    )
+[[kernel]] void sparse_relation_conv_f16_i32_cout4_dense_c64(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout4_impl<half, 64>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_STORE_F32_4(OUT, BASE, VALUE)                                  \
-    (OUT)[(BASE) + 0] = (VALUE).x;                                             \
-    (OUT)[(BASE) + 1] = (VALUE).y;                                             \
-    (OUT)[(BASE) + 2] = (VALUE).z;                                             \
-    (OUT)[(BASE) + 3] = (VALUE).w
+[[kernel]] void sparse_relation_conv_f32_i32_cout16_dense_c32(
+    device const float* feats [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device float* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout16_impl<float, 32>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_STORE_F16_4(OUT, BASE, VALUE)                                  \
-    (OUT)[(BASE) + 0] = half((VALUE).x);                                       \
-    (OUT)[(BASE) + 1] = half((VALUE).y);                                       \
-    (OUT)[(BASE) + 2] = half((VALUE).z);                                       \
-    (OUT)[(BASE) + 3] = half((VALUE).w)
+[[kernel]] void sparse_relation_conv_f16_i32_cout16_dense_c32(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout16_impl<half, 32>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DEFINE_DENSE_C16_FORWARD(NAME, TYPE, LOAD_WEIGHT4, STORE4)     \
-    [[kernel]] void NAME(                                                      \
-        device const TYPE* feats [[buffer(0)]],                                \
-        device const TYPE* weights [[buffer(1)]],                              \
-        device const int* in_rows [[buffer(2)]],                               \
-        device const int* out_rows [[buffer(3)]],                              \
-        device const int* kernel_ids [[buffer(4)]],                            \
-        device const int* counts [[buffer(5)]],                                \
-        device const int* row_offsets [[buffer(6)]],                           \
-        device TYPE* out [[buffer(7)]],                                        \
-        constant const int& edge_capacity [[buffer(8)]],                       \
-        constant const int& out_capacity [[buffer(9)]],                        \
-        constant const int& in_channels [[buffer(10)]],                        \
-        constant const int& out_channels [[buffer(11)]],                       \
-        constant const int& feat_s0 [[buffer(12)]],                            \
-        constant const int& feat_s1 [[buffer(13)]],                            \
-        constant const int& weight_s0 [[buffer(14)]],                          \
-        constant const int& weight_s1 [[buffer(15)]],                          \
-        constant const int& weight_s2 [[buffer(16)]],                          \
-        constant const int& weight_s3 [[buffer(17)]],                          \
-        constant const int& weight_s4 [[buffer(18)]],                          \
-        constant const int& weight_layout [[buffer(19)]],                      \
-        constant const int& kernel_x [[buffer(20)]],                           \
-        constant const int& kernel_y [[buffer(21)]],                           \
-        constant const int& kernel_z [[buffer(22)]],                           \
-        uint out_row_id [[thread_position_in_grid]]                            \
-    ) {                                                                        \
-        if (out_row_id >= uint(out_capacity)) {                                \
-            return;                                                            \
-        }                                                                      \
-        const int out_row = int(out_row_id);                                   \
-        const int out_base = out_row * 16;                                     \
-        const int out_count = min(counts[1], out_capacity);                    \
-        if (out_row >= out_count) {                                            \
-            for (int co = 0; co < 16; ++co) {                                  \
-                out[out_base + co] = TYPE(0);                                  \
-            }                                                                  \
-            return;                                                            \
-        }                                                                      \
-        const int edge_count = min(counts[0], edge_capacity);                  \
-        float4 acc0 = float4(0.0f);                                            \
-        float4 acc1 = float4(0.0f);                                            \
-        float4 acc2 = float4(0.0f);                                            \
-        float4 acc3 = float4(0.0f);                                            \
-        for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1]; \
-             ++edge) {                                                         \
-            if (edge < 0 || edge >= edge_count) {                              \
-                continue;                                                      \
-            }                                                                  \
-            const int in_row = in_rows[edge];                                  \
-            const int kernel_id = kernel_ids[edge];                            \
-            if (in_row < 0 || kernel_id < 0) {                                 \
-                continue;                                                      \
-            }                                                                  \
-            const int feat_base = in_row * feat_s0;                            \
-            for (int ci = 0; ci < 16; ++ci) {                                  \
-                const float value = float(feats[feat_base + ci * feat_s1]);    \
-                acc0 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, ci, 0);    \
-                acc1 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, ci, 4);    \
-                acc2 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, ci, 8);    \
-                acc3 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, ci, 12);   \
-            }                                                                  \
-        }                                                                      \
-        STORE4(out, out_base, acc0);                                           \
-        STORE4(out, out_base + 4, acc1);                                       \
-        STORE4(out, out_base + 8, acc2);                                       \
-        STORE4(out, out_base + 12, acc3);                                      \
-        LATTICE_CONV_UNUSED_DENSE_FORWARD_ARGS();                              \
-    }
+[[kernel]] void sparse_relation_conv_f32_i32_cout16_dense_c64(
+    device const float* feats [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device float* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout16_impl<float, 64>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DEFINE_DENSE_COUT4_FORWARD(                                    \
-    NAME, CHANNELS, TYPE, LOAD_WEIGHT4, STORE4                                 \
-)                                                                              \
-    [[kernel]] void NAME(                                                      \
-        device const TYPE* feats [[buffer(0)]],                                \
-        device const TYPE* weights [[buffer(1)]],                              \
-        device const int* in_rows [[buffer(2)]],                               \
-        device const int* out_rows [[buffer(3)]],                              \
-        device const int* kernel_ids [[buffer(4)]],                            \
-        device const int* counts [[buffer(5)]],                                \
-        device const int* row_offsets [[buffer(6)]],                           \
-        device TYPE* out [[buffer(7)]],                                        \
-        constant const int& edge_capacity [[buffer(8)]],                       \
-        constant const int& out_capacity [[buffer(9)]],                        \
-        constant const int& in_channels [[buffer(10)]],                        \
-        constant const int& out_channels [[buffer(11)]],                       \
-        constant const int& feat_s0 [[buffer(12)]],                            \
-        constant const int& feat_s1 [[buffer(13)]],                            \
-        constant const int& weight_s0 [[buffer(14)]],                          \
-        constant const int& weight_s1 [[buffer(15)]],                          \
-        constant const int& weight_s2 [[buffer(16)]],                          \
-        constant const int& weight_s3 [[buffer(17)]],                          \
-        constant const int& weight_s4 [[buffer(18)]],                          \
-        constant const int& weight_layout [[buffer(19)]],                      \
-        constant const int& kernel_x [[buffer(20)]],                           \
-        constant const int& kernel_y [[buffer(21)]],                           \
-        constant const int& kernel_z [[buffer(22)]],                           \
-        uint elem [[thread_position_in_grid]]                                  \
-    ) {                                                                        \
-        const int blocks = CHANNELS / 4;                                       \
-        const int total = out_capacity * blocks;                               \
-        if (elem >= uint(total)) {                                             \
-            return;                                                            \
-        }                                                                      \
-        const int out_row = int(elem) / blocks;                                \
-        const int co = (int(elem) - out_row * blocks) * 4;                     \
-        const int out_base = out_row * CHANNELS + co;                          \
-        const int out_count = min(counts[1], out_capacity);                    \
-        if (out_row >= out_count) {                                            \
-            out[out_base] = TYPE(0);                                           \
-            out[out_base + 1] = TYPE(0);                                       \
-            out[out_base + 2] = TYPE(0);                                       \
-            out[out_base + 3] = TYPE(0);                                       \
-            return;                                                            \
-        }                                                                      \
-        const int edge_count = min(counts[0], edge_capacity);                  \
-        float4 acc = float4(0.0f);                                             \
-        for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1]; \
-             ++edge) {                                                         \
-            if (edge < 0 || edge >= edge_count) {                              \
-                continue;                                                      \
-            }                                                                  \
-            const int in_row = in_rows[edge];                                  \
-            const int kernel_id = kernel_ids[edge];                            \
-            if (in_row < 0 || kernel_id < 0) {                                 \
-                continue;                                                      \
-            }                                                                  \
-            const int feat_base = in_row * feat_s0;                            \
-            for (int ci = 0; ci < CHANNELS; ++ci) {                            \
-                const float value = float(feats[feat_base + ci * feat_s1]);    \
-                acc += value *                                                 \
-                       LOAD_WEIGHT4(                                           \
-                           weights, weight_s0, CHANNELS, kernel_id, ci, co     \
-                       );                                                      \
-            }                                                                  \
-        }                                                                      \
-        STORE4(out, out_base, acc);                                            \
-        LATTICE_CONV_UNUSED_DENSE_FORWARD_ARGS();                              \
-    }
+[[kernel]] void sparse_relation_conv_f16_i32_cout16_dense_c64(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_forward_cout16_impl<half, 64>(
+        feats,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DEFINE_DENSE_COUT16_FORWARD(                                   \
-    NAME, CHANNELS, TYPE, LOAD_WEIGHT4, STORE4                                 \
-)                                                                              \
-    [[kernel]] void NAME(                                                      \
-        device const TYPE* feats [[buffer(0)]],                                \
-        device const TYPE* weights [[buffer(1)]],                              \
-        device const int* in_rows [[buffer(2)]],                               \
-        device const int* out_rows [[buffer(3)]],                              \
-        device const int* kernel_ids [[buffer(4)]],                            \
-        device const int* counts [[buffer(5)]],                                \
-        device const int* row_offsets [[buffer(6)]],                           \
-        device TYPE* out [[buffer(7)]],                                        \
-        constant const int& edge_capacity [[buffer(8)]],                       \
-        constant const int& out_capacity [[buffer(9)]],                        \
-        constant const int& in_channels [[buffer(10)]],                        \
-        constant const int& out_channels [[buffer(11)]],                       \
-        constant const int& feat_s0 [[buffer(12)]],                            \
-        constant const int& feat_s1 [[buffer(13)]],                            \
-        constant const int& weight_s0 [[buffer(14)]],                          \
-        constant const int& weight_s1 [[buffer(15)]],                          \
-        constant const int& weight_s2 [[buffer(16)]],                          \
-        constant const int& weight_s3 [[buffer(17)]],                          \
-        constant const int& weight_s4 [[buffer(18)]],                          \
-        constant const int& weight_layout [[buffer(19)]],                      \
-        constant const int& kernel_x [[buffer(20)]],                           \
-        constant const int& kernel_y [[buffer(21)]],                           \
-        constant const int& kernel_z [[buffer(22)]],                           \
-        uint elem [[thread_position_in_grid]]                                  \
-    ) {                                                                        \
-        const int blocks = CHANNELS / 16;                                      \
-        const int total = out_capacity * blocks;                               \
-        if (elem >= uint(total)) {                                             \
-            return;                                                            \
-        }                                                                      \
-        const int out_row = int(elem) / blocks;                                \
-        const int co = (int(elem) - out_row * blocks) * 16;                    \
-        const int out_base = out_row * CHANNELS + co;                          \
-        const int out_count = min(counts[1], out_capacity);                    \
-        if (out_row >= out_count) {                                            \
-            for (int offset = 0; offset < 16; ++offset) {                      \
-                out[out_base + offset] = TYPE(0);                              \
-            }                                                                  \
-            return;                                                            \
-        }                                                                      \
-        const int edge_count = min(counts[0], edge_capacity);                  \
-        float4 acc0 = float4(0.0f);                                            \
-        float4 acc1 = float4(0.0f);                                            \
-        float4 acc2 = float4(0.0f);                                            \
-        float4 acc3 = float4(0.0f);                                            \
-        for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1]; \
-             ++edge) {                                                         \
-            if (edge < 0 || edge >= edge_count) {                              \
-                continue;                                                      \
-            }                                                                  \
-            const int in_row = in_rows[edge];                                  \
-            const int kernel_id = kernel_ids[edge];                            \
-            if (in_row < 0 || kernel_id < 0) {                                 \
-                continue;                                                      \
-            }                                                                  \
-            const int feat_base = in_row * feat_s0;                            \
-            for (int ci = 0; ci < CHANNELS; ++ci) {                            \
-                const float value = float(feats[feat_base + ci * feat_s1]);    \
-                acc0 += value *                                                \
-                        LOAD_WEIGHT4(                                          \
-                            weights, weight_s0, CHANNELS, kernel_id, ci, co    \
-                        );                                                     \
-                acc1 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(                                              \
-                        weights, weight_s0, CHANNELS, kernel_id, ci, co + 4    \
-                    );                                                         \
-                acc2 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(                                              \
-                        weights, weight_s0, CHANNELS, kernel_id, ci, co + 8    \
-                    );                                                         \
-                acc3 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(                                              \
-                        weights, weight_s0, CHANNELS, kernel_id, ci, co + 12   \
-                    );                                                         \
-            }                                                                  \
-        }                                                                      \
-        STORE4(out, out_base, acc0);                                           \
-        STORE4(out, out_base + 4, acc1);                                       \
-        STORE4(out, out_base + 8, acc2);                                       \
-        STORE4(out, out_base + 12, acc3);                                      \
-        LATTICE_CONV_UNUSED_DENSE_FORWARD_ARGS();                              \
-    }
+[[kernel]] void sparse_relation_conv_input_grad_f32_i32_cin16_dense_c16(
+    device const float* cotangent [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device float* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_input_grad_cin16_impl<float>(
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        in_row_offsets,
+        in_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        in_capacity,
+        in_channels,
+        out_channels,
+        cotangent_s0,
+        cotangent_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DEFINE_DENSE_C16_INPUT_GRAD(NAME, TYPE, LOAD_WEIGHT4, STORE4)  \
-    [[kernel]] void NAME(                                                      \
-        device const TYPE* cotangent [[buffer(0)]],                            \
-        device const TYPE* weights [[buffer(1)]],                              \
-        device const int* in_rows [[buffer(2)]],                               \
-        device const int* out_rows [[buffer(3)]],                              \
-        device const int* kernel_ids [[buffer(4)]],                            \
-        device const int* counts [[buffer(5)]],                                \
-        device const int* row_offsets [[buffer(6)]],                           \
-        device const int* in_row_offsets [[buffer(7)]],                        \
-        device const int* in_edge_ids [[buffer(8)]],                           \
-        device TYPE* grad [[buffer(9)]],                                       \
-        constant const int& edge_capacity [[buffer(10)]],                      \
-        constant const int& out_capacity [[buffer(11)]],                       \
-        constant const int& in_capacity [[buffer(12)]],                        \
-        constant const int& in_channels [[buffer(13)]],                        \
-        constant const int& out_channels [[buffer(14)]],                       \
-        constant const int& cotangent_s0 [[buffer(15)]],                       \
-        constant const int& cotangent_s1 [[buffer(16)]],                       \
-        constant const int& weight_s0 [[buffer(17)]],                          \
-        constant const int& weight_s1 [[buffer(18)]],                          \
-        constant const int& weight_s2 [[buffer(19)]],                          \
-        constant const int& weight_s3 [[buffer(20)]],                          \
-        constant const int& weight_s4 [[buffer(21)]],                          \
-        constant const int& weight_layout [[buffer(22)]],                      \
-        constant const int& kernel_x [[buffer(23)]],                           \
-        constant const int& kernel_y [[buffer(24)]],                           \
-        constant const int& kernel_z [[buffer(25)]],                           \
-        uint in_row_id [[thread_position_in_grid]]                             \
-    ) {                                                                        \
-        if (in_row_id >= uint(in_capacity)) {                                  \
-            return;                                                            \
-        }                                                                      \
-        const int in_row = int(in_row_id);                                     \
-        const int edge_count = min(counts[0], edge_capacity);                  \
-        float4 acc0 = float4(0.0f);                                            \
-        float4 acc1 = float4(0.0f);                                            \
-        float4 acc2 = float4(0.0f);                                            \
-        float4 acc3 = float4(0.0f);                                            \
-        for (int cursor = in_row_offsets[in_row];                              \
-             cursor < in_row_offsets[in_row + 1];                              \
-             ++cursor) {                                                       \
-            const int edge = in_edge_ids[cursor];                              \
-            if (edge < 0 || edge >= edge_count) {                              \
-                continue;                                                      \
-            }                                                                  \
-            const int out_row = out_rows[edge];                                \
-            const int kernel_id = kernel_ids[edge];                            \
-            if (out_row < 0 || out_row >= out_capacity || kernel_id < 0) {     \
-                continue;                                                      \
-            }                                                                  \
-            const int cot_base = out_row * cotangent_s0;                       \
-            for (int co = 0; co < 16; ++co) {                                  \
-                const float value =                                            \
-                    float(cotangent[cot_base + co * cotangent_s1]);            \
-                acc0 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, co, 0);    \
-                acc1 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, co, 4);    \
-                acc2 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, co, 8);    \
-                acc3 +=                                                        \
-                    value *                                                    \
-                    LOAD_WEIGHT4(weights, weight_s0, 16, kernel_id, co, 12);   \
-            }                                                                  \
-        }                                                                      \
-        const int grad_base = in_row * 16;                                     \
-        STORE4(grad, grad_base, acc0);                                         \
-        STORE4(grad, grad_base + 4, acc1);                                     \
-        STORE4(grad, grad_base + 8, acc2);                                     \
-        STORE4(grad, grad_base + 12, acc3);                                    \
-        LATTICE_CONV_UNUSED_DENSE_INPUT_GRAD_ARGS();                           \
-    }
+[[kernel]] void sparse_relation_conv_input_grad_f16_i32_cin16_dense_c16(
+    device const half* cotangent [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_input_grad_cin16_impl<half>(
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        in_row_offsets,
+        in_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        in_capacity,
+        in_channels,
+        out_channels,
+        cotangent_s0,
+        cotangent_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DEFINE_DENSE_CIN4_INPUT_GRAD(                                  \
-    NAME, CHANNELS, TYPE, LOAD_WEIGHT4, STORE4                                 \
-)                                                                              \
-    [[kernel]] void NAME(                                                      \
-        device const TYPE* cotangent [[buffer(0)]],                            \
-        device const TYPE* weights [[buffer(1)]],                              \
-        device const int* in_rows [[buffer(2)]],                               \
-        device const int* out_rows [[buffer(3)]],                              \
-        device const int* kernel_ids [[buffer(4)]],                            \
-        device const int* counts [[buffer(5)]],                                \
-        device const int* row_offsets [[buffer(6)]],                           \
-        device const int* in_row_offsets [[buffer(7)]],                        \
-        device const int* in_edge_ids [[buffer(8)]],                           \
-        device TYPE* grad [[buffer(9)]],                                       \
-        constant const int& edge_capacity [[buffer(10)]],                      \
-        constant const int& out_capacity [[buffer(11)]],                       \
-        constant const int& in_capacity [[buffer(12)]],                        \
-        constant const int& in_channels [[buffer(13)]],                        \
-        constant const int& out_channels [[buffer(14)]],                       \
-        constant const int& cotangent_s0 [[buffer(15)]],                       \
-        constant const int& cotangent_s1 [[buffer(16)]],                       \
-        constant const int& weight_s0 [[buffer(17)]],                          \
-        constant const int& weight_s1 [[buffer(18)]],                          \
-        constant const int& weight_s2 [[buffer(19)]],                          \
-        constant const int& weight_s3 [[buffer(20)]],                          \
-        constant const int& weight_s4 [[buffer(21)]],                          \
-        constant const int& weight_layout [[buffer(22)]],                      \
-        constant const int& kernel_x [[buffer(23)]],                           \
-        constant const int& kernel_y [[buffer(24)]],                           \
-        constant const int& kernel_z [[buffer(25)]],                           \
-        uint elem [[thread_position_in_grid]]                                  \
-    ) {                                                                        \
-        const int blocks = CHANNELS / 4;                                       \
-        const int total = in_capacity * blocks;                                \
-        if (elem >= uint(total)) {                                             \
-            return;                                                            \
-        }                                                                      \
-        const int in_row = int(elem) / blocks;                                 \
-        const int ci = (int(elem) - in_row * blocks) * 4;                      \
-        const int edge_count = min(counts[0], edge_capacity);                  \
-        float4 acc = float4(0.0f);                                             \
-        for (int cursor = in_row_offsets[in_row];                              \
-             cursor < in_row_offsets[in_row + 1];                              \
-             ++cursor) {                                                       \
-            const int edge = in_edge_ids[cursor];                              \
-            if (edge < 0 || edge >= edge_count) {                              \
-                continue;                                                      \
-            }                                                                  \
-            const int out_row = out_rows[edge];                                \
-            const int kernel_id = kernel_ids[edge];                            \
-            if (out_row < 0 || out_row >= out_capacity || kernel_id < 0) {     \
-                continue;                                                      \
-            }                                                                  \
-            const int cot_base = out_row * cotangent_s0;                       \
-            for (int co = 0; co < CHANNELS; ++co) {                            \
-                const float value =                                            \
-                    float(cotangent[cot_base + co * cotangent_s1]);            \
-                acc += value *                                                 \
-                       LOAD_WEIGHT4(                                           \
-                           weights, weight_s0, CHANNELS, kernel_id, co, ci     \
-                       );                                                      \
-            }                                                                  \
-        }                                                                      \
-        STORE4(grad, in_row * CHANNELS + ci, acc);                             \
-        LATTICE_CONV_UNUSED_DENSE_INPUT_GRAD_ARGS();                           \
-    }
+[[kernel]] void sparse_relation_conv_input_grad_f32_i32_cin4_dense_c32(
+    device const float* cotangent [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device float* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_input_grad_cin4_impl<float, 32>(
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        in_row_offsets,
+        in_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        in_capacity,
+        in_channels,
+        out_channels,
+        cotangent_s0,
+        cotangent_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-#define LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(NAME, CHANNELS, TYPE, STORE4) \
-    [[kernel]] void NAME(                                                      \
-        device const TYPE* feats [[buffer(0)]],                                \
-        device const TYPE* cotangent [[buffer(1)]],                            \
-        device const int* in_rows [[buffer(2)]],                               \
-        device const int* out_rows [[buffer(3)]],                              \
-        device const int* kernel_ids [[buffer(4)]],                            \
-        device const int* counts [[buffer(5)]],                                \
-        device const int* row_offsets [[buffer(6)]],                           \
-        device const int* kernel_row_offsets [[buffer(7)]],                    \
-        device const int* kernel_edge_ids [[buffer(8)]],                       \
-        device TYPE* grad [[buffer(9)]],                                       \
-        constant const int& edge_capacity [[buffer(10)]],                      \
-        constant const int& out_capacity [[buffer(11)]],                       \
-        constant const int& n_kernels [[buffer(12)]],                          \
-        constant const int& in_channels [[buffer(13)]],                        \
-        constant const int& out_channels [[buffer(14)]],                       \
-        constant const int& feat_s0 [[buffer(15)]],                            \
-        constant const int& feat_s1 [[buffer(16)]],                            \
-        constant const int& cotangent_s0 [[buffer(17)]],                       \
-        constant const int& cotangent_s1 [[buffer(18)]],                       \
-        constant const int& weight_layout [[buffer(19)]],                      \
-        constant const int& kernel_x [[buffer(20)]],                           \
-        constant const int& kernel_y [[buffer(21)]],                           \
-        constant const int& kernel_z [[buffer(22)]],                           \
-        uint tile_id [[threadgroup_position_in_grid]],                         \
-        uint tid [[thread_index_in_threadgroup]]                               \
-    ) {                                                                        \
-        threadgroup float partial[1024];                                       \
-        const int blocks = CHANNELS / 4;                                       \
-        const int tiles_per_kernel = blocks * blocks;                          \
-        const int total_tiles = n_kernels * tiles_per_kernel;                  \
-        if (tile_id >= uint(total_tiles) || tid >= 64) {                       \
-            return;                                                            \
-        }                                                                      \
-        const int tile = int(tile_id);                                         \
-        const int kernel_id = tile / tiles_per_kernel;                         \
-        const int rem = tile - kernel_id * tiles_per_kernel;                   \
-        const int ci = (rem / blocks) * 4;                                     \
-        const int co = (rem - (ci / 4) * blocks) * 4;                          \
-        const int edge_count = min(counts[0], edge_capacity);                  \
-        const int start = kernel_row_offsets[kernel_id];                       \
-        const int stop = kernel_row_offsets[kernel_id + 1];                    \
-        float4 acc0 = float4(0.0f);                                            \
-        float4 acc1 = float4(0.0f);                                            \
-        float4 acc2 = float4(0.0f);                                            \
-        float4 acc3 = float4(0.0f);                                            \
-        for (int cursor = start + int(tid); cursor < stop; cursor += 64) {     \
-            const int edge = kernel_edge_ids[cursor];                          \
-            if (edge < 0 || edge >= edge_count) {                              \
-                continue;                                                      \
-            }                                                                  \
-            const int in_row = in_rows[edge];                                  \
-            const int out_row = out_rows[edge];                                \
-            if (in_row < 0 || out_row < 0 || out_row >= out_capacity) {        \
-                continue;                                                      \
-            }                                                                  \
-            const int feat_base = in_row * feat_s0 + ci * feat_s1;             \
-            const float4 feat4 = float4(                                       \
-                float(feats[feat_base]),                                       \
-                float(feats[feat_base + feat_s1]),                             \
-                float(feats[feat_base + feat_s1 * 2]),                         \
-                float(feats[feat_base + feat_s1 * 3])                          \
-            );                                                                 \
-            const int cotangent_base =                                         \
-                out_row * cotangent_s0 + co * cotangent_s1;                    \
-            acc0 += feat4 * float(cotangent[cotangent_base]);                  \
-            acc1 += feat4 * float(cotangent[cotangent_base + cotangent_s1]);   \
-            acc2 +=                                                            \
-                feat4 * float(cotangent[cotangent_base + cotangent_s1 * 2]);   \
-            acc3 +=                                                            \
-                feat4 * float(cotangent[cotangent_base + cotangent_s1 * 3]);   \
-        }                                                                      \
-        const int thread_base = int(tid) * 16;                                 \
-        partial[thread_base] = acc0.x;                                         \
-        partial[thread_base + 1] = acc0.y;                                     \
-        partial[thread_base + 2] = acc0.z;                                     \
-        partial[thread_base + 3] = acc0.w;                                     \
-        partial[thread_base + 4] = acc1.x;                                     \
-        partial[thread_base + 5] = acc1.y;                                     \
-        partial[thread_base + 6] = acc1.z;                                     \
-        partial[thread_base + 7] = acc1.w;                                     \
-        partial[thread_base + 8] = acc2.x;                                     \
-        partial[thread_base + 9] = acc2.y;                                     \
-        partial[thread_base + 10] = acc2.z;                                    \
-        partial[thread_base + 11] = acc2.w;                                    \
-        partial[thread_base + 12] = acc3.x;                                    \
-        partial[thread_base + 13] = acc3.y;                                    \
-        partial[thread_base + 14] = acc3.z;                                    \
-        partial[thread_base + 15] = acc3.w;                                    \
-        threadgroup_barrier(mem_flags::mem_threadgroup);                       \
-        for (uint stride = 32; stride > 0; stride >>= 1) {                     \
-            if (tid < stride) {                                                \
-                const int lhs = int(tid) * 16;                                 \
-                const int rhs = int(tid + stride) * 16;                        \
-                for (int value = 0; value < 16; ++value) {                     \
-                    partial[lhs + value] += partial[rhs + value];              \
-                }                                                              \
-            }                                                                  \
-            threadgroup_barrier(mem_flags::mem_threadgroup);                   \
-        }                                                                      \
-        if (tid == 0) {                                                        \
-            const int kernel_base = kernel_id * CHANNELS + ci;                 \
-            STORE4(                                                            \
-                grad,                                                          \
-                ((co + 0) * n_kernels * CHANNELS) + kernel_base,               \
-                float4(partial[0], partial[1], partial[2], partial[3])         \
-            );                                                                 \
-            STORE4(                                                            \
-                grad,                                                          \
-                ((co + 1) * n_kernels * CHANNELS) + kernel_base,               \
-                float4(partial[4], partial[5], partial[6], partial[7])         \
-            );                                                                 \
-            STORE4(                                                            \
-                grad,                                                          \
-                ((co + 2) * n_kernels * CHANNELS) + kernel_base,               \
-                float4(partial[8], partial[9], partial[10], partial[11])       \
-            );                                                                 \
-            STORE4(                                                            \
-                grad,                                                          \
-                ((co + 3) * n_kernels * CHANNELS) + kernel_base,               \
-                float4(partial[12], partial[13], partial[14], partial[15])     \
-            );                                                                 \
-        }                                                                      \
-        (void)kernel_ids;                                                      \
-        (void)row_offsets;                                                     \
-        (void)in_channels;                                                     \
-        (void)out_channels;                                                    \
-        (void)weight_layout;                                                   \
-        (void)kernel_x;                                                        \
-        (void)kernel_y;                                                        \
-        (void)kernel_z;                                                        \
-    }
+[[kernel]] void sparse_relation_conv_input_grad_f16_i32_cin4_dense_c32(
+    device const half* cotangent [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_input_grad_cin4_impl<half, 32>(
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        in_row_offsets,
+        in_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        in_capacity,
+        in_channels,
+        out_channels,
+        cotangent_s0,
+        cotangent_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-LATTICE_DEFINE_DENSE_C16_FORWARD(
-    sparse_relation_conv_f32_i32_cout16_dense_c16,
-    float,
-    LATTICE_DENSE_WEIGHT4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_C16_FORWARD(
-    sparse_relation_conv_f16_i32_cout16_dense_c16,
-    half,
-    LATTICE_DENSE_WEIGHT4_F16,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_COUT4_FORWARD(
-    sparse_relation_conv_f32_i32_cout4_dense_c32,
-    32,
-    float,
-    LATTICE_DENSE_WEIGHT4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_COUT4_FORWARD(
-    sparse_relation_conv_f16_i32_cout4_dense_c32,
-    32,
-    half,
-    LATTICE_DENSE_WEIGHT4_F16,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_COUT4_FORWARD(
-    sparse_relation_conv_f32_i32_cout4_dense_c64,
-    64,
-    float,
-    LATTICE_DENSE_WEIGHT4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_COUT4_FORWARD(
-    sparse_relation_conv_f16_i32_cout4_dense_c64,
-    64,
-    half,
-    LATTICE_DENSE_WEIGHT4_F16,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_COUT16_FORWARD(
-    sparse_relation_conv_f32_i32_cout16_dense_c32,
-    32,
-    float,
-    LATTICE_DENSE_WEIGHT4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_COUT16_FORWARD(
-    sparse_relation_conv_f16_i32_cout16_dense_c32,
-    32,
-    half,
-    LATTICE_DENSE_WEIGHT4_F16,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_COUT16_FORWARD(
-    sparse_relation_conv_f32_i32_cout16_dense_c64,
-    64,
-    float,
-    LATTICE_DENSE_WEIGHT4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_COUT16_FORWARD(
-    sparse_relation_conv_f16_i32_cout16_dense_c64,
-    64,
-    half,
-    LATTICE_DENSE_WEIGHT4_F16,
-    LATTICE_STORE_F16_4
-)
+[[kernel]] void sparse_relation_conv_input_grad_f32_i32_cin4_dense_c64(
+    device const float* cotangent [[buffer(0)]],
+    device const float* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device float* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_input_grad_cin4_impl<float, 64>(
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        in_row_offsets,
+        in_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        in_capacity,
+        in_channels,
+        out_channels,
+        cotangent_s0,
+        cotangent_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-LATTICE_DEFINE_DENSE_C16_INPUT_GRAD(
-    sparse_relation_conv_input_grad_f32_i32_cin16_dense_c16,
-    float,
-    LATTICE_DENSE_WEIGHT_CI4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_C16_INPUT_GRAD(
-    sparse_relation_conv_input_grad_f16_i32_cin16_dense_c16,
-    half,
-    LATTICE_DENSE_WEIGHT_CI4_F16,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_CIN4_INPUT_GRAD(
-    sparse_relation_conv_input_grad_f32_i32_cin4_dense_c32,
-    32,
-    float,
-    LATTICE_DENSE_WEIGHT_CI4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_CIN4_INPUT_GRAD(
-    sparse_relation_conv_input_grad_f16_i32_cin4_dense_c32,
-    32,
-    half,
-    LATTICE_DENSE_WEIGHT_CI4_F16,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_CIN4_INPUT_GRAD(
-    sparse_relation_conv_input_grad_f32_i32_cin4_dense_c64,
-    64,
-    float,
-    LATTICE_DENSE_WEIGHT_CI4_F32,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_CIN4_INPUT_GRAD(
-    sparse_relation_conv_input_grad_f16_i32_cin4_dense_c64,
-    64,
-    half,
-    LATTICE_DENSE_WEIGHT_CI4_F16,
-    LATTICE_STORE_F16_4
-)
+[[kernel]] void sparse_relation_conv_input_grad_f16_i32_cin4_dense_c64(
+    device const half* cotangent [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    dense_input_grad_cin4_impl<half, 64>(
+        cotangent,
+        weights,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        in_row_offsets,
+        in_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        in_capacity,
+        in_channels,
+        out_channels,
+        cotangent_s0,
+        cotangent_s1,
+        weight_s0,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        elem
+    );
+}
 
-LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(
-    sparse_relation_conv_weight_grad_f32_i32_c4_dense_c16,
-    16,
-    float,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(
-    sparse_relation_conv_weight_grad_f16_i32_c4_dense_c16,
-    16,
-    half,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(
-    sparse_relation_conv_weight_grad_f32_i32_c4_dense_c32,
-    32,
-    float,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(
-    sparse_relation_conv_weight_grad_f16_i32_c4_dense_c32,
-    32,
-    half,
-    LATTICE_STORE_F16_4
-)
-LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(
-    sparse_relation_conv_weight_grad_f32_i32_c4_dense_c64,
-    64,
-    float,
-    LATTICE_STORE_F32_4
-)
-LATTICE_DEFINE_DENSE_CI4_CO4_WEIGHT_GRAD(
-    sparse_relation_conv_weight_grad_f16_i32_c4_dense_c64,
-    64,
-    half,
-    LATTICE_STORE_F16_4
-)
+[[kernel]] void sparse_relation_conv_weight_grad_f32_i32_c4_dense_c16(
+    device const float* feats [[buffer(0)]],
+    device const float* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device float* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint tile_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[1024];
+    dense_weight_grad_ci4_co4_impl<float, 16>(
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        kernel_row_offsets,
+        kernel_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        n_kernels,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        cotangent_s0,
+        cotangent_s1,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        tile_id,
+        tid,
+        partial
+    );
+}
+
+[[kernel]] void sparse_relation_conv_weight_grad_f16_i32_c4_dense_c16(
+    device const half* feats [[buffer(0)]],
+    device const half* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint tile_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[1024];
+    dense_weight_grad_ci4_co4_impl<half, 16>(
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        kernel_row_offsets,
+        kernel_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        n_kernels,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        cotangent_s0,
+        cotangent_s1,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        tile_id,
+        tid,
+        partial
+    );
+}
+
+[[kernel]] void sparse_relation_conv_weight_grad_f32_i32_c4_dense_c32(
+    device const float* feats [[buffer(0)]],
+    device const float* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device float* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint tile_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[1024];
+    dense_weight_grad_ci4_co4_impl<float, 32>(
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        kernel_row_offsets,
+        kernel_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        n_kernels,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        cotangent_s0,
+        cotangent_s1,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        tile_id,
+        tid,
+        partial
+    );
+}
+
+[[kernel]] void sparse_relation_conv_weight_grad_f16_i32_c4_dense_c32(
+    device const half* feats [[buffer(0)]],
+    device const half* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint tile_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[1024];
+    dense_weight_grad_ci4_co4_impl<half, 32>(
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        kernel_row_offsets,
+        kernel_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        n_kernels,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        cotangent_s0,
+        cotangent_s1,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        tile_id,
+        tid,
+        partial
+    );
+}
+
+[[kernel]] void sparse_relation_conv_weight_grad_f32_i32_c4_dense_c64(
+    device const float* feats [[buffer(0)]],
+    device const float* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device float* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint tile_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[1024];
+    dense_weight_grad_ci4_co4_impl<float, 64>(
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        kernel_row_offsets,
+        kernel_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        n_kernels,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        cotangent_s0,
+        cotangent_s1,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        tile_id,
+        tid,
+        partial
+    );
+}
+
+[[kernel]] void sparse_relation_conv_weight_grad_f16_i32_c4_dense_c64(
+    device const half* feats [[buffer(0)]],
+    device const half* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint tile_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[1024];
+    dense_weight_grad_ci4_co4_impl<half, 64>(
+        feats,
+        cotangent,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        kernel_row_offsets,
+        kernel_edge_ids,
+        grad,
+        edge_capacity,
+        out_capacity,
+        n_kernels,
+        in_channels,
+        out_channels,
+        feat_s0,
+        feat_s1,
+        cotangent_s0,
+        cotangent_s1,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        tile_id,
+        tid,
+        partial
+    );
+}
 
 [[kernel]] void sparse_relation_conv_clear_f32(
     device float* out [[buffer(0)]],
