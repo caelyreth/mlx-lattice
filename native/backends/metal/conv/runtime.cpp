@@ -5,7 +5,7 @@
 
 #include "backends/array_utils.h"
 #include "backends/metal/runtime_utils.h"
-#include "backends/metal/tensor_ops/conv/forward/runtime.h"
+#include "backends/metal/tensor_ops/conv/input_grad/runtime.h"
 #include "backends/metal/tensor_ops/conv/weight_grad/runtime.h"
 
 #ifdef _METAL_
@@ -178,10 +178,6 @@ void eval(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
-    if (tensor_ops::conv::forward::is_preferred(shape, stream)) {
-        tensor_ops::conv::forward::encode(shape, stream, inputs, out);
-        return;
-    }
     auto& device = mx::metal::device(stream.device);
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
@@ -256,6 +252,10 @@ void eval_input_grad(
     auto& encoder = mx::metal::get_command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
+    if (!fp16 && tensor_ops::conv::input_grad::is_preferred(shape, stream)) {
+        tensor_ops::conv::input_grad::encode(shape, stream, inputs, out);
+        return;
+    }
     auto use_cin16 = shape.in_channels == 16 && shape.in_capacity >= 4096;
     auto use_vec4 = !fp16 && shape.in_channels % 4 == 0;
     auto kernel = device.get_kernel(

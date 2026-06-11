@@ -1212,49 +1212,75 @@ void eval_generic_kernel_relation(
             return;
         }
 
-        auto slot_in_rows = make_int32_temp(rows * kernel_count);
-        auto slot_out_rows = make_int32_temp(rows * kernel_count);
-        auto slot_kernel_ids = make_int32_temp(rows * kernel_count);
-        encoder.add_temporaries({slot_in_rows, slot_out_rows, slot_kernel_ids});
-
-        auto slots = device.get_kernel(
-            "build_identity_forward_relation_slots_i32", library
+        auto row_degrees = make_int32_temp(rows);
+        auto buffers = make_stable_compact_buffers(rows);
+        encoder.add_temporaries(
+            {row_degrees, buffers.local_offsets, buffers.block_offsets}
         );
-        encoder.set_compute_pipeline_state(slots);
+
+        auto count = device.get_kernel(
+            "count_identity_forward_relation_degrees_i32", library
+        );
+        encoder.set_compute_pipeline_state(count);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
         encoder.set_input_array(inputs[2], 2);
         encoder.set_input_array(outputs[RelationBaseOutputCount], 3);
-        encoder.set_output_array(slot_in_rows, 4);
-        encoder.set_output_array(slot_out_rows, 5);
-        encoder.set_output_array(slot_kernel_ids, 6);
-        encoder.set_output_array(outputs[RelationRowOffsets], 7);
-        encoder.set_output_array(outputs[RelationOutCoords], 8);
-        encoder.set_output_array(outputs[RelationCounts], 9);
-        encoder.set_bytes(rows, 10);
-        encoder.set_bytes(kernel_count, 11);
-        encoder.set_bytes(table_capacity, 12);
-        dispatch_1d(
-            encoder,
-            slots,
-            std::max(
-                {static_cast<size_t>(rows + 1),
-                 static_cast<size_t>(rows) * 4,
-                 static_cast<size_t>(rows) * static_cast<size_t>(kernel_count)}
-            )
+        encoder.set_output_array(row_degrees, 4);
+        encoder.set_output_array(outputs[RelationOutCoords], 5);
+        encoder.set_output_array(outputs[RelationCounts], 6);
+        encoder.set_bytes(rows, 7);
+        encoder.set_bytes(kernel_count, 8);
+        encoder.set_bytes(table_capacity, 9);
+        dispatch_1d(encoder, count, static_cast<size_t>(rows));
+
+        auto scan =
+            device.get_kernel("scan_relation_row_degrees_blocks_i32", library);
+        encoder.set_compute_pipeline_state(scan);
+        encoder.set_input_array(row_degrees, 0);
+        encoder.set_output_array(buffers.local_offsets, 1);
+        encoder.set_output_array(buffers.block_offsets, 2);
+        encoder.set_bytes(rows, 3);
+        encoder.dispatch_threadgroups(
+            MTL::Size(static_cast<size_t>(buffers.blocks), 1, 1),
+            MTL::Size(kStableCompactBlockSize, 1, 1)
         );
-        compact_forward_relation_slots(
-            device,
-            library,
-            encoder,
-            ForwardRelationSlotArrays{
-                .in_rows = slot_in_rows,
-                .out_rows = slot_out_rows,
-                .kernel_ids = slot_kernel_ids,
-            },
-            outputs,
-            RelationSlotShape{.rows = rows, .kernel_count = kernel_count}
+
+        auto prefix =
+            device.get_kernel("prefix_coord_set_selected_blocks_i32", library);
+        encoder.set_compute_pipeline_state(prefix);
+        encoder.set_output_array(buffers.block_offsets, 0);
+        encoder.set_output_array(outputs[RelationCounts], 1);
+        encoder.set_bytes(buffers.blocks, 2);
+        encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
+
+        auto finalize = device.get_kernel(
+            "finalize_forward_relation_row_offsets_i32", library
         );
+        encoder.set_compute_pipeline_state(finalize);
+        encoder.set_input_array(buffers.local_offsets, 0);
+        encoder.set_input_array(buffers.block_offsets, 1);
+        encoder.set_output_array(outputs[RelationRowOffsets], 2);
+        encoder.set_input_array(outputs[RelationCounts], 3);
+        encoder.set_bytes(rows, 4);
+        dispatch_1d(encoder, finalize, static_cast<size_t>(rows) + size_t{1});
+
+        auto fill = device.get_kernel(
+            "fill_identity_forward_relation_compact_i32", library
+        );
+        encoder.set_compute_pipeline_state(fill);
+        encoder.set_input_array(inputs[0], 0);
+        encoder.set_input_array(inputs[1], 1);
+        encoder.set_input_array(outputs[RelationBaseOutputCount], 2);
+        encoder.set_input_array(outputs[RelationRowOffsets], 3);
+        encoder.set_input_array(outputs[RelationCounts], 4);
+        encoder.set_output_array(outputs[RelationInRows], 5);
+        encoder.set_output_array(outputs[RelationOutRows], 6);
+        encoder.set_output_array(outputs[RelationKernelIds], 7);
+        encoder.set_bytes(rows, 8);
+        encoder.set_bytes(kernel_count, 9);
+        encoder.set_bytes(table_capacity, 10);
+        dispatch_1d(encoder, fill, static_cast<size_t>(rows));
         return;
     }
 

@@ -112,6 +112,105 @@ using namespace metal;
     kernel_ids[elem] = in_row >= 0 ? kernel_id : -1;
 }
 
+[[kernel]] void count_identity_forward_relation_degrees_i32(
+    device const int* coords [[buffer(0)]],
+    device const int* kernel_offsets [[buffer(1)]],
+    device const int* active_rows [[buffer(2)]],
+    device const int* table_rows [[buffer(3)]],
+    device int* row_degrees [[buffer(4)]],
+    device int* out_coords [[buffer(5)]],
+    device int* counts [[buffer(6)]],
+    constant const int& rows [[buffer(7)]],
+    constant const int& kernel_count [[buffer(8)]],
+    constant const int& table_capacity [[buffer(9)]],
+    uint row_id [[thread_position_in_grid]]
+) {
+    int out_count = min(active_rows[0], rows);
+    if (row_id == 0) {
+        counts[1] = out_count;
+    }
+    if (row_id >= uint(rows)) {
+        return;
+    }
+
+    int row = int(row_id);
+    int out_base = row * 4;
+    if (row < out_count) {
+        out_coords[out_base] = coords[out_base];
+        out_coords[out_base + 1] = coords[out_base + 1];
+        out_coords[out_base + 2] = coords[out_base + 2];
+        out_coords[out_base + 3] = coords[out_base + 3];
+    } else {
+        out_coords[out_base] = 0;
+        out_coords[out_base + 1] = 0;
+        out_coords[out_base + 2] = 0;
+        out_coords[out_base + 3] = 0;
+        row_degrees[row] = 0;
+        return;
+    }
+
+    int degree = 0;
+    for (int kernel_id = 0; kernel_id < kernel_count; ++kernel_id) {
+        int offset_base = kernel_id * 3;
+        int candidate[4] = {
+            coords[out_base],
+            coords[out_base + 1] + kernel_offsets[offset_base],
+            coords[out_base + 2] + kernel_offsets[offset_base + 1],
+            coords[out_base + 3] + kernel_offsets[offset_base + 2],
+        };
+        int in_row = lookup_coord_row_hash(
+            coords, table_rows, table_capacity, candidate
+        );
+        if (in_row >= 0) {
+            ++degree;
+        }
+    }
+    row_degrees[row] = degree;
+}
+
+[[kernel]] void fill_identity_forward_relation_compact_i32(
+    device const int* coords [[buffer(0)]],
+    device const int* kernel_offsets [[buffer(1)]],
+    device const int* table_rows [[buffer(2)]],
+    device const int* row_offsets [[buffer(3)]],
+    device const int* counts [[buffer(4)]],
+    device int* in_rows [[buffer(5)]],
+    device int* out_rows [[buffer(6)]],
+    device int* kernel_ids [[buffer(7)]],
+    constant const int& rows [[buffer(8)]],
+    constant const int& kernel_count [[buffer(9)]],
+    constant const int& table_capacity [[buffer(10)]],
+    uint row_id [[thread_position_in_grid]]
+) {
+    int out_count = min(counts[1], rows);
+    if (row_id >= uint(out_count)) {
+        return;
+    }
+
+    int out_row = int(row_id);
+    int out_base = out_row * 4;
+    int dst = row_offsets[out_row];
+    for (int kernel_id = 0; kernel_id < kernel_count; ++kernel_id) {
+        int offset_base = kernel_id * 3;
+        int candidate[4] = {
+            coords[out_base],
+            coords[out_base + 1] + kernel_offsets[offset_base],
+            coords[out_base + 2] + kernel_offsets[offset_base + 1],
+            coords[out_base + 3] + kernel_offsets[offset_base + 2],
+        };
+        int in_row = lookup_coord_row_hash(
+            coords, table_rows, table_capacity, candidate
+        );
+        if (in_row < 0) {
+            continue;
+        }
+        in_rows[dst] = in_row;
+        out_rows[dst] = out_row;
+        kernel_ids[dst] = kernel_id;
+        ++dst;
+    }
+}
+
 [[kernel]] void build_strided_forward_relation_slots_i32(
     device const int* coords [[buffer(0)]],
     device const int* kernel_offsets [[buffer(1)]],
