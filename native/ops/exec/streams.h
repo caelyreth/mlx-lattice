@@ -14,6 +14,18 @@ mx::Stream sparse_conv_features_stream(
     const mx::array& row_offsets
 );
 
+mx::Stream sparse_conv_grad_stream(
+    const mx::array& lhs,
+    const mx::array& rhs,
+    const mx::array& in_rows,
+    const mx::array& out_rows,
+    const mx::array& kernel_ids,
+    const mx::array& counts,
+    const mx::array& row_offsets,
+    const mx::array& grouped_row_offsets,
+    const mx::array& grouped_edge_ids
+);
+
 mx::Stream sparse_pool_features_stream(
     const mx::array& feats,
     const mx::array& in_rows,

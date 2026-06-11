@@ -15,6 +15,10 @@ mx::array sparse_conv_features(
     const mx::array& kernel_ids,
     const mx::array& counts,
     const mx::array& row_offsets,
+    const mx::array& in_row_offsets,
+    const mx::array& in_edge_ids,
+    const mx::array& kernel_row_offsets,
+    const mx::array& kernel_edge_ids,
     int out_capacity,
     int n_kernels
 ) {
@@ -27,9 +31,14 @@ mx::array sparse_conv_features(
             "(C_out, Kx, Ky, Kz, C_in)."
         );
     }
-    if (feats.dtype() != mx::float32 || weights.dtype() != mx::float32) {
+    if (feats.dtype() != mx::float32 && feats.dtype() != mx::float16) {
         throw std::invalid_argument(
-            "sparse_conv_features currently supports float32 feats and weights."
+            "sparse_conv_features supports float32 and float16 feats."
+        );
+    }
+    if (weights.dtype() != feats.dtype()) {
+        throw std::invalid_argument(
+            "sparse_conv_features weights must match feats dtype."
         );
     }
     if (in_rows.ndim() != 1 || out_rows.ndim() != 1 || kernel_ids.ndim() != 1) {
@@ -59,6 +68,20 @@ mx::array sparse_conv_features(
             "row_offsets must be a one-dimensional int32 array."
         );
     }
+    if (in_row_offsets.ndim() != 1 || in_row_offsets.dtype() != mx::int32 ||
+        kernel_row_offsets.ndim() != 1 ||
+        kernel_row_offsets.dtype() != mx::int32) {
+        throw std::invalid_argument(
+            "plan row_offsets must be one-dimensional int32 arrays."
+        );
+    }
+    if (in_edge_ids.ndim() != 1 || kernel_edge_ids.ndim() != 1 ||
+        in_edge_ids.dtype() != mx::int32 ||
+        kernel_edge_ids.dtype() != mx::int32) {
+        throw std::invalid_argument(
+            "plan edge_ids must be one-dimensional int32 arrays."
+        );
+    }
     if (row_offsets.shape(0) != out_capacity + 1) {
         throw std::invalid_argument(
             "row_offsets length must match out_capacity + 1."
@@ -74,6 +97,22 @@ mx::array sparse_conv_features(
     if (out_capacity < 0 || n_kernels <= 0) {
         throw std::invalid_argument(
             "out_capacity must be nonnegative and n_kernels must be positive."
+        );
+    }
+    if (in_row_offsets.shape(0) != feats.shape(0) + 1) {
+        throw std::invalid_argument(
+            "in_row_offsets length must match input capacity + 1."
+        );
+    }
+    if (kernel_row_offsets.shape(0) != n_kernels + 1) {
+        throw std::invalid_argument(
+            "kernel_row_offsets length must match n_kernels + 1."
+        );
+    }
+    if (in_edge_ids.shape(0) != in_rows.shape(0) ||
+        kernel_edge_ids.shape(0) != in_rows.shape(0)) {
+        throw std::invalid_argument(
+            "plan edge_ids must match relation edge capacity."
         );
     }
     if (weights.ndim() == 3 && weights.shape(0) != n_kernels) {
@@ -95,6 +134,9 @@ mx::array sparse_conv_features(
         kernel_ids,
         counts,
         row_offsets,
+        SparseConvPlan{
+            in_row_offsets, in_edge_ids, kernel_row_offsets, kernel_edge_ids
+        },
         out_capacity,
         n_kernels
     );

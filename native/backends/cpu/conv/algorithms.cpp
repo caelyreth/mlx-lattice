@@ -5,12 +5,13 @@
 
 #include "backends/array_utils.h"
 #include "backends/cpu/schedule.h"
+#include "mlx/types/half_types.h"
 
 namespace mlx_lattice::backend::cpu::conv {
 namespace {
 
-void fill_zero(mx::array& out) {
-    auto* data = out.data<float>();
+template <typename T> void fill_zero(mx::array& out) {
+    auto* data = out.data<T>();
     std::fill(data, data + out.size(), 0.0F);
 }
 
@@ -70,6 +71,199 @@ int edge_count(const mx::array& rows, const mx::array& counts) {
     return std::min(counts.data<int32_t>()[0], static_cast<int>(rows.shape(0)));
 }
 
+template <typename T>
+void eval_typed(
+    SparseConvShape shape,
+    const std::vector<mx::array>& ready,
+    std::vector<mx::array>& task_outputs
+) {
+    const auto& feats = ready[0];
+    const auto& weights = ready[1];
+    const auto& in_rows = ready[2];
+    const auto& out_rows = ready[3];
+    const auto& kernel_ids = ready[4];
+    const auto& row_offsets = ready[6];
+
+    auto& out = task_outputs[0];
+    auto* out_data = out.data<T>();
+    const auto* feat_data = feats.data<T>();
+    const auto* weight_data = weights.data<T>();
+    const auto* in_data = in_rows.data<int32_t>();
+    const auto* kernel_data = kernel_ids.data<int32_t>();
+    const auto* offset_data = row_offsets.data<int32_t>();
+    const auto feat_s0 = feats.strides(0);
+    const auto feat_s1 = feats.strides(1);
+    const auto edge_total = edge_count(in_rows, ready[5]);
+    const auto out_count =
+        std::min(ready[5].data<int32_t>()[1], shape.out_capacity);
+
+    (void)out_rows;
+    for (int out_row = 0; out_row < shape.out_capacity; ++out_row) {
+        auto* out_row_data = out_data + static_cast<std::ptrdiff_t>(out_row) *
+                                            shape.out_channels;
+        std::fill(out_row_data, out_row_data + shape.out_channels, T(0.0F));
+        if (out_row >= out_count) {
+            continue;
+        }
+        for (int edge = offset_data[out_row]; edge < offset_data[out_row + 1];
+             ++edge) {
+            if (edge < 0 || edge >= edge_total) {
+                continue;
+            }
+            auto in_row = in_data[edge];
+            auto kernel = kernel_data[edge];
+            if (in_row < 0 || kernel < 0) {
+                continue;
+            }
+            for (int ci = 0; ci < shape.in_channels; ++ci) {
+                auto value = static_cast<float>(
+                    feat_data
+                        [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
+                         static_cast<std::ptrdiff_t>(ci) * feat_s1]
+                );
+                for (int co = 0; co < shape.out_channels; ++co) {
+                    auto acc = static_cast<float>(out_row_data[co]);
+                    acc += value * static_cast<float>(weight_data[weight_offset(
+                                       weights, shape, kernel, ci, co
+                                   )]);
+                    out_row_data[co] = T(acc);
+                }
+            }
+        }
+    }
+}
+
+template <typename T>
+void eval_input_grad_typed(
+    SparseConvShape shape,
+    const std::vector<mx::array>& ready,
+    std::vector<mx::array>& task_outputs
+) {
+    const auto& cotangent = ready[0];
+    const auto& weights = ready[1];
+    const auto& in_rows = ready[2];
+    const auto& out_rows = ready[3];
+    const auto& kernel_ids = ready[4];
+    const auto& in_row_offsets = ready[7];
+    const auto& in_edge_ids = ready[8];
+
+    auto& grad = task_outputs[0];
+    fill_zero<T>(grad);
+    auto* grad_data = grad.data<T>();
+    const auto* cotangent_data = cotangent.data<T>();
+    const auto* weight_data = weights.data<T>();
+    const auto* out_data = out_rows.data<int32_t>();
+    const auto* kernel_data = kernel_ids.data<int32_t>();
+    const auto* offset_data = in_row_offsets.data<int32_t>();
+    const auto* edge_data = in_edge_ids.data<int32_t>();
+    const auto cotangent_s0 = cotangent.strides(0);
+    const auto cotangent_s1 = cotangent.strides(1);
+    const auto edge_total = edge_count(in_rows, ready[5]);
+
+    (void)in_rows;
+    for (int in_row = 0; in_row < shape.in_capacity; ++in_row) {
+        auto* grad_row =
+            grad_data + static_cast<std::ptrdiff_t>(in_row) * shape.in_channels;
+        for (int ci = 0; ci < shape.in_channels; ++ci) {
+            auto acc = 0.0F;
+            for (int cursor = offset_data[in_row];
+                 cursor < offset_data[in_row + 1];
+                 ++cursor) {
+                auto edge = edge_data[cursor];
+                if (edge < 0 || edge >= edge_total) {
+                    continue;
+                }
+                auto out_row = out_data[edge];
+                auto kernel = kernel_data[edge];
+                if (out_row < 0 || kernel < 0 ||
+                    out_row >= shape.out_capacity) {
+                    continue;
+                }
+                for (int co = 0; co < shape.out_channels; ++co) {
+                    acc +=
+                        static_cast<float>(
+                            cotangent_data
+                                [static_cast<std::ptrdiff_t>(out_row) *
+                                     cotangent_s0 +
+                                 static_cast<std::ptrdiff_t>(co) * cotangent_s1]
+                        ) *
+                        static_cast<float>(weight_data[weight_offset(
+                            weights, shape, kernel, ci, co
+                        )]);
+                }
+            }
+            grad_row[ci] = T(acc);
+        }
+    }
+}
+
+template <typename T>
+void eval_weight_grad_typed(
+    SparseConvShape shape,
+    const std::vector<mx::array>& ready,
+    std::vector<mx::array>& task_outputs
+) {
+    const auto& feats = ready[0];
+    const auto& cotangent = ready[1];
+    const auto& in_rows = ready[2];
+    const auto& out_rows = ready[3];
+    const auto& kernel_ids = ready[4];
+    const auto& kernel_row_offsets = ready[7];
+    const auto& kernel_edge_ids = ready[8];
+
+    auto& grad = task_outputs[0];
+    fill_zero<T>(grad);
+    auto* grad_data = grad.data<T>();
+    const auto* feat_data = feats.data<T>();
+    const auto* cotangent_data = cotangent.data<T>();
+    const auto* in_data = in_rows.data<int32_t>();
+    const auto* out_data = out_rows.data<int32_t>();
+    const auto* offset_data = kernel_row_offsets.data<int32_t>();
+    const auto* edge_data = kernel_edge_ids.data<int32_t>();
+    const auto feat_s0 = feats.strides(0);
+    const auto feat_s1 = feats.strides(1);
+    const auto cotangent_s0 = cotangent.strides(0);
+    const auto cotangent_s1 = cotangent.strides(1);
+    const auto edge_total = edge_count(in_rows, ready[5]);
+
+    (void)kernel_ids;
+    for (int kernel = 0; kernel < shape.n_kernels; ++kernel) {
+        for (int ci = 0; ci < shape.in_channels; ++ci) {
+            for (int co = 0; co < shape.out_channels; ++co) {
+                auto acc = 0.0F;
+                for (int cursor = offset_data[kernel];
+                     cursor < offset_data[kernel + 1];
+                     ++cursor) {
+                    auto edge = edge_data[cursor];
+                    if (edge < 0 || edge >= edge_total) {
+                        continue;
+                    }
+                    auto in_row = in_data[edge];
+                    auto out_row = out_data[edge];
+                    if (in_row < 0 || out_row < 0 ||
+                        out_row >= shape.out_capacity) {
+                        continue;
+                    }
+                    auto feat_value = static_cast<float>(
+                        feat_data
+                            [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
+                             static_cast<std::ptrdiff_t>(ci) * feat_s1]
+                    );
+                    acc +=
+                        feat_value *
+                        static_cast<float>(
+                            cotangent_data
+                                [static_cast<std::ptrdiff_t>(out_row) *
+                                     cotangent_s0 +
+                                 static_cast<std::ptrdiff_t>(co) * cotangent_s1]
+                        );
+                }
+                grad_data[dense_weight_offset(shape, kernel, ci, co)] = T(acc);
+            }
+        }
+    }
+}
+
 } // namespace
 
 void eval(
@@ -87,61 +281,11 @@ void eval(
             const std::vector<mx::array>& ready,
             std::vector<mx::array>& task_outputs
         ) {
-            const auto& feats = ready[0];
-            const auto& weights = ready[1];
-            const auto& in_rows = ready[2];
-            const auto& out_rows = ready[3];
-            const auto& kernel_ids = ready[4];
-            const auto& row_offsets = ready[6];
-
-            auto& out = task_outputs[0];
-            auto* out_data = out.data<float>();
-            const auto* feat_data = feats.data<float>();
-            const auto* weight_data = weights.data<float>();
-            const auto* in_data = in_rows.data<int32_t>();
-            const auto* kernel_data = kernel_ids.data<int32_t>();
-            const auto* offset_data = row_offsets.data<int32_t>();
-            const auto feat_s0 = feats.strides(0);
-            const auto feat_s1 = feats.strides(1);
-            const auto edge_total = edge_count(in_rows, ready[5]);
-            const auto out_count =
-                std::min(ready[5].data<int32_t>()[1], shape.out_capacity);
-
-            (void)out_rows;
-            for (int out_row = 0; out_row < shape.out_capacity; ++out_row) {
-                auto* out_row_data =
-                    out_data +
-                    static_cast<std::ptrdiff_t>(out_row) * shape.out_channels;
-                std::fill(
-                    out_row_data, out_row_data + shape.out_channels, 0.0F
-                );
-                if (out_row >= out_count) {
-                    continue;
-                }
-                for (int edge = offset_data[out_row];
-                     edge < offset_data[out_row + 1];
-                     ++edge) {
-                    if (edge < 0 || edge >= edge_total) {
-                        continue;
-                    }
-                    auto in_row = in_data[edge];
-                    auto kernel = kernel_data[edge];
-                    if (in_row < 0 || kernel < 0) {
-                        continue;
-                    }
-                    for (int ci = 0; ci < shape.in_channels; ++ci) {
-                        auto value = feat_data
-                            [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
-                             static_cast<std::ptrdiff_t>(ci) * feat_s1];
-                        for (int co = 0; co < shape.out_channels; ++co) {
-                            out_row_data[co] +=
-                                value * weight_data[weight_offset(
-                                            weights, shape, kernel, ci, co
-                                        )];
-                        }
-                    }
-                }
+            if (ready[0].dtype() == mx::float32) {
+                eval_typed<float>(shape, ready, task_outputs);
+                return;
             }
+            eval_typed<mx::float16_t>(shape, ready, task_outputs);
         }
     );
 }
@@ -161,61 +305,11 @@ void eval_input_grad(
             const std::vector<mx::array>& ready,
             std::vector<mx::array>& task_outputs
         ) {
-            const auto& cotangent = ready[0];
-            const auto& weights = ready[1];
-            const auto& in_rows = ready[2];
-            const auto& out_rows = ready[3];
-            const auto& kernel_ids = ready[4];
-            const auto& in_row_offsets = ready[7];
-            const auto& in_edge_ids = ready[8];
-
-            auto& grad = task_outputs[0];
-            fill_zero(grad);
-            auto* grad_data = grad.data<float>();
-            const auto* cotangent_data = cotangent.data<float>();
-            const auto* weight_data = weights.data<float>();
-            const auto* out_data = out_rows.data<int32_t>();
-            const auto* kernel_data = kernel_ids.data<int32_t>();
-            const auto* offset_data = in_row_offsets.data<int32_t>();
-            const auto* edge_data = in_edge_ids.data<int32_t>();
-            const auto cotangent_s0 = cotangent.strides(0);
-            const auto cotangent_s1 = cotangent.strides(1);
-            const auto edge_total = edge_count(in_rows, ready[5]);
-
-            (void)in_rows;
-            for (int in_row = 0; in_row < shape.in_capacity; ++in_row) {
-                auto* grad_row =
-                    grad_data +
-                    static_cast<std::ptrdiff_t>(in_row) * shape.in_channels;
-                for (int ci = 0; ci < shape.in_channels; ++ci) {
-                    auto acc = 0.0F;
-                    for (int cursor = offset_data[in_row];
-                         cursor < offset_data[in_row + 1];
-                         ++cursor) {
-                        auto edge = edge_data[cursor];
-                        if (edge < 0 || edge >= edge_total) {
-                            continue;
-                        }
-                        auto out_row = out_data[edge];
-                        auto kernel = kernel_data[edge];
-                        if (out_row < 0 || kernel < 0 ||
-                            out_row >= shape.out_capacity) {
-                            continue;
-                        }
-                        for (int co = 0; co < shape.out_channels; ++co) {
-                            acc += cotangent_data
-                                       [static_cast<std::ptrdiff_t>(out_row) *
-                                            cotangent_s0 +
-                                        static_cast<std::ptrdiff_t>(co) *
-                                            cotangent_s1] *
-                                   weight_data[weight_offset(
-                                       weights, shape, kernel, ci, co
-                                   )];
-                        }
-                    }
-                    grad_row[ci] = acc;
-                }
+            if (ready[0].dtype() == mx::float32) {
+                eval_input_grad_typed<float>(shape, ready, task_outputs);
+                return;
             }
+            eval_input_grad_typed<mx::float16_t>(shape, ready, task_outputs);
         }
     );
 }
@@ -235,62 +329,11 @@ void eval_weight_grad(
             const std::vector<mx::array>& ready,
             std::vector<mx::array>& task_outputs
         ) {
-            const auto& feats = ready[0];
-            const auto& cotangent = ready[1];
-            const auto& in_rows = ready[2];
-            const auto& out_rows = ready[3];
-            const auto& kernel_ids = ready[4];
-            const auto& kernel_row_offsets = ready[7];
-            const auto& kernel_edge_ids = ready[8];
-
-            auto& grad = task_outputs[0];
-            fill_zero(grad);
-            auto* grad_data = grad.data<float>();
-            const auto* feat_data = feats.data<float>();
-            const auto* cotangent_data = cotangent.data<float>();
-            const auto* in_data = in_rows.data<int32_t>();
-            const auto* out_data = out_rows.data<int32_t>();
-            const auto* offset_data = kernel_row_offsets.data<int32_t>();
-            const auto* edge_data = kernel_edge_ids.data<int32_t>();
-            const auto feat_s0 = feats.strides(0);
-            const auto feat_s1 = feats.strides(1);
-            const auto cotangent_s0 = cotangent.strides(0);
-            const auto cotangent_s1 = cotangent.strides(1);
-            const auto edge_total = edge_count(in_rows, ready[5]);
-
-            (void)kernel_ids;
-            for (int kernel = 0; kernel < shape.n_kernels; ++kernel) {
-                for (int ci = 0; ci < shape.in_channels; ++ci) {
-                    for (int co = 0; co < shape.out_channels; ++co) {
-                        auto acc = 0.0F;
-                        for (int cursor = offset_data[kernel];
-                             cursor < offset_data[kernel + 1];
-                             ++cursor) {
-                            auto edge = edge_data[cursor];
-                            if (edge < 0 || edge >= edge_total) {
-                                continue;
-                            }
-                            auto in_row = in_data[edge];
-                            auto out_row = out_data[edge];
-                            if (in_row < 0 || out_row < 0 ||
-                                out_row >= shape.out_capacity) {
-                                continue;
-                            }
-                            auto feat_value = feat_data
-                                [static_cast<std::ptrdiff_t>(in_row) * feat_s0 +
-                                 static_cast<std::ptrdiff_t>(ci) * feat_s1];
-                            acc += feat_value *
-                                   cotangent_data
-                                       [static_cast<std::ptrdiff_t>(out_row) *
-                                            cotangent_s0 +
-                                        static_cast<std::ptrdiff_t>(co) *
-                                            cotangent_s1];
-                        }
-                        grad_data[dense_weight_offset(shape, kernel, ci, co)] =
-                            acc;
-                    }
-                }
+            if (ready[0].dtype() == mx::float32) {
+                eval_weight_grad_typed<float>(shape, ready, task_outputs);
+                return;
             }
+            eval_weight_grad_typed<mx::float16_t>(shape, ready, task_outputs);
         }
     );
 }

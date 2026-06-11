@@ -54,6 +54,27 @@ def test_conv3d_generic_matches_fused_native_reference() -> None:
     assert out.coord_manager.owns(out.coord_key)
 
 
+def test_conv3d_generic_supports_float16() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float16)
+    x = SparseTensor(coords, feats)
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float16).reshape(
+        1, 3, 1, 1, 1
+    )
+
+    out = conv3d(x, weight, kernel_size=(3, 1, 1))
+    mx.eval(out.feats)
+
+    assert out.feats.dtype == mx.float16
+    assert_nested_close(
+        active_feats(out).astype(mx.float32).tolist(),
+        [[8.0], [14.0], [8.0]],
+    )
+
+
 def test_conv3d_target_coordinates_match_sparse_reference() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
@@ -724,6 +745,28 @@ def test_metal_convolution_respects_active_rows_capacity_contract() -> None:
         [[3.0], [3.0]],
         [2],
     )
+
+
+def test_metal_convolution_supports_float16() -> None:
+    skip_without_metal()
+
+    def run() -> list[list[float]]:
+        coords = mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        )
+        feats = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float16)
+        x = SparseTensor(coords, feats)
+        weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float16).reshape(
+            1, 3, 1, 1, 1
+        )
+
+        out = conv3d(x, weight, kernel_size=(3, 1, 1))
+        mx.eval(out.feats)
+        assert out.feats.dtype == mx.float16
+        return active_feats(out).astype(mx.float32).tolist()
+
+    assert_nested_close(run_with_gpu_default(run), [[8.0], [14.0], [8.0]])
 
 
 def test_metal_convolution_rejects_unsupported_coord_dtype() -> None:

@@ -48,6 +48,13 @@ struct SparseConvShape {
     int kernel_z;
 };
 
+struct SparseConvPlan {
+    mx::array in_row_offsets;
+    mx::array in_edge_ids;
+    mx::array kernel_row_offsets;
+    mx::array kernel_edge_ids;
+};
+
 struct SparsePoolShape {
     int in_capacity;
     int out_capacity;

@@ -30,6 +30,8 @@ mx::array make_float_temp(std::size_t elements) {
     );
 }
 
+bool is_float16(const mx::array& array) { return array.dtype() == mx::float16; }
+
 int partition_count(SparseConvShape shape) {
     auto partitions =
         (shape.in_capacity + kPartitionEdges - 1) / kPartitionEdges;
@@ -76,7 +78,10 @@ void encode(
     encoder.add_temporary(partials);
 
     auto contract = device.get_kernel(
-        "sparse_relation_conv_weight_grad_tensor_ops_f32_i32", library
+        is_float16(inputs[0])
+            ? "sparse_relation_conv_weight_grad_tensor_ops_f16_i32"
+            : "sparse_relation_conv_weight_grad_tensor_ops_f32_i32",
+        library
     );
     encoder.set_compute_pipeline_state(contract);
     encoder.set_input_array(inputs[0], 0);
@@ -106,7 +111,10 @@ void encode(
     );
 
     auto reduce = device.get_kernel(
-        "sparse_relation_conv_weight_grad_tensor_ops_reduce_f32", library
+        is_float16(inputs[0])
+            ? "sparse_relation_conv_weight_grad_tensor_ops_reduce_f16"
+            : "sparse_relation_conv_weight_grad_tensor_ops_reduce_f32",
+        library
     );
     encoder.set_compute_pipeline_state(reduce);
     encoder.set_input_array(partials, 0);

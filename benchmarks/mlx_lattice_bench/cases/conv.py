@@ -37,6 +37,7 @@ type ConvGradTarget = Literal['features', 'weight', 'both']
 @dataclass(frozen=True, slots=True)
 class ConvFixture:
     arrays: SparseArrays
+    dtype: mx.Dtype
     target_subset_coords: mx.array
     target_superset_coords: mx.array
     pointwise_weight: mx.array
@@ -60,9 +61,11 @@ def cases(
     preset: str,
     *,
     n_values: tuple[int, ...] | None = None,
+    dtype: str = 'float32',
 ) -> tuple[BenchmarkCase, ...]:
     params = tuple(
-        dict(item) for item in param_grid(preset, n_values=n_values)
+        {**dict(item), 'dtype': dtype}
+        for item in param_grid(preset, n_values=n_values)
     )
     specs = (
         ('conv3d_pointwise', 'pointwise'),
@@ -125,23 +128,33 @@ def _backward_case(
 
 def _setup(params: Mapping[str, Any]) -> ConvFixture:
     channels = int(params['channels'])
+    dtype = _dtype(params)
     arrays = sparse_arrays(
         rows=benchmark_n(params),
         channels=channels,
         batches=int(params['batches']),
+        dtype=dtype,
     )
     superset = sparse_arrays(
         rows=benchmark_n(params) + max(1, benchmark_n(params) // 4),
         channels=channels,
         batches=int(params['batches']),
+        dtype=dtype,
     )
     return ConvFixture(
         arrays=arrays,
+        dtype=dtype,
         target_subset_coords=arrays.coords[::2],
         target_superset_coords=superset.coords,
-        pointwise_weight=dense_weight((channels, 1, 1, 1, channels)),
-        kernel3_weight=dense_weight((channels, 3, 3, 3, channels)),
-        kernel2_weight=dense_weight((channels, 2, 2, 2, channels)),
+        pointwise_weight=dense_weight(
+            (channels, 1, 1, 1, channels), dtype=dtype
+        ),
+        kernel3_weight=dense_weight(
+            (channels, 3, 3, 3, channels), dtype=dtype
+        ),
+        kernel2_weight=dense_weight(
+            (channels, 2, 2, 2, channels), dtype=dtype
+        ),
     )
 
 
@@ -282,7 +295,7 @@ def _compiled_inputs(
     weight: mx.array,
     fixture: ConvFixture | None = None,
 ) -> ConvInputs:
-    empty = mx.array([], dtype=mx.float32)
+    empty = mx.array([], dtype=x.dtype)
     target_same = _target_tensor(x, x.coords)
     target_subset = (
         target_same
@@ -337,3 +350,12 @@ def _target_tensor(x: SparseTensor, coords: mx.array) -> SparseTensor:
         mx.zeros((coords.shape[0], x.channels), dtype=x.dtype),
         coord_manager=x.coord_manager,
     )
+
+
+def _dtype(params: Mapping[str, Any]) -> mx.Dtype:
+    name = str(params.get('dtype', 'float32'))
+    if name == 'float32':
+        return mx.float32
+    if name == 'float16':
+        return mx.float16
+    raise ValueError("dtype must be 'float32' or 'float16'.")

@@ -12,6 +12,7 @@ mx::array make_sparse_conv_features(
     const mx::array& kernel_ids,
     const mx::array& counts,
     const mx::array& row_offsets,
+    const SparseConvPlan& plan,
     int out_capacity,
     int n_kernels
 );

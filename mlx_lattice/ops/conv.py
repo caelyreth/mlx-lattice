@@ -170,6 +170,10 @@ def _relation_conv(
         relation.edges.kernel_ids,
         relation.counts,
         relation.row_offsets,
+        relation.in_row_offsets,
+        relation.in_edge_ids,
+        relation.kernel_row_offsets,
+        relation.kernel_edge_ids,
         relation.n_out_capacity,
         relation.n_kernels,
     )
@@ -286,8 +290,12 @@ def _target_weight(weight: mx.array, spec: KernelSpec) -> mx.array:
 
 
 def _validate_feature_dtype(feats: mx.array, weight: mx.array) -> None:
-    if feats.dtype != mx.float32 or weight.dtype != mx.float32:
-        raise ValueError('convolution currently supports float32 tensors.')
+    if feats.dtype not in (mx.float32, mx.float16):
+        raise ValueError(
+            'convolution supports float32 and float16 tensors.'
+        )
+    if weight.dtype != feats.dtype:
+        raise ValueError('convolution weights must match feature dtype.')
 
 
 def _validate_metal_coord_dtype(x: SparseTensor) -> None:

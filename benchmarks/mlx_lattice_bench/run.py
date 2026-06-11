@@ -34,13 +34,16 @@ def main() -> None:
     groups = tuple(args.group) if args.group else GROUPS
     modes = tuple(args.mode) if args.mode else ('cold_op', 'hot_op')
     n_values = tuple(args.n_values) if args.n_values else None
+    dtype = _dtype_name(args.dtype)
 
     runtime = _load_runtime(
         show_build_log=args.show_build_log,
         preload_native=not args.list,
     )
     console = make_console(args.color, quiet=args.quiet)
-    cases = runtime.all_cases(args.preset, groups=groups, n_values=n_values)
+    cases = runtime.all_cases(
+        args.preset, groups=groups, n_values=n_values, dtype=dtype
+    )
 
     if args.list:
         for case in cases:
@@ -116,6 +119,12 @@ def _parser() -> argparse.ArgumentParser:
         action='append',
         type=_positive_int,
         help='planned input size N; repeat to sweep multiple values',
+    )
+    parser.add_argument(
+        '--dtype',
+        choices=('float32', 'float16'),
+        default='float32',
+        help='feature/weight dtype for dtype-aware cases',
     )
     parser.add_argument(
         '--output',
@@ -259,6 +268,12 @@ def _positive_int(value: str) -> int:
     if parsed <= 0:
         raise argparse.ArgumentTypeError('must be a positive integer')
     return parsed
+
+
+def _dtype_name(value: str) -> str:
+    if value not in ('float32', 'float16'):
+        raise argparse.ArgumentTypeError('must be float32 or float16')
+    return value
 
 
 class _CapturedOutput(AbstractContextManager['_CapturedOutput']):

@@ -5,6 +5,7 @@
 
 #include "backends/array_utils.h"
 #include "backends/metal/runtime_utils.h"
+#include "backends/metal/tensor_ops/conv/forward/runtime.h"
 #include "backends/metal/tensor_ops/conv/weight_grad/runtime.h"
 
 #ifdef _METAL_
@@ -77,6 +78,13 @@ void clear_output(
     dispatch_1d(encoder, clear, static_cast<size_t>(total));
 }
 
+bool is_float16(const mx::array& array) { return array.dtype() == mx::float16; }
+
+const char*
+typed_kernel_name(const char* fp32_kernel, const char* fp16_kernel, bool fp16) {
+    return fp16 ? fp16_kernel : fp32_kernel;
+}
+
 void encode_weight_grad_classic(
     SparseConvShape shape,
     const mx::Stream& stream,
@@ -88,11 +96,14 @@ void encode_weight_grad_classic(
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
 
-    auto use_block4 = shape.in_channels % 4 == 0 &&
+    auto fp16 = is_float16(inputs[0]);
+    auto use_block4 = !fp16 && shape.in_channels % 4 == 0 &&
                       shape.out_channels % 4 == 0 && shape.n_kernels >= 16 &&
                       shape.in_capacity >= 50000;
-    auto use_cout16 = shape.out_channels == 16 && shape.n_kernels >= 16;
-    auto use_gather = shape.n_kernels >= 16;
+    auto edge_count = static_cast<int>(inputs[2].shape(0));
+    auto use_cout16 = shape.out_channels == 16 && shape.n_kernels != 1 &&
+                      (shape.n_kernels >= 16 || edge_count >= 50000);
+    auto use_gather = fp16 || shape.n_kernels >= 16;
     if (!use_gather && !use_block4 && !use_cout16) {
         clear_output(encoder, device, library, out);
     }
@@ -100,10 +111,16 @@ void encode_weight_grad_classic(
         use_block4
             ? "sparse_relation_conv_weight_grad_block4_f32_i32"
             : (use_cout16
-                   ? "sparse_relation_conv_weight_grad_cout16_f32_i32"
-                   : (use_gather
-                          ? "sparse_relation_conv_weight_grad_f32_i32"
-                          : "sparse_relation_conv_weight_grad_atomic_f32_i32")),
+                   ? typed_kernel_name(
+                         "sparse_relation_conv_weight_grad_cout16_f32_i32",
+                         "sparse_relation_conv_weight_grad_cout16_f16_i32",
+                         fp16
+                     )
+                   : (fp16 ? "sparse_relation_conv_weight_grad_f16_i32"
+                           : (use_gather
+                                  ? "sparse_relation_conv_weight_grad_f32_i32"
+                                  : "sparse_relation_conv_weight_grad_atomic_"
+                                    "f32_i32"))),
         library
     );
     encoder.set_compute_pipeline_state(kernel);
@@ -111,7 +128,7 @@ void encode_weight_grad_classic(
         encoder.set_input_array(inputs[index], index);
     }
     encoder.set_output_array(out, 9);
-    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 10);
+    encoder.set_bytes(edge_count, 10);
     encoder.set_bytes(shape.out_capacity, 11);
     encoder.set_bytes(shape.n_kernels, 12);
     encoder.set_bytes(shape.in_channels, 13);
@@ -161,27 +178,39 @@ void eval(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
+    if (tensor_ops::conv::forward::is_preferred(shape, stream)) {
+        tensor_ops::conv::forward::encode(shape, stream, inputs, out);
+        return;
+    }
     auto& device = mx::metal::device(stream.device);
     auto library =
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
 
+    auto fp16 = is_float16(inputs[0]);
     auto use_cout16 = shape.out_channels == 16 &&
                       ((shape.n_kernels >= 16 && shape.out_capacity >= 4096) ||
                        shape.out_capacity >= 50000);
-    auto use_vec4 = shape.out_channels % 4 == 0;
-    auto use_gather = use_vec4 || shape.n_kernels == 1;
+    auto use_vec4 = !fp16 && shape.out_channels % 4 == 0;
+    auto use_gather = fp16 || use_vec4 || shape.n_kernels == 1;
     if (!use_gather) {
         clear_output(encoder, device, library, out);
     }
-    auto kernel = device.get_kernel(
-        use_cout16
-            ? "sparse_relation_conv_f32_i32_cout16"
-            : (use_vec4 ? "sparse_relation_conv_f32_i32_vec4"
-                        : (use_gather ? "sparse_relation_conv_f32_i32"
-                                      : "sparse_relation_conv_atomic_f32_i32")),
-        library
-    );
+    const char* kernel_name = "sparse_relation_conv_atomic_f32_i32";
+    if (use_cout16) {
+        kernel_name = typed_kernel_name(
+            "sparse_relation_conv_f32_i32_cout16",
+            "sparse_relation_conv_f16_i32_cout16",
+            fp16
+        );
+    } else if (use_vec4) {
+        kernel_name = "sparse_relation_conv_f32_i32_vec4";
+    } else if (fp16) {
+        kernel_name = "sparse_relation_conv_f16_i32";
+    } else if (use_gather) {
+        kernel_name = "sparse_relation_conv_f32_i32";
+    }
+    auto kernel = device.get_kernel(kernel_name, library);
     encoder.set_compute_pipeline_state(kernel);
     for (int index = 0; index < 7; ++index) {
         encoder.set_input_array(inputs[index], index);
@@ -226,12 +255,19 @@ void eval_input_grad(
         device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
     auto& encoder = mx::metal::get_command_encoder(stream);
 
+    auto fp16 = is_float16(inputs[0]);
     auto use_cin16 = shape.in_channels == 16 && shape.in_capacity >= 4096;
-    auto use_vec4 = shape.in_channels % 4 == 0;
+    auto use_vec4 = !fp16 && shape.in_channels % 4 == 0;
     auto kernel = device.get_kernel(
-        use_cin16 ? "sparse_relation_conv_input_grad_f32_i32_cin16"
-                  : (use_vec4 ? "sparse_relation_conv_input_grad_f32_i32_vec4"
-                              : "sparse_relation_conv_input_grad_f32_i32"),
+        use_cin16
+            ? typed_kernel_name(
+                  "sparse_relation_conv_input_grad_f32_i32_cin16",
+                  "sparse_relation_conv_input_grad_f16_i32_cin16",
+                  fp16
+              )
+            : (use_vec4 ? "sparse_relation_conv_input_grad_f32_i32_vec4"
+                        : (fp16 ? "sparse_relation_conv_input_grad_f16_i32"
+                                : "sparse_relation_conv_input_grad_f32_i32")),
         library
     );
     encoder.set_compute_pipeline_state(kernel);

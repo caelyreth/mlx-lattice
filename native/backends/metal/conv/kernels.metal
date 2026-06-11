@@ -588,6 +588,390 @@ using namespace metal;
     (void)row_offsets;
 }
 
+[[kernel]] void sparse_relation_conv_f16_i32(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int total = out_capacity * out_channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int out_row = int(elem) / out_channels;
+    int co = int(elem) - out_row * out_channels;
+    int out_count = min(counts[1], out_capacity);
+    if (out_row >= out_count) {
+        out[elem] = half(0.0h);
+        return;
+    }
+
+    int edge_count = min(counts[0], edge_capacity);
+    float acc = 0.0f;
+    for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
+         ++edge) {
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        int in_row = in_rows[edge];
+        int kernel_id = kernel_ids[edge];
+        if (in_row < 0 || kernel_id < 0) {
+            continue;
+        }
+        for (int ci = 0; ci < in_channels; ++ci) {
+            acc += float(feats[in_row * feat_s0 + ci * feat_s1]) *
+                   float(weights[sparse_conv_weight_offset(
+                       kernel_id,
+                       ci,
+                       co,
+                       weight_layout,
+                       kernel_x,
+                       kernel_y,
+                       kernel_z,
+                       weight_s0,
+                       weight_s1,
+                       weight_s2,
+                       weight_s3,
+                       weight_s4
+                   )]);
+        }
+    }
+    out[elem] = half(acc);
+    (void)out_rows;
+}
+
+[[kernel]] void sparse_relation_conv_f16_i32_cout16(
+    device const half* feats [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device half* out [[buffer(7)]],
+    constant const int& edge_capacity [[buffer(8)]],
+    constant const int& out_capacity [[buffer(9)]],
+    constant const int& in_channels [[buffer(10)]],
+    constant const int& out_channels [[buffer(11)]],
+    constant const int& feat_s0 [[buffer(12)]],
+    constant const int& feat_s1 [[buffer(13)]],
+    constant const int& weight_s0 [[buffer(14)]],
+    constant const int& weight_s1 [[buffer(15)]],
+    constant const int& weight_s2 [[buffer(16)]],
+    constant const int& weight_s3 [[buffer(17)]],
+    constant const int& weight_s4 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint out_row_id [[thread_position_in_grid]]
+) {
+    if (out_row_id >= uint(out_capacity)) {
+        return;
+    }
+
+    int out_row = int(out_row_id);
+    int out_base = out_row * 16;
+    int out_count = min(counts[1], out_capacity);
+    if (out_row >= out_count) {
+        for (int co = 0; co < 16; ++co) {
+            out[out_base + co] = half(0.0h);
+        }
+        return;
+    }
+
+    int edge_count = min(counts[0], edge_capacity);
+    float4 acc0 = float4(0.0f);
+    float4 acc1 = float4(0.0f);
+    float4 acc2 = float4(0.0f);
+    float4 acc3 = float4(0.0f);
+    for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
+         ++edge) {
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        int in_row = in_rows[edge];
+        int kernel_id = kernel_ids[edge];
+        if (in_row < 0 || kernel_id < 0) {
+            continue;
+        }
+        for (int ci = 0; ci < in_channels; ++ci) {
+            float value = float(feats[in_row * feat_s0 + ci * feat_s1]);
+            acc0 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    0,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    1,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    2,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    3,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+            acc1 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    4,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    5,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    6,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    7,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+            acc2 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    8,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    9,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    10,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    11,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+            acc3 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    12,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    13,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    14,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    ci,
+                                    15,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+        }
+    }
+    out[out_base] = half(acc0.x);
+    out[out_base + 1] = half(acc0.y);
+    out[out_base + 2] = half(acc0.z);
+    out[out_base + 3] = half(acc0.w);
+    out[out_base + 4] = half(acc1.x);
+    out[out_base + 5] = half(acc1.y);
+    out[out_base + 6] = half(acc1.z);
+    out[out_base + 7] = half(acc1.w);
+    out[out_base + 8] = half(acc2.x);
+    out[out_base + 9] = half(acc2.y);
+    out[out_base + 10] = half(acc2.z);
+    out[out_base + 11] = half(acc2.w);
+    out[out_base + 12] = half(acc3.x);
+    out[out_base + 13] = half(acc3.y);
+    out[out_base + 14] = half(acc3.z);
+    out[out_base + 15] = half(acc3.w);
+    (void)out_rows;
+    (void)out_channels;
+}
+
 [[kernel]] void sparse_relation_conv_input_grad_f32_i32(
     device const float* cotangent [[buffer(0)]],
     device const float* weights [[buffer(1)]],
@@ -1092,6 +1476,390 @@ using namespace metal;
     (void)in_channels;
 }
 
+[[kernel]] void sparse_relation_conv_input_grad_f16_i32(
+    device const half* cotangent [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int total = in_capacity * in_channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int in_row = int(elem) / in_channels;
+    int ci = int(elem) - in_row * in_channels;
+    int edge_count = min(counts[0], edge_capacity);
+    float acc = 0.0f;
+    for (int cursor = in_row_offsets[in_row];
+         cursor < in_row_offsets[in_row + 1];
+         ++cursor) {
+        int edge = in_edge_ids[cursor];
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        int out_row = out_rows[edge];
+        int kernel_id = kernel_ids[edge];
+        if (out_row < 0 || out_row >= out_capacity || kernel_id < 0) {
+            continue;
+        }
+        for (int co = 0; co < out_channels; ++co) {
+            acc +=
+                float(cotangent[out_row * cotangent_s0 + co * cotangent_s1]) *
+                float(weights[sparse_conv_weight_offset(
+                    kernel_id,
+                    ci,
+                    co,
+                    weight_layout,
+                    kernel_x,
+                    kernel_y,
+                    kernel_z,
+                    weight_s0,
+                    weight_s1,
+                    weight_s2,
+                    weight_s3,
+                    weight_s4
+                )]);
+        }
+    }
+    grad[in_row * in_channels + ci] = half(acc);
+    (void)in_rows;
+    (void)row_offsets;
+}
+
+[[kernel]] void sparse_relation_conv_input_grad_f16_i32_cin16(
+    device const half* cotangent [[buffer(0)]],
+    device const half* weights [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* in_row_offsets [[buffer(7)]],
+    device const int* in_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_capacity [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& cotangent_s0 [[buffer(15)]],
+    constant const int& cotangent_s1 [[buffer(16)]],
+    constant const int& weight_s0 [[buffer(17)]],
+    constant const int& weight_s1 [[buffer(18)]],
+    constant const int& weight_s2 [[buffer(19)]],
+    constant const int& weight_s3 [[buffer(20)]],
+    constant const int& weight_s4 [[buffer(21)]],
+    constant const int& weight_layout [[buffer(22)]],
+    constant const int& kernel_x [[buffer(23)]],
+    constant const int& kernel_y [[buffer(24)]],
+    constant const int& kernel_z [[buffer(25)]],
+    uint in_row_id [[thread_position_in_grid]]
+) {
+    if (in_row_id >= uint(in_capacity)) {
+        return;
+    }
+
+    int in_row = int(in_row_id);
+    int edge_count = min(counts[0], edge_capacity);
+    float4 acc0 = float4(0.0f);
+    float4 acc1 = float4(0.0f);
+    float4 acc2 = float4(0.0f);
+    float4 acc3 = float4(0.0f);
+    for (int cursor = in_row_offsets[in_row];
+         cursor < in_row_offsets[in_row + 1];
+         ++cursor) {
+        int edge = in_edge_ids[cursor];
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        int out_row = out_rows[edge];
+        int kernel_id = kernel_ids[edge];
+        if (out_row < 0 || out_row >= out_capacity || kernel_id < 0) {
+            continue;
+        }
+        for (int co = 0; co < out_channels; ++co) {
+            float value =
+                float(cotangent[out_row * cotangent_s0 + co * cotangent_s1]);
+            acc0 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    0,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    1,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    2,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    3,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+            acc1 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    4,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    5,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    6,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    7,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+            acc2 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    8,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    9,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    10,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    11,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+            acc3 += value * float4(
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    12,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    13,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    14,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )]),
+                                float(weights[sparse_conv_weight_offset(
+                                    kernel_id,
+                                    15,
+                                    co,
+                                    weight_layout,
+                                    kernel_x,
+                                    kernel_y,
+                                    kernel_z,
+                                    weight_s0,
+                                    weight_s1,
+                                    weight_s2,
+                                    weight_s3,
+                                    weight_s4
+                                )])
+                            );
+        }
+    }
+    int grad_base = in_row * 16;
+    grad[grad_base] = half(acc0.x);
+    grad[grad_base + 1] = half(acc0.y);
+    grad[grad_base + 2] = half(acc0.z);
+    grad[grad_base + 3] = half(acc0.w);
+    grad[grad_base + 4] = half(acc1.x);
+    grad[grad_base + 5] = half(acc1.y);
+    grad[grad_base + 6] = half(acc1.z);
+    grad[grad_base + 7] = half(acc1.w);
+    grad[grad_base + 8] = half(acc2.x);
+    grad[grad_base + 9] = half(acc2.y);
+    grad[grad_base + 10] = half(acc2.z);
+    grad[grad_base + 11] = half(acc2.w);
+    grad[grad_base + 12] = half(acc3.x);
+    grad[grad_base + 13] = half(acc3.y);
+    grad[grad_base + 14] = half(acc3.z);
+    grad[grad_base + 15] = half(acc3.w);
+    (void)in_rows;
+    (void)row_offsets;
+    (void)in_channels;
+}
+
 [[kernel]] void sparse_relation_conv_weight_grad_f32_i32(
     device const float* feats [[buffer(0)]],
     device const float* cotangent [[buffer(1)]],
@@ -1410,6 +2178,138 @@ using namespace metal;
     (void)row_offsets;
 }
 
+[[kernel]] void sparse_relation_conv_weight_grad_cout16_f16_i32(
+    device const half* feats [[buffer(0)]],
+    device const half* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint pair_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup float partial[4096];
+    int total_pairs = n_kernels * in_channels;
+    if (pair_id >= uint(total_pairs) || tid >= 256) {
+        return;
+    }
+
+    int kernel_id = int(pair_id) / in_channels;
+    int ci = int(pair_id) - kernel_id * in_channels;
+    int edge_count = min(counts[0], edge_capacity);
+    int start = kernel_row_offsets[kernel_id];
+    int stop = kernel_row_offsets[kernel_id + 1];
+    float4 acc0 = float4(0.0f);
+    float4 acc1 = float4(0.0f);
+    float4 acc2 = float4(0.0f);
+    float4 acc3 = float4(0.0f);
+    for (int cursor = start + int(tid); cursor < stop; cursor += 256) {
+        int edge = kernel_edge_ids[cursor];
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        int in_row = in_rows[edge];
+        int out_row = out_rows[edge];
+        if (in_row < 0 || out_row < 0 || out_row >= out_capacity) {
+            continue;
+        }
+        float value = float(feats[in_row * feat_s0 + ci * feat_s1]);
+        int cotangent_base = out_row * cotangent_s0;
+        acc0 += value * float4(
+                            float(cotangent[cotangent_base]),
+                            float(cotangent[cotangent_base + cotangent_s1]),
+                            float(cotangent[cotangent_base + cotangent_s1 * 2]),
+                            float(cotangent[cotangent_base + cotangent_s1 * 3])
+                        );
+        acc1 += value * float4(
+                            float(cotangent[cotangent_base + cotangent_s1 * 4]),
+                            float(cotangent[cotangent_base + cotangent_s1 * 5]),
+                            float(cotangent[cotangent_base + cotangent_s1 * 6]),
+                            float(cotangent[cotangent_base + cotangent_s1 * 7])
+                        );
+        acc2 +=
+            value * float4(
+                        float(cotangent[cotangent_base + cotangent_s1 * 8]),
+                        float(cotangent[cotangent_base + cotangent_s1 * 9]),
+                        float(cotangent[cotangent_base + cotangent_s1 * 10]),
+                        float(cotangent[cotangent_base + cotangent_s1 * 11])
+                    );
+        acc3 +=
+            value * float4(
+                        float(cotangent[cotangent_base + cotangent_s1 * 12]),
+                        float(cotangent[cotangent_base + cotangent_s1 * 13]),
+                        float(cotangent[cotangent_base + cotangent_s1 * 14]),
+                        float(cotangent[cotangent_base + cotangent_s1 * 15])
+                    );
+    }
+
+    int base = int(tid) * 16;
+    partial[base] = acc0.x;
+    partial[base + 1] = acc0.y;
+    partial[base + 2] = acc0.z;
+    partial[base + 3] = acc0.w;
+    partial[base + 4] = acc1.x;
+    partial[base + 5] = acc1.y;
+    partial[base + 6] = acc1.z;
+    partial[base + 7] = acc1.w;
+    partial[base + 8] = acc2.x;
+    partial[base + 9] = acc2.y;
+    partial[base + 10] = acc2.z;
+    partial[base + 11] = acc2.w;
+    partial[base + 12] = acc3.x;
+    partial[base + 13] = acc3.y;
+    partial[base + 14] = acc3.z;
+    partial[base + 15] = acc3.w;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    for (uint stride = 128; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            int lhs = int(tid) * 16;
+            int rhs = int(tid + stride) * 16;
+            for (int co = 0; co < 16; ++co) {
+                partial[lhs + co] += partial[rhs + co];
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+
+    if (tid == 0) {
+        for (int co = 0; co < 16; ++co) {
+            grad[sparse_conv_dense_weight_offset(
+                kernel_id,
+                ci,
+                co,
+                weight_layout,
+                kernel_x,
+                kernel_y,
+                kernel_z,
+                in_channels,
+                out_channels
+            )] = half(partial[co]);
+        }
+    }
+    (void)kernel_ids;
+    (void)row_offsets;
+    (void)out_channels;
+}
+
 [[kernel]] void sparse_relation_conv_weight_grad_atomic_f32_i32(
     device const float* feats [[buffer(0)]],
     device const float* cotangent [[buffer(1)]],
@@ -1474,4 +2374,72 @@ using namespace metal;
     (void)kernel_row_offsets;
     (void)kernel_edge_ids;
     (void)n_kernels;
+}
+
+[[kernel]] void sparse_relation_conv_weight_grad_f16_i32(
+    device const half* feats [[buffer(0)]],
+    device const half* cotangent [[buffer(1)]],
+    device const int* in_rows [[buffer(2)]],
+    device const int* out_rows [[buffer(3)]],
+    device const int* kernel_ids [[buffer(4)]],
+    device const int* counts [[buffer(5)]],
+    device const int* row_offsets [[buffer(6)]],
+    device const int* kernel_row_offsets [[buffer(7)]],
+    device const int* kernel_edge_ids [[buffer(8)]],
+    device half* grad [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& n_kernels [[buffer(12)]],
+    constant const int& in_channels [[buffer(13)]],
+    constant const int& out_channels [[buffer(14)]],
+    constant const int& feat_s0 [[buffer(15)]],
+    constant const int& feat_s1 [[buffer(16)]],
+    constant const int& cotangent_s0 [[buffer(17)]],
+    constant const int& cotangent_s1 [[buffer(18)]],
+    constant const int& weight_layout [[buffer(19)]],
+    constant const int& kernel_x [[buffer(20)]],
+    constant const int& kernel_y [[buffer(21)]],
+    constant const int& kernel_z [[buffer(22)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int edge_count = min(counts[0], edge_capacity);
+    int total = n_kernels * in_channels * out_channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int channel = int(elem) % (in_channels * out_channels);
+    int kernel_id = int(elem) / (in_channels * out_channels);
+    int ci = channel / out_channels;
+    int co = channel - ci * out_channels;
+
+    float acc = 0.0f;
+    for (int cursor = kernel_row_offsets[kernel_id];
+         cursor < kernel_row_offsets[kernel_id + 1];
+         ++cursor) {
+        int edge = kernel_edge_ids[cursor];
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        int in_row = in_rows[edge];
+        int out_row = out_rows[edge];
+        if (in_row < 0 || out_row < 0 || out_row >= out_capacity) {
+            continue;
+        }
+        acc += float(feats[in_row * feat_s0 + ci * feat_s1]) *
+               float(cotangent[out_row * cotangent_s0 + co * cotangent_s1]);
+    }
+    grad[sparse_conv_dense_weight_offset(
+        kernel_id,
+        ci,
+        co,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z,
+        in_channels,
+        out_channels
+    )] = half(acc);
+    (void)kernel_ids;
+    (void)row_offsets;
 }

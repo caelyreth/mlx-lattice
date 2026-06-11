@@ -34,6 +34,7 @@ def sparse_arrays(
     rows: int,
     channels: int,
     batches: int = 1,
+    dtype: mx.Dtype = mx.float32,
 ) -> SparseArrays:
     batch_counts = _batch_counts(rows, batches)
     coords = []
@@ -46,7 +47,7 @@ def sparse_arrays(
             row += 1
     return SparseArrays(
         coords=mx.array(coords, dtype=mx.int32),
-        feats=mx.array(feats, dtype=mx.float32),
+        feats=mx.array(feats, dtype=dtype),
         batch_counts=batch_counts,
     )
 
@@ -84,12 +85,14 @@ def point_arrays(
     )
 
 
-def dense_weight(shape: Sequence[int]) -> mx.array:
+def dense_weight(
+    shape: Sequence[int], *, dtype: mx.Dtype = mx.float32
+) -> mx.array:
     total = 1
     for dim in shape:
         total *= int(dim)
     values = [((index % 23) - 11) / 23.0 for index in range(total)]
-    return mx.array(values, dtype=mx.float32).reshape(tuple(shape))
+    return mx.array(values, dtype=dtype).reshape(tuple(shape))
 
 
 def dense_bias(channels: int) -> mx.array:
