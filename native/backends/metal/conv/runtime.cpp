@@ -118,14 +118,14 @@ const char* dense_forward_kernel_name(SparseConvShape shape, bool fp16) {
     }
     if (shape.out_channels == 32) {
         return typed_kernel_name(
-            "sparse_relation_conv_f32_i32_cout4_dense_c32",
-            "sparse_relation_conv_f16_i32_cout4_dense_c32",
+            "sparse_relation_conv_f32_i32_cout16_dense_c32",
+            "sparse_relation_conv_f16_i32_cout16_dense_c32",
             fp16
         );
     }
     return typed_kernel_name(
-        "sparse_relation_conv_f32_i32_cout4_dense_c64",
-        "sparse_relation_conv_f16_i32_cout4_dense_c64",
+        "sparse_relation_conv_f32_i32_cout16_dense_c64",
+        "sparse_relation_conv_f16_i32_cout16_dense_c64",
         fp16
     );
 }
@@ -327,7 +327,7 @@ void eval(
     auto work_items =
         use_dense_c && shape.out_channels > 16
             ? static_cast<size_t>(shape.out_capacity) *
-                  static_cast<size_t>(shape.out_channels / 4)
+                  static_cast<size_t>(shape.out_channels / 16)
         : use_cout16 || (use_dense_c && shape.out_channels == 16)
             ? static_cast<size_t>(shape.out_capacity)
         : use_vec4 ? static_cast<size_t>(shape.out_capacity) *

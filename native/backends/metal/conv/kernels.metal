@@ -223,6 +223,96 @@ using namespace metal;
         LATTICE_CONV_UNUSED_DENSE_FORWARD_ARGS();                              \
     }
 
+#define LATTICE_DEFINE_DENSE_COUT16_FORWARD(                                   \
+    NAME, CHANNELS, TYPE, LOAD_WEIGHT4, STORE4                                 \
+)                                                                              \
+    [[kernel]] void NAME(                                                      \
+        device const TYPE* feats [[buffer(0)]],                                \
+        device const TYPE* weights [[buffer(1)]],                              \
+        device const int* in_rows [[buffer(2)]],                               \
+        device const int* out_rows [[buffer(3)]],                              \
+        device const int* kernel_ids [[buffer(4)]],                            \
+        device const int* counts [[buffer(5)]],                                \
+        device const int* row_offsets [[buffer(6)]],                           \
+        device TYPE* out [[buffer(7)]],                                        \
+        constant const int& edge_capacity [[buffer(8)]],                       \
+        constant const int& out_capacity [[buffer(9)]],                        \
+        constant const int& in_channels [[buffer(10)]],                        \
+        constant const int& out_channels [[buffer(11)]],                       \
+        constant const int& feat_s0 [[buffer(12)]],                            \
+        constant const int& feat_s1 [[buffer(13)]],                            \
+        constant const int& weight_s0 [[buffer(14)]],                          \
+        constant const int& weight_s1 [[buffer(15)]],                          \
+        constant const int& weight_s2 [[buffer(16)]],                          \
+        constant const int& weight_s3 [[buffer(17)]],                          \
+        constant const int& weight_s4 [[buffer(18)]],                          \
+        constant const int& weight_layout [[buffer(19)]],                      \
+        constant const int& kernel_x [[buffer(20)]],                           \
+        constant const int& kernel_y [[buffer(21)]],                           \
+        constant const int& kernel_z [[buffer(22)]],                           \
+        uint elem [[thread_position_in_grid]]                                  \
+    ) {                                                                        \
+        const int blocks = CHANNELS / 16;                                      \
+        const int total = out_capacity * blocks;                               \
+        if (elem >= uint(total)) {                                             \
+            return;                                                            \
+        }                                                                      \
+        const int out_row = int(elem) / blocks;                                \
+        const int co = (int(elem) - out_row * blocks) * 16;                    \
+        const int out_base = out_row * CHANNELS + co;                          \
+        const int out_count = min(counts[1], out_capacity);                    \
+        if (out_row >= out_count) {                                            \
+            for (int offset = 0; offset < 16; ++offset) {                      \
+                out[out_base + offset] = TYPE(0);                              \
+            }                                                                  \
+            return;                                                            \
+        }                                                                      \
+        const int edge_count = min(counts[0], edge_capacity);                  \
+        float4 acc0 = float4(0.0f);                                            \
+        float4 acc1 = float4(0.0f);                                            \
+        float4 acc2 = float4(0.0f);                                            \
+        float4 acc3 = float4(0.0f);                                            \
+        for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1]; \
+             ++edge) {                                                         \
+            if (edge < 0 || edge >= edge_count) {                              \
+                continue;                                                      \
+            }                                                                  \
+            const int in_row = in_rows[edge];                                  \
+            const int kernel_id = kernel_ids[edge];                            \
+            if (in_row < 0 || kernel_id < 0) {                                 \
+                continue;                                                      \
+            }                                                                  \
+            const int feat_base = in_row * feat_s0;                            \
+            for (int ci = 0; ci < CHANNELS; ++ci) {                            \
+                const float value = float(feats[feat_base + ci * feat_s1]);    \
+                acc0 += value *                                                \
+                        LOAD_WEIGHT4(                                          \
+                            weights, weight_s0, CHANNELS, kernel_id, ci, co    \
+                        );                                                     \
+                acc1 +=                                                        \
+                    value *                                                    \
+                    LOAD_WEIGHT4(                                              \
+                        weights, weight_s0, CHANNELS, kernel_id, ci, co + 4    \
+                    );                                                         \
+                acc2 +=                                                        \
+                    value *                                                    \
+                    LOAD_WEIGHT4(                                              \
+                        weights, weight_s0, CHANNELS, kernel_id, ci, co + 8    \
+                    );                                                         \
+                acc3 +=                                                        \
+                    value *                                                    \
+                    LOAD_WEIGHT4(                                              \
+                        weights, weight_s0, CHANNELS, kernel_id, ci, co + 12   \
+                    );                                                         \
+            }                                                                  \
+        }                                                                      \
+        STORE4(out, out_base, acc0);                                           \
+        STORE4(out, out_base + 4, acc1);                                       \
+        STORE4(out, out_base + 8, acc2);                                       \
+        STORE4(out, out_base + 12, acc3);                                      \
+        LATTICE_CONV_UNUSED_DENSE_FORWARD_ARGS();                              \
+    }
+
 #define LATTICE_DEFINE_DENSE_C16_INPUT_GRAD(NAME, TYPE, LOAD_WEIGHT4, STORE4)  \
     [[kernel]] void NAME(                                                      \
         device const TYPE* cotangent [[buffer(0)]],                            \
@@ -536,6 +626,34 @@ LATTICE_DEFINE_DENSE_COUT4_FORWARD(
 )
 LATTICE_DEFINE_DENSE_COUT4_FORWARD(
     sparse_relation_conv_f16_i32_cout4_dense_c64,
+    64,
+    half,
+    LATTICE_DENSE_WEIGHT4_F16,
+    LATTICE_STORE_F16_4
+)
+LATTICE_DEFINE_DENSE_COUT16_FORWARD(
+    sparse_relation_conv_f32_i32_cout16_dense_c32,
+    32,
+    float,
+    LATTICE_DENSE_WEIGHT4_F32,
+    LATTICE_STORE_F32_4
+)
+LATTICE_DEFINE_DENSE_COUT16_FORWARD(
+    sparse_relation_conv_f16_i32_cout16_dense_c32,
+    32,
+    half,
+    LATTICE_DENSE_WEIGHT4_F16,
+    LATTICE_STORE_F16_4
+)
+LATTICE_DEFINE_DENSE_COUT16_FORWARD(
+    sparse_relation_conv_f32_i32_cout16_dense_c64,
+    64,
+    float,
+    LATTICE_DENSE_WEIGHT4_F32,
+    LATTICE_STORE_F32_4
+)
+LATTICE_DEFINE_DENSE_COUT16_FORWARD(
+    sparse_relation_conv_f16_i32_cout16_dense_c64,
     64,
     half,
     LATTICE_DENSE_WEIGHT4_F16,
