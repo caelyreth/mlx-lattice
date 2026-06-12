@@ -185,11 +185,9 @@ inline void dense_forward_cout4_impl(
 
     const int edge_count = min(counts[0], edge_capacity);
     float4 acc = float4(0.0f);
-    for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
-         ++edge) {
-        if (edge < 0 || edge >= edge_count) {
-            continue;
-        }
+    const int edge_begin = max(row_offsets[out_row], 0);
+    const int edge_end = min(row_offsets[out_row + 1], edge_count);
+    for (int edge = edge_begin; edge < edge_end; ++edge) {
         const int in_row = in_rows[edge];
         const int kernel_id = kernel_ids[edge];
         if (in_row < 0 || kernel_id < 0) {
@@ -268,11 +266,9 @@ inline void dense_forward_cout16_impl(
     float4 acc1 = float4(0.0f);
     float4 acc2 = float4(0.0f);
     float4 acc3 = float4(0.0f);
-    for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
-         ++edge) {
-        if (edge < 0 || edge >= edge_count) {
-            continue;
-        }
+    const int edge_begin = max(row_offsets[out_row], 0);
+    const int edge_end = min(row_offsets[out_row + 1], edge_count);
+    for (int edge = edge_begin; edge < edge_end; ++edge) {
         const int in_row = in_rows[edge];
         const int kernel_id = kernel_ids[edge];
         if (in_row < 0 || kernel_id < 0) {
