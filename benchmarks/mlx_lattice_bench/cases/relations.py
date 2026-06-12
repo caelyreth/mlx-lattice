@@ -6,6 +6,7 @@ from typing import Any
 
 from mlx_lattice.core import SparseTensor
 from mlx_lattice.ops import (
+    gather_neighbor_features,
     generative_kernel_relation,
     kernel_relation,
     knn_relation,
@@ -22,6 +23,7 @@ from mlx_lattice_bench.harness import BenchmarkCase
 class RelationInputs:
     x: SparseTensor
     transposed: SparseTensor
+    knn: object
 
 
 def cases(
@@ -87,6 +89,17 @@ def cases(
             units=('edges', 'n_in'),
         ),
         BenchmarkCase(
+            name='knn_neighbor_features',
+            group='relations',
+            params=params,
+            setup=_setup,
+            prepare=_prepare,
+            run=lambda inputs: gather_neighbor_features(
+                inputs.x, inputs.knn
+            ),
+            units=('edges', 'n_in'),
+        ),
+        BenchmarkCase(
             name='radius_relation',
             group='relations',
             params=params,
@@ -103,4 +116,5 @@ def _setup(params: Mapping[str, Any]) -> SparseArrays:
 
 
 def _prepare(fixture: SparseArrays) -> RelationInputs:
-    return RelationInputs(fixture.tensor(), fixture.tensor(stride=2))
+    x = fixture.tensor()
+    return RelationInputs(x, fixture.tensor(stride=2), knn_relation(x, k=8))

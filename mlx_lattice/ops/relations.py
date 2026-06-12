@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import mlx.core as mx
+
 from mlx_lattice.core.coords.builders import (
     build_generative_relation,
     build_kernel_relation,
@@ -21,6 +23,7 @@ __all__ = [
     'build_radius_relation',
     'build_target_kernel_relation',
     'build_transposed_kernel_relation',
+    'gather_neighbor_features',
     'generative_kernel_relation',
     'kernel_offsets',
     'kernel_relation',
@@ -137,6 +140,14 @@ def radius_relation(
         radius=radius,
         max_neighbors=max_neighbors,
     )
+
+
+def gather_neighbor_features(
+    source: SparseTensor,
+    relation: NeighborRelation,
+) -> mx.array:
+    rows = relation.edges.source_rows.astype(mx.int32)
+    return mx.take(source.feats, rows, axis=0)
 
 
 def _require_matching_stride(

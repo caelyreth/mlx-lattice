@@ -14,6 +14,7 @@ from mlx_lattice.ops import (
     build_transposed_kernel_relation,
     child_coords_from_indices,
     downsample_coords,
+    gather_neighbor_features,
     intersection_coords,
     kernel_offsets,
     kernel_relation,
@@ -416,6 +417,8 @@ def test_knn_and_radius_relations_define_neighbor_query_contract() -> None:
         radius=1.5,
         max_neighbors=1,
     )
+    feats = mx.array([[10.0], [20.0], [30.0], [40.0]], dtype=mx.float32)
+    gathered = gather_neighbor_features(SparseTensor(source, feats), knn)
 
     assert knn.counts.tolist() == [5, 3]
     assert _active_rows(knn.edges.query_rows, knn.edge_count) == [
@@ -455,6 +458,7 @@ def test_knn_and_radius_relations_define_neighbor_query_contract() -> None:
     assert knn.n_query_capacity == 3
     assert knn.n_source_capacity == 4
     assert knn.max_neighbors == 2
+    assert gathered.tolist()[:5] == [[10.0], [20.0], [30.0], [20.0], [40.0]]
 
     assert radius.counts.tolist() == [4, 3]
     assert _active_rows(radius.edges.query_rows, radius.edge_count) == [
