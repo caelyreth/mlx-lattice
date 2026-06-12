@@ -348,6 +348,64 @@ def test_conv3d_generic_weight_grad_tensor_ops_blocks_match_cpu(
     assert_nested_close(actual, expected, abs=2e-2)
 
 
+@pytest.mark.parametrize(
+    ('channels_in', 'channels_out'),
+    [(16, 64), (64, 16)],
+)
+def test_conv3d_generic_asymmetric_backward_matches_cpu(
+    channels_in: int,
+    channels_out: int,
+) -> None:
+    skip_without_metal()
+    rows = 4096
+    coords_values = [
+        [0, row % 97, (row // 97) % 97, row // (97 * 97)]
+        for row in range(rows)
+    ]
+    feats_values = [
+        [
+            ((row + 1) * (channel + 3) % 37) / 37.0
+            for channel in range(channels_in)
+        ]
+        for row in range(rows)
+    ]
+    weight_values = [
+        ((index % 23) - 11) / 23.0
+        for index in range(channels_out * 3 * 3 * 3 * channels_in)
+    ]
+
+    def grads() -> tuple[list[object], list[object]]:
+        coords = mx.array(coords_values, dtype=mx.int32)
+        feats = mx.array(feats_values, dtype=mx.float32)
+        weight = mx.array(weight_values, dtype=mx.float32).reshape(
+            channels_out, 3, 3, 3, channels_in
+        )
+
+        def loss(
+            feats_arg: mx.array,
+            weight_arg: mx.array,
+        ) -> mx.array:
+            x = SparseTensor(coords, feats_arg)
+            return mx.sum(conv3d(x, weight_arg, kernel_size=3).feats)
+
+        grad_feats, grad_weight = mx.grad(loss, argnums=(0, 1))(
+            feats,
+            weight,
+        )
+        mx.eval(grad_feats, grad_weight)
+        return grad_feats.tolist(), grad_weight.tolist()
+
+    previous = mx.default_device()
+    try:
+        mx.set_default_device(mx.cpu)
+        expected = grads()
+    finally:
+        mx.set_default_device(previous)
+    actual = run_with_gpu_default(grads)
+
+    assert_nested_close(actual, expected, abs=2e-2)
+
+
 def test_conv3d_generic_forward_matches_cpu_at_large_relation_boundary() -> (
     None
 ):

@@ -108,6 +108,16 @@ bool is_dense_5d_square_c_shape(SparseConvShape shape) {
            shape.n_kernels >= 16;
 }
 
+bool supports_dense_input_grad_shape(SparseConvShape shape) {
+    if (shape.in_channels == shape.out_channels) {
+        return shape.in_channels == 16 || shape.in_channels == 32 ||
+               shape.in_channels == 64;
+    }
+    return (shape.in_channels == 16 && shape.out_channels == 32) ||
+           (shape.in_channels == 16 && shape.out_channels == 64) ||
+           (shape.in_channels == 64 && shape.out_channels == 16);
+}
+
 const char* dense_forward_kernel_name(SparseConvShape shape, bool fp16) {
     if (shape.in_channels == 16 && shape.out_channels == 16) {
         return typed_kernel_name(
@@ -173,6 +183,33 @@ const char* dense_forward_kernel_name(SparseConvShape shape, bool fp16) {
 }
 
 const char* dense_input_grad_kernel_name(SparseConvShape shape, bool fp16) {
+    if (shape.in_channels == 16 && shape.out_channels == 32) {
+        return typed_kernel_name(
+            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin16_"
+            "cout32",
+            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin16_"
+            "cout32",
+            fp16
+        );
+    }
+    if (shape.in_channels == 16 && shape.out_channels == 64) {
+        return typed_kernel_name(
+            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin16_"
+            "cout64",
+            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin16_"
+            "cout64",
+            fp16
+        );
+    }
+    if (shape.in_channels == 64 && shape.out_channels == 16) {
+        return typed_kernel_name(
+            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin64_"
+            "cout16",
+            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin64_"
+            "cout16",
+            fp16
+        );
+    }
     if (shape.in_channels == 16) {
         return typed_kernel_name(
             "sparse_relation_conv_input_grad_f32_i32_cin16_dense_c16",
@@ -240,7 +277,7 @@ void encode_weight_grad_classic(
     auto& encoder = mx::metal::get_command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
-    auto use_block4 = !fp16 && shape.in_channels % 4 == 0 &&
+    auto use_block4 = shape.in_channels % 4 == 0 &&
                       shape.out_channels % 4 == 0 && shape.n_kernels >= 16 &&
                       shape.in_capacity >= 50000;
     auto edge_count = static_cast<int>(inputs[2].shape(0));
@@ -256,22 +293,23 @@ void encode_weight_grad_classic(
     auto kernel = device.get_kernel(
         use_dense_c
             ? dense_weight_grad_kernel_name(shape, fp16)
-            : (use_block4
-                   ? "sparse_relation_conv_weight_grad_block4_f32_i32"
-                   : (use_cout16
-                          ? typed_kernel_name(
-                                "sparse_relation_conv_weight_grad_cout16_"
-                                "f32_i32",
-                                "sparse_relation_conv_weight_grad_cout16_"
-                                "f16_i32",
-                                fp16
-                            )
-                          : (fp16 ? "sparse_relation_conv_weight_grad_f16_i32"
-                                  : (use_gather
-                                         ? "sparse_relation_conv_weight_grad_"
-                                           "f32_i32"
-                                         : "sparse_relation_conv_weight_grad_"
-                                           "atomic_f32_i32")))),
+            : (use_cout16
+                   ? typed_kernel_name(
+                         "sparse_relation_conv_weight_grad_cout16_f32_i32",
+                         "sparse_relation_conv_weight_grad_cout16_f16_i32",
+                         fp16
+                     )
+               : use_block4
+                   ? typed_kernel_name(
+                         "sparse_relation_conv_weight_grad_block4_f32_i32",
+                         "sparse_relation_conv_weight_grad_block4_f16_i32",
+                         fp16
+                     )
+                   : (fp16 ? "sparse_relation_conv_weight_grad_f16_i32"
+                           : (use_gather
+                                  ? "sparse_relation_conv_weight_grad_f32_i32"
+                                  : "sparse_relation_conv_weight_grad_atomic_"
+                                    "f32_i32"))),
         library
     );
     encoder.set_compute_pipeline_state(kernel);
@@ -415,11 +453,13 @@ void eval_input_grad(
     auto& encoder = mx::metal::get_command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
-    auto use_dense_c =
-        shape.in_capacity >= 4096 && is_dense_5d_c_weight(inputs[1], shape);
+    auto use_dense_c = shape.in_capacity >= 4096 &&
+                       is_dense_5d_c_weight(inputs[1], shape) &&
+                       supports_dense_input_grad_shape(shape);
     auto use_grouped_dense_c =
         use_dense_c && shape.in_capacity >= 100000 &&
-        (shape.in_channels == 32 || (fp16 && shape.in_channels == 64));
+        (shape.in_channels == 32 ||
+         (fp16 && shape.in_channels == 64 && shape.out_channels == 64));
     if (!use_dense_c && !fp16 &&
         tensor_ops::conv::input_grad::is_preferred(shape, stream)) {
         tensor_ops::conv::input_grad::encode(shape, stream, inputs, out);
