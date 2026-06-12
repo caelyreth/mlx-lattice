@@ -20,6 +20,12 @@ void eval_lookup_coords(
     std::vector<mx::array>& outputs
 );
 
+void eval_morton_codes(
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+);
+
 void eval_sparse_quantize(
     QuantizationSpec spec,
     const mx::Stream& stream,

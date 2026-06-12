@@ -114,6 +114,12 @@ void write_i32(
     std::copy(values.begin(), values.end(), data);
 }
 
+void write_i64(mx::array& out, const std::vector<int64_t>& values) {
+    auto data = out.data<int64_t>();
+    std::fill(data, data + out.size(), 0);
+    std::copy(values.begin(), values.end(), data);
+}
+
 void write_f32(mx::array& out, const std::vector<float>& values) {
     auto data = out.data<float>();
     std::fill(data, data + out.size(), 0.0F);
@@ -184,6 +190,34 @@ downsample_values(const std::vector<Coord>& coords, Triple stride) {
         if (seen.insert(quantized).second) {
             out.push_back(quantized);
         }
+    }
+    return out;
+}
+
+uint64_t split_morton_3(uint64_t value) {
+    value &= 0x1fffffULL;
+    value = (value | (value << 32)) & 0x1f00000000ffffULL;
+    value = (value | (value << 16)) & 0x1f0000ff0000ffULL;
+    value = (value | (value << 8)) & 0x100f00f00f00f00fULL;
+    value = (value | (value << 4)) & 0x10c30c30c30c30c3ULL;
+    value = (value | (value << 2)) & 0x1249249249249249ULL;
+    return value;
+}
+
+int64_t morton_code(Coord coord) {
+    auto code = split_morton_3(static_cast<uint64_t>(coord[1])) |
+                (split_morton_3(static_cast<uint64_t>(coord[2])) << 1) |
+                (split_morton_3(static_cast<uint64_t>(coord[3])) << 2);
+    code += static_cast<uint64_t>(coord[0]) << 60;
+    return static_cast<int64_t>(code);
+}
+
+std::vector<int64_t> morton_code_values(const mx::array& coords) {
+    auto values = read_coords(coords);
+    std::vector<int64_t> out;
+    out.reserve(values.size());
+    for (auto coord : values) {
+        out.push_back(morton_code(coord));
     }
     return out;
 }
@@ -914,6 +948,23 @@ void eval_lookup_coords(
             write_i32(
                 task_outputs[0], lookup_values(task_inputs[0], task_inputs[1])
             );
+        }
+    );
+}
+
+void eval_morton_codes(
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    backend::allocate_all(outputs);
+    backend::schedule_cpu(
+        stream,
+        inputs,
+        outputs,
+        [](const std::vector<mx::array>& task_inputs,
+           std::vector<mx::array>& task_outputs) {
+            write_i64(task_outputs[0], morton_code_values(task_inputs[0]));
         }
     );
 }

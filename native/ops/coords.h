@@ -13,6 +13,7 @@ NativeCoordSet downsample_coords(const mx::array& coords, Triple stride);
 NativeCoordSet union_coords(const mx::array& lhs, const mx::array& rhs);
 NativeCoordSet intersection_coords(const mx::array& lhs, const mx::array& rhs);
 mx::array lookup_coords(const mx::array& coords, const mx::array& queries);
+mx::array morton_codes(const mx::array& coords);
 
 NativeSparseQuantization sparse_quantize(
     const mx::array& points,

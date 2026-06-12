@@ -127,6 +127,10 @@ struct CoordLookupShape {
     int query_rows;
 };
 
+struct CoordRowsShape {
+    int rows;
+};
+
 struct NeighborRelationShape {
     int source_rows;
     int query_rows;

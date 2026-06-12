@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 import mlx.core as mx
 from mlx_lattice.core import (
+    CoordinateOrdering,
     CoordinateSet,
     KernelRelation,
     NeighborRelation,
@@ -257,6 +258,11 @@ def _collect_arrays(value: Any) -> Iterable[mx.array]:
     if isinstance(value, CoordinateSet):
         yield value.coords
         yield value.active_rows
+        return
+    if isinstance(value, CoordinateOrdering):
+        yield value.coords
+        yield value.order
+        yield value.inverse_rows
         return
     if isinstance(value, SparseQuantization):
         yield value.coords

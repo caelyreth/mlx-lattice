@@ -18,6 +18,9 @@ from mlx_lattice.ops import (
     kernel_relation,
     knn_relation,
     lookup_coords,
+    morton_codes,
+    morton_order,
+    morton_sort_coords,
     radius_relation,
     union_coords,
 )
@@ -48,6 +51,25 @@ def _coord_set_rows(value: object) -> list[list[int]]:
     return _active_coords(coords, count)
 
 
+def _split_by_3(value: int) -> int:
+    code = value & 0x1FFFFF
+    code = (code | (code << 32)) & 0x1F00000000FFFF
+    code = (code | (code << 16)) & 0x1F0000FF0000FF
+    code = (code | (code << 8)) & 0x100F00F00F00F00F
+    code = (code | (code << 4)) & 0x10C30C30C30C30C3
+    code = (code | (code << 2)) & 0x1249249249249249
+    return code
+
+
+def _expected_morton_code(coord: list[int]) -> int:
+    return (
+        _split_by_3(coord[1])
+        | (_split_by_3(coord[2]) << 1)
+        | (_split_by_3(coord[3]) << 2)
+        | (coord[0] << 60)
+    )
+
+
 def test_coordinate_set_primitives_preserve_first_seen_order() -> None:
     lhs = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]],
@@ -72,6 +94,51 @@ def test_coordinate_set_primitives_preserve_first_seen_order() -> None:
     ]
     assert _coord_set_rows(intersection_coords(lhs, rhs)) == [[0, 1, 0, 0]]
     assert lookup_coords(lhs, rhs).tolist() == [1, -1]
+
+
+def test_morton_ordering_matches_gameleon_z_order_contract() -> None:
+    coords = mx.array(
+        [
+            [0, 1, 1, 0],
+            [1, 0, 0, 0],
+            [0, 0, 1, 1],
+            [0, 0, 0, 0],
+        ],
+        dtype=mx.int32,
+    )
+
+    codes = morton_codes(coords)
+    order = morton_order(coords)
+    sorted_coords = morton_sort_coords(coords)
+
+    assert codes.tolist() == [
+        _expected_morton_code(row) for row in coords.tolist()
+    ]
+    assert order.tolist() == [3, 0, 2, 1]
+    assert sorted_coords.coords.tolist() == [
+        [0, 0, 0, 0],
+        [0, 1, 1, 0],
+        [0, 0, 1, 1],
+        [1, 0, 0, 0],
+    ]
+    assert sorted_coords.inverse_rows.tolist() == [1, 3, 2, 0]
+
+
+@run_with_gpu_default
+def test_morton_ordering_supports_gpu_and_int64_inputs() -> None:
+    coords = mx.array(
+        [[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+        dtype=mx.int64,
+    )
+
+    codes = morton_codes(coords)
+    order = morton_order(coords)
+
+    mx.eval(codes, order)
+    assert codes.tolist() == [
+        _expected_morton_code(row) for row in coords.tolist()
+    ]
+    assert order.tolist() == [0, 1, 2]
 
 
 def test_kernel_offsets_and_relation_builders_emit_expected_edges() -> None:

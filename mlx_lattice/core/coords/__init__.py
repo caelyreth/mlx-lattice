@@ -13,6 +13,12 @@ from mlx_lattice.core.coords.manager import (
     CoordinateManager,
     CoordinateMapKey,
 )
+from mlx_lattice.core.coords.ordering import (
+    CoordinateOrdering,
+    morton_codes,
+    morton_order,
+    morton_sort_coords,
+)
 from mlx_lattice.core.coords.quantization import (
     SparseQuantization,
     sparse_quantize,
@@ -31,6 +37,7 @@ from mlx_lattice.core.coords.validation import validate_coords
 __all__ = [
     'CoordinateManager',
     'CoordinateMapKey',
+    'CoordinateOrdering',
     'CoordinateSet',
     'SparseQuantization',
     'build_generative_relation',
@@ -45,6 +52,9 @@ __all__ = [
     'inverse_map',
     'kernel_offsets',
     'lookup_coords',
+    'morton_codes',
+    'morton_order',
+    'morton_sort_coords',
     'sparse_quantize',
     'union_coords',
     'validate_coords',

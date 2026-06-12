@@ -7,6 +7,7 @@ from mlx_lattice.ops.conv import (
     subm_conv3d,
 )
 from mlx_lattice.ops.coords import (
+    CoordinateOrdering,
     CoordinateSet,
     SparseQuantization,
     contains_coords,
@@ -14,6 +15,9 @@ from mlx_lattice.ops.coords import (
     intersection_coords,
     inverse_map,
     lookup_coords,
+    morton_codes,
+    morton_order,
+    morton_sort_coords,
     sparse_quantize,
     union_coords,
 )
@@ -62,6 +66,7 @@ from mlx_lattice.ops.relations import (
 from mlx_lattice.ops.tensor import cat, prune, sparse_collate, topk_rows
 
 __all__ = [
+    'CoordinateOrdering',
     'CoordinateSet',
     'SparseQuantization',
     'avg_pool3d',
@@ -94,6 +99,9 @@ __all__ = [
     'linear',
     'lookup_coords',
     'max_pool3d',
+    'morton_codes',
+    'morton_order',
+    'morton_sort_coords',
     'pool3d',
     'prune',
     'radius_relation',

@@ -137,6 +137,13 @@ void register_coords(nb::module_& module) {
         "Return row indices of queries in coords, or -1."
     );
     module.def(
+        "morton_codes",
+        &morton_codes,
+        "coords"_a,
+        nb::sig("def morton_codes(coords: mlx.core.array) -> mlx.core.array"),
+        "Return Gameleon-compatible 3D Morton codes for sparse coordinates."
+    );
+    module.def(
         "sparse_quantize",
         [](const mx::array& points,
            const mx::array& batch_indices,

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from mlx_lattice.core.coords.ordering import (
+    CoordinateOrdering,
+    morton_codes,
+    morton_order,
+    morton_sort_coords,
+)
 from mlx_lattice.core.coords.quantization import (
     SparseQuantization,
     sparse_quantize,
@@ -15,6 +21,7 @@ from mlx_lattice.core.coords.set_ops import (
 )
 
 __all__ = [
+    'CoordinateOrdering',
     'CoordinateSet',
     'SparseQuantization',
     'contains_coords',
@@ -22,6 +29,9 @@ __all__ = [
     'intersection_coords',
     'inverse_map',
     'lookup_coords',
+    'morton_codes',
+    'morton_order',
+    'morton_sort_coords',
     'sparse_quantize',
     'union_coords',
 ]

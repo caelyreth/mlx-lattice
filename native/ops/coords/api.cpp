@@ -30,6 +30,11 @@ mx::array lookup_coords(const mx::array& coords, const mx::array& queries) {
     return make_lookup_coords(coords, queries);
 }
 
+mx::array morton_codes(const mx::array& coords) {
+    validate_coords(coords);
+    return make_morton_codes(coords);
+}
+
 // MARK: - quantization
 
 NativeSparseQuantization sparse_quantize(

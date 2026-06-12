@@ -3,6 +3,7 @@ from __future__ import annotations
 from mlx_lattice.core.coords import (
     CoordinateManager,
     CoordinateMapKey,
+    CoordinateOrdering,
     CoordinateSet,
     SparseQuantization,
 )
@@ -20,6 +21,7 @@ from mlx_lattice.core.types import Triple, triple
 __all__ = [
     'CoordinateManager',
     'CoordinateMapKey',
+    'CoordinateOrdering',
     'CoordinateSet',
     'KernelRelation',
     'KernelSpec',

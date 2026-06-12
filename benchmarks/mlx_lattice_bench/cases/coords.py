@@ -9,6 +9,8 @@ from mlx_lattice.ops import (
     downsample_coords,
     intersection_coords,
     lookup_coords,
+    morton_codes,
+    morton_sort_coords,
     union_coords,
 )
 
@@ -73,6 +75,24 @@ def cases(
             prepare=_prepare,
             run=lambda inputs: lookup_coords(inputs.lhs, inputs.rhs),
             units=('n_in', 'n_out'),
+        ),
+        BenchmarkCase(
+            name='morton_codes',
+            group='coords',
+            params=params,
+            setup=_setup,
+            prepare=_prepare,
+            run=lambda inputs: morton_codes(inputs.lhs),
+            units=('n_in',),
+        ),
+        BenchmarkCase(
+            name='morton_sort_coords',
+            group='coords',
+            params=params,
+            setup=_setup,
+            prepare=_prepare,
+            run=lambda inputs: morton_sort_coords(inputs.lhs),
+            units=('n_in',),
         ),
     )
 

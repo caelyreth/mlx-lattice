@@ -9,6 +9,7 @@ NativeCoordSet make_union_coords(const mx::array& lhs, const mx::array& rhs);
 NativeCoordSet
 make_intersection_coords(const mx::array& lhs, const mx::array& rhs);
 mx::array make_lookup_coords(const mx::array& coords, const mx::array& queries);
+mx::array make_morton_codes(const mx::array& coords);
 
 NativeSparseQuantization make_sparse_quantize(
     const mx::array& points,
