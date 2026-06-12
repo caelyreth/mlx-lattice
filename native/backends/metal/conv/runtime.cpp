@@ -5,6 +5,7 @@
 
 #include "backends/array_utils.h"
 #include "backends/metal/runtime_utils.h"
+#include "backends/metal/tensor_ops/conv/forward/runtime.h"
 #include "backends/metal/tensor_ops/conv/input_grad/runtime.h"
 #include "backends/metal/tensor_ops/conv/weight_grad/runtime.h"
 
@@ -387,6 +388,10 @@ void eval(
     auto& encoder = mx::metal::get_command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
+    if (tensor_ops::conv::forward::is_preferred(shape, stream)) {
+        tensor_ops::conv::forward::encode(shape, stream, inputs, out);
+        return;
+    }
     auto use_cout16 = shape.out_channels == 16 &&
                       ((shape.n_kernels >= 16 && shape.out_capacity >= 4096) ||
                        shape.out_capacity >= 50000);
