@@ -152,6 +152,18 @@ const char* dense_input_grad_kernel_name(SparseConvShape shape, bool fp16) {
     );
 }
 
+const char*
+dense_input_grad_grouped_kernel_name(SparseConvShape shape, bool fp16) {
+    if (shape.in_channels == 32) {
+        return typed_kernel_name(
+            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_c32",
+            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c32",
+            fp16
+        );
+    }
+    return "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c64";
+}
+
 const char* dense_weight_grad_kernel_name(SparseConvShape shape, bool fp16) {
     if (shape.in_channels == 16) {
         return typed_kernel_name(
@@ -363,6 +375,9 @@ void eval_input_grad(
     auto fp16 = is_float16(inputs[0]);
     auto use_dense_c =
         shape.in_capacity >= 4096 && is_dense_5d_c_weight(inputs[1], shape);
+    auto use_grouped_dense_c =
+        use_dense_c && shape.in_capacity >= 100000 &&
+        (shape.in_channels == 32 || (fp16 && shape.in_channels == 64));
     if (!use_dense_c && !fp16 &&
         tensor_ops::conv::input_grad::is_preferred(shape, stream)) {
         tensor_ops::conv::input_grad::encode(shape, stream, inputs, out);
@@ -371,7 +386,8 @@ void eval_input_grad(
     auto use_cin16 = shape.in_channels == 16 && shape.in_capacity >= 4096;
     auto use_vec4 = !fp16 && shape.in_channels % 4 == 0;
     auto kernel = device.get_kernel(
-        use_dense_c
+        use_grouped_dense_c ? dense_input_grad_grouped_kernel_name(shape, fp16)
+        : use_dense_c
             ? dense_input_grad_kernel_name(shape, fp16)
             : (use_cin16
                    ? typed_kernel_name(
@@ -399,16 +415,18 @@ void eval_input_grad(
     encoder.set_bytes(stride_at(inputs[0], 0), 15);
     encoder.set_bytes(stride_at(inputs[0], 1), 16);
     bind_weight_shape(encoder, inputs[1], shape, 17);
-    auto work_items = use_dense_c && shape.in_channels > 16
-                          ? static_cast<size_t>(shape.in_capacity) *
-                                static_cast<size_t>(shape.in_channels / 4)
-                      : use_cin16 || (use_dense_c && shape.in_channels == 16)
-                          ? static_cast<size_t>(shape.in_capacity)
-                      : use_vec4
-                          ? static_cast<size_t>(shape.in_capacity) *
-                                static_cast<size_t>(shape.in_channels / 4)
-                          : static_cast<size_t>(shape.in_capacity) *
-                                static_cast<size_t>(shape.in_channels);
+    auto work_items =
+        use_grouped_dense_c ? static_cast<size_t>(shape.in_capacity) *
+                                  static_cast<size_t>(shape.in_channels / 16)
+        : use_dense_c && shape.in_channels > 16
+            ? static_cast<size_t>(shape.in_capacity) *
+                  static_cast<size_t>(shape.in_channels / 4)
+        : use_cin16 || (use_dense_c && shape.in_channels == 16)
+            ? static_cast<size_t>(shape.in_capacity)
+        : use_vec4 ? static_cast<size_t>(shape.in_capacity) *
+                         static_cast<size_t>(shape.in_channels / 4)
+                   : static_cast<size_t>(shape.in_capacity) *
+                         static_cast<size_t>(shape.in_channels);
     dispatch_1d(encoder, kernel, work_items);
 #else
     (void)shape;

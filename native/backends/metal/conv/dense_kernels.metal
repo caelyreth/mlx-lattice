@@ -477,6 +477,103 @@ inline void dense_forward_cout16_ci4_f16_impl(
     );
 }
 
+template <typename T, int channels>
+inline void dense_input_grad_cin16_grouped_impl(
+    device const T* cotangent,
+    device const T* weights,
+    device const int* in_rows,
+    device const int* out_rows,
+    device const int* kernel_ids,
+    device const int* counts,
+    device const int* row_offsets,
+    device const int* in_row_offsets,
+    device const int* in_edge_ids,
+    device T* grad,
+    int edge_capacity,
+    int out_capacity,
+    int in_capacity,
+    int in_channels,
+    int out_channels,
+    int cotangent_s0,
+    int cotangent_s1,
+    int weight_s0,
+    int weight_s1,
+    int weight_s2,
+    int weight_s3,
+    int weight_s4,
+    int weight_layout,
+    int kernel_x,
+    int kernel_y,
+    int kernel_z,
+    uint elem
+) {
+    const int groups = channels / 16;
+    const int total = in_capacity * groups;
+    if (elem >= uint(total)) {
+        return;
+    }
+    const int in_row = int(elem) / groups;
+    const int ci_base = (int(elem) - in_row * groups) * 16;
+    const int edge_count = min(counts[0], edge_capacity);
+    float4 acc0 = float4(0.0f);
+    float4 acc1 = float4(0.0f);
+    float4 acc2 = float4(0.0f);
+    float4 acc3 = float4(0.0f);
+    for (int cursor = in_row_offsets[in_row];
+         cursor < in_row_offsets[in_row + 1];
+         ++cursor) {
+        const int edge = in_edge_ids[cursor];
+        if (edge < 0 || edge >= edge_count) {
+            continue;
+        }
+        const int out_row = out_rows[edge];
+        const int kernel_id = kernel_ids[edge];
+        if (out_row < 0 || out_row >= out_capacity || kernel_id < 0) {
+            continue;
+        }
+        const int cot_base = out_row * cotangent_s0;
+        for (int co = 0; co < channels; ++co) {
+            const float value = float(cotangent[cot_base + co * cotangent_s1]);
+            acc0 +=
+                value * load_dense_weight_ci4(
+                            weights, weight_s0, channels, kernel_id, co, ci_base
+                        );
+            acc1 += value *
+                    load_dense_weight_ci4(
+                        weights, weight_s0, channels, kernel_id, co, ci_base + 4
+                    );
+            acc2 += value *
+                    load_dense_weight_ci4(
+                        weights, weight_s0, channels, kernel_id, co, ci_base + 8
+                    );
+            acc3 +=
+                value *
+                load_dense_weight_ci4(
+                    weights, weight_s0, channels, kernel_id, co, ci_base + 12
+                );
+        }
+    }
+    const int grad_base = in_row * channels + ci_base;
+    store4(grad, grad_base, acc0);
+    store4(grad, grad_base + 4, acc1);
+    store4(grad, grad_base + 8, acc2);
+    store4(grad, grad_base + 12, acc3);
+    ignore_dense_input_grad_shape_args(
+        in_rows,
+        row_offsets,
+        in_channels,
+        out_channels,
+        weight_s1,
+        weight_s2,
+        weight_s3,
+        weight_s4,
+        weight_layout,
+        kernel_x,
+        kernel_y,
+        kernel_z
+    );
+}
+
 template <typename T>
 inline void dense_input_grad_cin16_impl(
     device const T* cotangent,
