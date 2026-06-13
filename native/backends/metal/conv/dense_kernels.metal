@@ -452,9 +452,9 @@ inline void dense_forward_cout16_ci4_f16_impl(
     store4(out, out_base + 12, acc3);
 }
 
-template <int in_channels>
+template <typename T, int in_channels>
 inline void accumulate_dense_forward_cout16_ci4_f16(
-    device const half* weights,
+    device const T* weights,
     int weight_s0,
     int kernel_id,
     int co,
@@ -592,7 +592,7 @@ inline void dense_forward_cout16_ci4_f16_contiguous_impl(
         const int feat_base = in_row * params.feat_s0;
         for (int ci = 0; ci < in_channels; ci += 4) {
             const float4 feat4 = load_contiguous4(feats, feat_base + ci);
-            accumulate_dense_forward_cout16_ci4_f16<in_channels>(
+            accumulate_dense_forward_cout16_ci4_f16<half, in_channels>(
                 weights,
                 params.weight_s0,
                 kernel_id,
@@ -659,162 +659,18 @@ inline void dense_forward_cout16_ci4_f32_impl(
             const float4 feat4 = load_strided4(
                 feats, feat_base + ci * params.feat_s1, params.feat_s1
             );
-            acc0.x += dot(
+            accumulate_dense_forward_cout16_ci4_f16<float, in_channels>(
+                weights,
+                params.weight_s0,
+                kernel_id,
+                co,
+                ci,
                 feat4,
-                load_dense_weight_ci4(
-                    weights, params.weight_s0, in_channels, kernel_id, co, ci
-                )
+                acc0,
+                acc1,
+                acc2,
+                acc3
             );
-            acc0.y +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 1,
-                        ci
-                    ));
-            acc0.z +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 2,
-                        ci
-                    ));
-            acc0.w +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 3,
-                        ci
-                    ));
-            acc1.x +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 4,
-                        ci
-                    ));
-            acc1.y +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 5,
-                        ci
-                    ));
-            acc1.z +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 6,
-                        ci
-                    ));
-            acc1.w +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 7,
-                        ci
-                    ));
-            acc2.x +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 8,
-                        ci
-                    ));
-            acc2.y +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 9,
-                        ci
-                    ));
-            acc2.z +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 10,
-                        ci
-                    ));
-            acc2.w +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 11,
-                        ci
-                    ));
-            acc3.x +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 12,
-                        ci
-                    ));
-            acc3.y +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 13,
-                        ci
-                    ));
-            acc3.z +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 14,
-                        ci
-                    ));
-            acc3.w +=
-                dot(feat4,
-                    load_dense_weight_ci4(
-                        weights,
-                        params.weight_s0,
-                        in_channels,
-                        kernel_id,
-                        co + 15,
-                        ci
-                    ));
         }
     }
     store4(out, out_base, acc0);
