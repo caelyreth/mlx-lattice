@@ -114,7 +114,15 @@ def backend_params(config: pytest.Config) -> list[Any]:
 def parity_backend_params(config: pytest.Config) -> list[Any]:
     names = _option_names(config, '--parity-backend')
     if not names:
-        names = available_backend_names()
+        return [
+            pytest.param(
+                (),
+                id='parity-disabled',
+                marks=pytest.mark.skip(
+                    reason='Parity tests require --parity-backend'
+                ),
+            )
+        ]
     if len(names) < 2:
         return [
             pytest.param(

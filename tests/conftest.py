@@ -33,7 +33,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help=(
             'Backend(s) for parity tests. Use comma-separated values or '
-            'repeat the option. Default: all available backends.'
+            'repeat the option. Default: parity tests are skipped.'
         ),
     )
     group.addoption(
