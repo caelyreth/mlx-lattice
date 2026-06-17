@@ -12,13 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  UV_FROZEN: "1"
+  UV_FROZEN: 1
   UV_LINK_MODE: copy
 
 jobs:
   quality:
     name: Python ${{ matrix.python-version }}
-    runs-on: macos-latest
+    runs-on: macos-26
 
     strategy:
       fail-fast: false
