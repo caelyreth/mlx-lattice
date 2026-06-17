@@ -5,6 +5,10 @@ using namespace metal;
 #include "native/backends/metal/conv/common.metal"
 #include "native/backends/metal/conv/dense_kernels.metal"
 
+// Specialized kernels share the generic convolution binding ABI, so some
+// bound buffers are intentionally unused by a given specialization.
+#pragma clang diagnostic ignored "-Wunused-parameter"
+
 template <int in_channels, int out_channels>
 [[kernel]] void sparse_relation_conv_f32_i32_cout16_dense(
     device const float* feats [[buffer(0)]],
