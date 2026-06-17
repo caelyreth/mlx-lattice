@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import mlx.nn as mxnn
+import pytest
 
 import mlx_lattice
 from mlx_lattice import SparseTensor
@@ -23,6 +24,8 @@ from tests.support import (
     assert_same_sparse_identity,
     mx,
 )
+
+pytestmark = [pytest.mark.nn, pytest.mark.usefixtures('selected_backend')]
 
 
 def _tensor() -> SparseTensor:

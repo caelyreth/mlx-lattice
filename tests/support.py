@@ -1,11 +1,28 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
 
 mx = pytest.importorskip('mlx.core')
+
+
+@dataclass(frozen=True)
+class Backend:
+    name: str
+    device: Any
+    supported_dtypes: tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class BackendRun:
+    backend: Backend
+
+    def __call__[T](self, fn: Callable[[], T]) -> T:
+        return run_on_backend(self.backend, fn)
 
 
 def assert_nested_close(
@@ -47,25 +64,139 @@ def active_feats(tensor: Any) -> Any:
     return tensor.feats[: active_count(tensor)]
 
 
-def skip_without_metal() -> None:
+def available_backend_names() -> list[str]:
+    return [backend.name for backend in available_backends()]
+
+
+def available_backends() -> list[Backend]:
     from mlx_lattice import backend_info
 
     info = cast('dict[str, Any]', backend_info())
     capabilities = cast('dict[str, bool]', info['capabilities'])
-    if not capabilities['metal']:
-        pytest.skip('Metal backend was not built')
-    if not hasattr(mx, 'metal') or not mx.metal.is_available():
-        pytest.skip('Metal device is not available')
+    backends = [
+        Backend('cpu', mx.cpu, (mx.float32, mx.float16)),
+    ]
+    if (
+        capabilities.get('metal', False)
+        and hasattr(mx, 'metal')
+        and mx.metal.is_available()
+    ):
+        backends.append(Backend('metal', mx.gpu, (mx.float32, mx.float16)))
+    if (
+        capabilities.get('cuda', False)
+        and hasattr(mx, 'cuda')
+        and mx.cuda.is_available()
+    ):
+        backends.append(Backend('cuda', mx.gpu, (mx.float32, mx.float16)))
+    return backends
 
 
-def run_with_gpu_default[T](fn: Callable[[], T]) -> T:
-    skip_without_metal()
+def backend_by_name(name: str) -> Backend:
+    for backend in available_backends():
+        if backend.name == name:
+            return backend
+    known = ', '.join(sorted(available_backend_names() or ['cpu']))
+    pytest.skip(f'Backend {name!r} is not available; available: {known}')
+
+
+def backend_params(config: pytest.Config) -> list[Any]:
+    names = _option_names(config, '--backend') or ['cpu']
+    return [
+        pytest.param(
+            name,
+            id=name,
+            marks=pytest.mark.backend,
+        )
+        for name in names
+    ]
+
+
+def parity_backend_params(config: pytest.Config) -> list[Any]:
+    names = _option_names(config, '--parity-backend')
+    if not names:
+        names = available_backend_names()
+    if len(names) < 2:
+        return [
+            pytest.param(
+                names,
+                id='insufficient-backends',
+                marks=pytest.mark.skip(
+                    reason='Parity requires at least two selected backends'
+                ),
+            )
+        ]
+    return [
+        pytest.param(
+            tuple(names),
+            id='-'.join(names),
+            marks=pytest.mark.parity,
+        )
+    ]
+
+
+def dtype_params(config: pytest.Config) -> list[Any]:
+    names = _option_names(config, '--dtype') or ['float32']
+    return [pytest.param(_dtype_by_name(name), id=name) for name in names]
+
+
+@pytest.fixture
+def backend(request: pytest.FixtureRequest) -> BackendRun:
+    name = cast('str', request.param)
+    return BackendRun(backend_by_name(name))
+
+
+@pytest.fixture
+def selected_backend(request: pytest.FixtureRequest):
+    name = cast('str', request.param)
+    with backend_default(backend_by_name(name)):
+        yield
+
+
+@pytest.fixture
+def parity_backends(request: pytest.FixtureRequest) -> tuple[Backend, ...]:
+    names = cast('Sequence[str]', request.param)
+    return tuple(backend_by_name(name) for name in names)
+
+
+@contextmanager
+def backend_default(backend: Backend):
     previous = mx.default_device()
     try:
-        mx.set_default_device(mx.gpu)
-        return fn()
+        mx.set_default_device(backend.device)
+        yield
     finally:
         mx.set_default_device(previous)
+
+
+def run_on_backend[T](backend: Backend, fn: Callable[[], T]) -> T:
+    with backend_default(backend):
+        return fn()
+
+
+def run_on_backends[T](
+    backends: Sequence[Backend],
+    fn: Callable[[], T],
+) -> dict[str, T]:
+    return {
+        backend.name: run_on_backend(backend, fn) for backend in backends
+    }
+
+
+def assert_backend_parity(
+    results: dict[str, object],
+    *,
+    abs: float = 1e-6,
+) -> None:
+    items = list(results.items())
+    assert len(items) >= 2
+    reference_name, reference = items[0]
+    for name, actual in items[1:]:
+        try:
+            assert_nested_close(actual, reference, abs=abs)
+        except AssertionError as exc:
+            raise AssertionError(
+                f'{name} output differs from {reference_name}'
+            ) from exc
 
 
 def line_tensor() -> Any:
@@ -78,3 +209,25 @@ def line_tensor() -> Any:
         ),
         mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32),
     )
+
+
+def _option_names(config: pytest.Config, option: str) -> list[str]:
+    values = cast('list[str] | None', config.getoption(option))
+    if not values:
+        return []
+    names: list[str] = []
+    for value in values:
+        names.extend(
+            part.strip() for part in value.split(',') if part.strip()
+        )
+    return names
+
+
+def _dtype_by_name(name: str) -> Any:
+    match name:
+        case 'float32':
+            return mx.float32
+        case 'float16':
+            return mx.float16
+        case _:
+            raise pytest.UsageError(f'Unknown dtype {name!r}')

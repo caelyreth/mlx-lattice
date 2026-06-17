@@ -15,8 +15,13 @@ from tests.support import (
     active_feats,
     assert_nested_close,
     mx,
-    run_with_gpu_default,
 )
+
+pytestmark = [
+    pytest.mark.ops,
+    pytest.mark.quantization,
+    pytest.mark.usefixtures('selected_backend'),
+]
 
 
 def _active_rows(values: mx.array, count: mx.array) -> list[int]:
@@ -188,82 +193,3 @@ def test_quantization_ops_reject_ambiguous_contracts() -> None:
         voxelize(points, feats, reduction=cast('str', 'max'))
     with pytest.raises(ValueError, match='matching rows'):
         voxelize(points, mx.ones((3, 1), dtype=mx.float32))
-
-
-def test_metal_quantization_and_voxelization_match_cpu_contract_when_available() -> (
-    None
-):
-    def run() -> tuple[
-        list[list[int]],
-        list[int],
-        list[int],
-        list[list[float]],
-        list[list[float]],
-        list[int],
-    ]:
-        points = mx.array(
-            [
-                [0.2, 0.2, 0.2],
-                [0.8, 0.1, 0.1],
-                [1.2, 0.0, 0.0],
-                [-0.1, 0.0, 0.0],
-                [0.0, 2.1, 0.0],
-            ],
-            dtype=mx.float32,
-        )
-        feats = mx.array(
-            [[1.0], [3.0], [5.0], [7.0], [11.0]],
-            dtype=mx.float32,
-        )
-        batches = mx.array([0, 0, 0, 0, 1], dtype=mx.int32)
-        quantized = sparse_quantize(points, batch_indices=batches)
-        mean = voxelize(
-            points,
-            feats,
-            batch_indices=batches,
-            reduction='mean',
-        )
-        summed = voxelize(
-            points,
-            feats,
-            batch_indices=batches,
-            reduction='sum',
-        )
-        mx.eval(
-            quantized.coords,
-            quantized.active_rows,
-            quantized.inverse_rows,
-            quantized.counts,
-            mean.feats,
-            summed.feats,
-            mean.active_rows,
-        )
-        return (
-            _active_coords(quantized.coords, quantized.active_count),
-            cast('list[int]', quantized.inverse_rows.tolist()),
-            _active_rows(quantized.counts, quantized.active_count),
-            active_feats(mean).tolist(),
-            active_feats(summed).tolist(),
-            cast('list[int]', mean.active_rows.tolist()),
-        )
-
-    (
-        coords,
-        inverse_rows,
-        counts,
-        mean_feats,
-        sum_feats,
-        active_rows,
-    ) = run_with_gpu_default(run)
-
-    assert coords == [
-        [0, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, -1, 0, 0],
-        [1, 0, 2, 0],
-    ]
-    assert inverse_rows == [0, 0, 1, 2, 3]
-    assert counts == [2, 1, 1, 1]
-    assert_nested_close(mean_feats, [[2.0], [5.0], [7.0], [11.0]])
-    assert_nested_close(sum_feats, [[4.0], [5.0], [7.0], [11.0]])
-    assert active_rows == [4]

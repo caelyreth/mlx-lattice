@@ -4,6 +4,7 @@ from itertools import pairwise
 from typing import cast
 
 import mlx.core as mx
+import pytest
 
 from mlx_lattice.ops import (
     normalized_cdf,
@@ -14,6 +15,12 @@ from mlx_lattice.ops import (
     rans_decode_from_prob,
     rans_encode_from_prob,
 )
+
+pytestmark = [
+    pytest.mark.ops,
+    pytest.mark.entropy,
+    pytest.mark.usefixtures('selected_backend'),
+]
 
 
 def test_normalized_cdf_is_strictly_monotonic() -> None:

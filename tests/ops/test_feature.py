@@ -25,6 +25,12 @@ from tests.support import (
     mx,
 )
 
+pytestmark = [
+    pytest.mark.ops,
+    pytest.mark.feature,
+    pytest.mark.usefixtures('selected_backend'),
+]
+
 
 def _tensor() -> SparseTensor:
     return SparseTensor(
