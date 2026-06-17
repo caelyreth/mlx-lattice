@@ -16,8 +16,8 @@ env:
   UV_LINK_MODE: copy
 
 jobs:
-  quality:
-    name: Mathematical Parity Check
+  macos-parity:
+    name: Parity Check (macOS)
     runs-on: macos-26
 
     steps:
