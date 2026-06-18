@@ -17,12 +17,17 @@ env:
 
 jobs:
   quality:
-    name: Python ${{ matrix.python-version }} Quick Check
-    runs-on: macos-26
+    name: Python ${{ matrix.python-version }} Quick Check (${{ matrix.os.name }})
+    runs-on: ${{ matrix.os.runner }}
 
     strategy:
       fail-fast: false
       matrix:
+        os:
+          - runner: macos-26
+            name: macOS
+          - runner: ubuntu-latest
+            name: Linux
         python-version: ["3.12", "3.14"]
 
     steps:
@@ -55,4 +60,5 @@ jobs:
         run: uv run --no-sync pytest --backend cpu
 
       - name: Test for Metal backend
+        if: runner.os == 'macOS'
         run: uv run --no-sync pytest --backend metal
