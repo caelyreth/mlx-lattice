@@ -18,6 +18,7 @@ from mlx_lattice.ops import (
     sparse_collate,
 )
 from tests.support import (
+    Backend,
     active_coords,
     active_feats,
     assert_nested_close,
@@ -173,7 +174,9 @@ def test_sparse_operator_modules_are_autogradable() -> None:
     assert mx.grad(pool_loss)(feats).tolist() == [[2.0], [3.0], [2.0]]
 
 
-def test_feature_modules_support_mlx_transform_surface() -> None:
+def test_feature_modules_support_mlx_transform_surface(
+    selected_backend: Backend,
+) -> None:
     coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
     feats = mx.array([[-1.0, 2.0], [3.0, -4.0]], dtype=mx.float32)
     tangent = mx.ones_like(feats)
@@ -198,7 +201,6 @@ def test_feature_modules_support_mlx_transform_surface() -> None:
         [mx.ones((2, 2), dtype=mx.float32)],
     )
     _, input_jvps = mx.jvp(features, [feats], [tangent])
-    compiled = mx.compile(features)
 
     assert value.tolist() == 13.0
     assert outputs[0].tolist() == [[5.0, 8.0], [0.0, 0.0]]
@@ -209,12 +211,13 @@ def test_feature_modules_support_mlx_transform_surface() -> None:
     assert param_grads['bias'].tolist() == [1.0, 1.0]
     assert input_vjps[0].tolist() == [[7.0, 10.0], [0.0, 0.0]]
     assert input_jvps[0].tolist() == [[5.0, 12.0], [0.0, 0.0]]
-    assert compiled(feats).tolist() == outputs[0].tolist()
+    if selected_backend.supports_compile:
+        assert mx.compile(features)(feats).tolist() == outputs[0].tolist()
 
 
-def test_convolution_modules_support_mlx_transform_surface_across_modes() -> (
-    None
-):
+def test_convolution_modules_support_mlx_transform_surface_across_modes(
+    selected_backend: Backend,
+) -> None:
     conv_coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
@@ -341,17 +344,19 @@ def test_convolution_modules_support_mlx_transform_surface_across_modes() -> (
             [mx.ones_like(mx.array(expected_out, dtype=mx.float32))],
         )
         _, input_jvps = mx.jvp(features, [feats], [mx.ones_like(feats)])
-        compiled = mx.compile(features)
 
         assert outputs[0].tolist() == expected_out
         assert value.tolist() == mx.sum(outputs[0]).tolist()
         assert input_vjps[0].tolist() == expected_input_grad
         assert input_jvps[0].tolist() == expected_jvp
         assert param_grads['weight'].tolist() == expected_weight_grad
-        assert compiled(feats).tolist() == expected_out
+        if selected_backend.supports_compile:
+            assert mx.compile(features)(feats).tolist() == expected_out
 
 
-def test_pool_modules_support_mlx_transform_surface() -> None:
+def test_pool_modules_support_mlx_transform_surface(
+    selected_backend: Backend,
+) -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
@@ -373,7 +378,8 @@ def test_pool_modules_support_mlx_transform_surface() -> None:
     assert outputs[0].tolist() == [[2.0], [2.0], [2.0]]
     assert input_vjps[0].tolist() == [[1.0], [2.0], [0.0]]
     assert input_jvps[0].tolist() == [[10.0], [10.0], [20.0]]
-    assert mx.compile(maxed)(feats).tolist() == outputs[0].tolist()
+    if selected_backend.supports_compile:
+        assert mx.compile(maxed)(feats).tolist() == outputs[0].tolist()
 
     def summed(feats_arg: mx.array) -> mx.array:
         module = lnn.SumPool3d(kernel_size=(3, 1, 1), stride=1)
@@ -383,11 +389,12 @@ def test_pool_modules_support_mlx_transform_surface() -> None:
         module = lnn.AvgPool3d(kernel_size=(3, 1, 1), stride=1)
         return module(SparseTensor(coords, feats_arg)).feats
 
-    assert mx.compile(summed)(feats).tolist() == [[4.0], [5.0], [3.0]]
-    assert_nested_close(
-        mx.compile(averaged)(feats).tolist(),
-        [[2.0], [5.0 / 3.0], [1.5]],
-    )
+    if selected_backend.supports_compile:
+        assert mx.compile(summed)(feats).tolist() == [[4.0], [5.0], [3.0]]
+        assert_nested_close(
+            mx.compile(averaged)(feats).tolist(),
+            [[2.0], [5.0 / 3.0], [1.5]],
+        )
 
 
 def test_transpose_and_pool_modules_wrap_sparse_policies() -> None:

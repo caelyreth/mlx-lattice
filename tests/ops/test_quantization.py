@@ -11,6 +11,7 @@ from mlx_lattice.ops import (
     voxelize_with_quantization,
 )
 from tests.support import (
+    Backend,
     active_coords,
     active_feats,
     assert_nested_close,
@@ -153,7 +154,9 @@ def test_voxelize_with_quantization_reuses_native_map() -> None:
     )
 
 
-def test_voxelize_feature_aggregation_is_autogradable() -> None:
+def test_voxelize_feature_aggregation_is_autogradable(
+    selected_backend: Backend,
+) -> None:
     points = mx.array(
         [[0.1, 0.0, 0.0], [0.9, 0.0, 0.0], [1.1, 0.0, 0.0]],
         dtype=mx.float32,
@@ -170,11 +173,12 @@ def test_voxelize_feature_aggregation_is_autogradable() -> None:
     grads = mx.grad(loss)(feats)
     _, jvps = mx.jvp(features, [feats], [tangent])
     jvp_values = jvps[0] if isinstance(jvps, list) else jvps
-    compiled = mx.compile(features)(feats)
 
     assert_nested_close(grads.tolist(), [[0.5], [0.5], [1.0]])
     assert_nested_close(jvp_values.tolist()[:2], [[15.0], [30.0]])
-    assert_nested_close(compiled.tolist()[:2], [[2.0], [5.0]])
+    if selected_backend.supports_compile:
+        compiled = mx.compile(features)(feats)
+        assert_nested_close(compiled.tolist()[:2], [[2.0], [5.0]])
 
 
 def test_quantization_ops_reject_ambiguous_contracts() -> None:

@@ -20,6 +20,7 @@ from mlx_lattice.ops import (
     tanh,
 )
 from tests.support import (
+    Backend,
     assert_nested_close,
     assert_same_sparse_identity,
     mx,
@@ -108,7 +109,9 @@ def test_normalization_feature_ops_apply_affine_parameters() -> None:
     assert_same_sparse_identity(rms, x)
 
 
-def test_feature_ops_support_grad_vjp_jvp_and_compile() -> None:
+def test_feature_ops_support_grad_vjp_jvp_and_compile(
+    selected_backend: Backend,
+) -> None:
     coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
     feats = mx.array([[-1.0, 2.0], [3.0, -4.0]], dtype=mx.float32)
     weight = mx.array([[2.0, 3.0], [5.0, 7.0]], dtype=mx.float32)
@@ -143,8 +146,6 @@ def test_feature_ops_support_grad_vjp_jvp_and_compile() -> None:
         [feats, weight, bias],
         [mx.ones_like(feats), mx.ones_like(weight), mx.ones_like(bias)],
     )
-    compiled = mx.compile(features)
-
     assert outputs[0].tolist() == [[5.0, 8.0], [0.0, 0.0]]
     assert grad_feats.tolist() == [[7.0, 10.0], [0.0, 0.0]]
     assert grad_weight.tolist() == [[-1.0, 2.0], [-1.0, 2.0]]
@@ -155,7 +156,11 @@ def test_feature_ops_support_grad_vjp_jvp_and_compile() -> None:
         [1.0, 1.0],
     ]
     assert jvps[0].tolist() == [[7.0, 14.0], [0.0, 0.0]]
-    assert compiled(feats, weight, bias).tolist() == outputs[0].tolist()
+    if selected_backend.supports_compile:
+        assert (
+            mx.compile(features)(feats, weight, bias).tolist()
+            == outputs[0].tolist()
+        )
 
 
 def test_feature_ops_reject_invalid_contracts() -> None:

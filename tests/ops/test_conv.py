@@ -10,6 +10,7 @@ from mlx_lattice.ops import (
     subm_conv3d,
 )
 from tests.support import (
+    Backend,
     active_coords,
     active_feats,
     assert_nested_close,
@@ -327,7 +328,12 @@ def test_conv3d_generic_supports_explicit_vjp_and_jvp_transforms() -> None:
     assert jvps[0].tolist() == [[8.0], [12.0], [8.0]]
 
 
-def test_convolution_modes_are_compatible_with_mx_compile() -> None:
+def test_convolution_modes_are_compatible_with_mx_compile(
+    selected_backend: Backend,
+) -> None:
+    if not selected_backend.supports_compile:
+        pytest.skip(f'{selected_backend.name} does not support mx.compile')
+
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,

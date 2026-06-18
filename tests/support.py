@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ class Backend:
     name: str
     device: Any
     supported_dtypes: tuple[Any, ...]
+    supports_compile: bool
 
 
 @dataclass(frozen=True)
@@ -80,20 +82,29 @@ def available_backends() -> list[Backend]:
     info = cast('dict[str, Any]', backend_info())
     capabilities = cast('dict[str, bool]', info['capabilities'])
     backends = [
-        Backend('cpu', mx.cpu, (mx.float32, mx.float16)),
+        Backend(
+            'cpu',
+            mx.cpu,
+            (mx.float32, mx.float16),
+            platform.system() == 'Darwin',
+        ),
     ]
     if (
         capabilities.get('metal', False)
         and hasattr(mx, 'metal')
         and mx.metal.is_available()
     ):
-        backends.append(Backend('metal', mx.gpu, (mx.float32, mx.float16)))
+        backends.append(
+            Backend('metal', mx.gpu, (mx.float32, mx.float16), True)
+        )
     if (
         capabilities.get('cuda', False)
         and hasattr(mx, 'cuda')
         and mx.cuda.is_available()
     ):
-        backends.append(Backend('cuda', mx.gpu, (mx.float32, mx.float16)))
+        backends.append(
+            Backend('cuda', mx.gpu, (mx.float32, mx.float16), True)
+        )
     return backends
 
 
@@ -162,8 +173,9 @@ def backend(request: pytest.FixtureRequest) -> BackendRun:
 @pytest.fixture
 def selected_backend(request: pytest.FixtureRequest):
     name = cast('str', request.param)
-    with backend_default(backend_by_name(name)):
-        yield
+    selected = backend_by_name(name)
+    with backend_default(selected):
+        yield selected
 
 
 @pytest.fixture

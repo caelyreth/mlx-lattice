@@ -16,6 +16,7 @@ from mlx_lattice.ops import (
     sum_pool3d,
 )
 from tests.support import (
+    Backend,
     active_coords,
     active_feats,
     assert_nested_close,
@@ -117,7 +118,12 @@ def test_max_pool3d_tie_policy_matches_mlx_transform_contract() -> None:
     assert jvps[0].tolist() == [[10.0], [10.0], [20.0]]
 
 
-def test_pooling_modes_are_compatible_with_mx_compile() -> None:
+def test_pooling_modes_are_compatible_with_mx_compile(
+    selected_backend: Backend,
+) -> None:
+    if not selected_backend.supports_compile:
+        pytest.skip(f'{selected_backend.name} does not support mx.compile')
+
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
         dtype=mx.int32,
