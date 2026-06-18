@@ -8,10 +8,6 @@
 #include "backends/metal/tensor_ops/conv/input_grad/runtime.h"
 #include "backends/metal/tensor_ops/conv/weight_grad/runtime.h"
 
-#ifdef _METAL_
-#include "mlx/backend/metal/device.h"
-#endif
-
 namespace mlx_lattice::backend::metal::conv {
 namespace {
 
@@ -20,13 +16,6 @@ int stride_at(const mx::array& array, int dim) {
 }
 
 #ifdef _METAL_
-template <typename Encoder, typename Kernel>
-void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
-    auto threads = std::max<size_t>(elements, 1);
-    auto group = std::min(threads, kernel->maxTotalThreadsPerThreadgroup());
-    encoder.dispatch_threads(MTL::Size(threads, 1, 1), MTL::Size(group, 1, 1));
-}
-
 template <typename Encoder>
 void bind_common_shape(
     Encoder& encoder,
@@ -35,10 +24,14 @@ void bind_common_shape(
     int first_index
 ) {
     auto edge_capacity = static_cast<int>(inputs[2].shape(0));
-    encoder.set_bytes(edge_capacity, first_index);
-    encoder.set_bytes(shape.out_capacity, first_index + 1);
-    encoder.set_bytes(shape.in_channels, first_index + 2);
-    encoder.set_bytes(shape.out_channels, first_index + 3);
+    set_bytes_range(
+        encoder,
+        first_index,
+        edge_capacity,
+        shape.out_capacity,
+        shape.in_channels,
+        shape.out_channels
+    );
 }
 
 template <typename Encoder>
@@ -48,19 +41,19 @@ void bind_weight_shape(
     SparseConvShape shape,
     int first_index
 ) {
-    encoder.set_bytes(stride_at(weights, 0), first_index);
-    encoder.set_bytes(stride_at(weights, 1), first_index + 1);
-    encoder.set_bytes(stride_at(weights, 2), first_index + 2);
-    encoder.set_bytes(
-        weights.ndim() == 5 ? stride_at(weights, 3) : 0, first_index + 3
+    set_bytes_range(
+        encoder,
+        first_index,
+        stride_at(weights, 0),
+        stride_at(weights, 1),
+        stride_at(weights, 2),
+        weights.ndim() == 5 ? stride_at(weights, 3) : 0,
+        weights.ndim() == 5 ? stride_at(weights, 4) : 0,
+        shape.weight_layout,
+        shape.kernel_x,
+        shape.kernel_y,
+        shape.kernel_z
     );
-    encoder.set_bytes(
-        weights.ndim() == 5 ? stride_at(weights, 4) : 0, first_index + 4
-    );
-    encoder.set_bytes(shape.weight_layout, first_index + 5);
-    encoder.set_bytes(shape.kernel_x, first_index + 6);
-    encoder.set_bytes(shape.kernel_y, first_index + 7);
-    encoder.set_bytes(shape.kernel_z, first_index + 8);
 }
 
 template <typename Encoder, typename Library>
@@ -74,7 +67,7 @@ void clear_output(
     encoder.set_compute_pipeline_state(clear);
     encoder.set_output_array(out, 0);
     auto total = static_cast<int>(out.size());
-    encoder.set_bytes(total, 1);
+    set_bytes_range(encoder, 1, total);
     dispatch_1d(encoder, clear, static_cast<size_t>(total));
 }
 
@@ -190,85 +183,80 @@ const char* dense_forward_kernel_name(SparseConvShape shape, bool fp16) {
 }
 
 const char* dense_input_grad_kernel_name(SparseConvShape shape, bool fp16) {
-    if (shape.in_channels == 16 && shape.out_channels == 32) {
-        return typed_kernel_name(
-            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin16_"
-            "cout32",
-            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin16_"
-            "cout32",
-            fp16
-        );
-    }
-    if (shape.in_channels == 16 && shape.out_channels == 64) {
-        return typed_kernel_name(
-            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin16_"
-            "cout64",
-            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin16_"
-            "cout64",
-            fp16
-        );
-    }
-    if (shape.in_channels == 64 && shape.out_channels == 16) {
-        return typed_kernel_name(
-            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin64_"
-            "cout16",
-            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin64_"
-            "cout16",
-            fp16
-        );
-    }
-    if (shape.in_channels == 16) {
-        return typed_kernel_name(
-            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_c16",
-            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c16",
-            fp16
-        );
-    }
-    if (shape.in_channels == 32) {
-        return typed_kernel_name(
-            "sparse_relation_conv_input_grad_f32_i32_cin4_dense_c32",
-            "sparse_relation_conv_input_grad_f16_i32_cin4_dense_c32",
-            fp16
-        );
-    }
-    return typed_kernel_name(
-        "sparse_relation_conv_input_grad_f32_i32_cin4_dense_c64",
-        "sparse_relation_conv_input_grad_f16_i32_cin4_dense_c64",
-        fp16
+    static constexpr ChannelKernelName kDenseInputGradKernels[] = {
+        {16,
+         16,
+         {"sparse_relation_conv_input_grad_f32_i32_cin16_dense_c16",
+          "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c16"}},
+        {16,
+         32,
+         {"sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin16_"
+          "cout32",
+          "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin16_"
+          "cout32"}},
+        {16,
+         64,
+         {"sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin16_"
+          "cout64",
+          "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin16_"
+          "cout64"}},
+        {32,
+         32,
+         {"sparse_relation_conv_input_grad_f32_i32_cin4_dense_c32",
+          "sparse_relation_conv_input_grad_f16_i32_cin4_dense_c32"}},
+        {64,
+         16,
+         {"sparse_relation_conv_input_grad_f32_i32_cin16_dense_cin64_"
+          "cout16",
+          "sparse_relation_conv_input_grad_f16_i32_cin16_dense_cin64_"
+          "cout16"}},
+        {64,
+         64,
+         {"sparse_relation_conv_input_grad_f32_i32_cin4_dense_c64",
+          "sparse_relation_conv_input_grad_f16_i32_cin4_dense_c64"}},
+    };
+    return find_channel_kernel_name(
+        kDenseInputGradKernels, std::size(kDenseInputGradKernels), shape, fp16
     );
 }
 
 const char*
 dense_input_grad_grouped_kernel_name(SparseConvShape shape, bool fp16) {
-    if (shape.in_channels == 32) {
-        return typed_kernel_name(
-            "sparse_relation_conv_input_grad_f32_i32_cin16_dense_c32",
-            "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c32",
-            fp16
-        );
-    }
-    return "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c64";
+    static constexpr ChannelKernelName kGroupedDenseInputGradKernels[] = {
+        {32,
+         32,
+         {"sparse_relation_conv_input_grad_f32_i32_cin16_dense_c32",
+          "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c32"}},
+        {64,
+         64,
+         {"sparse_relation_conv_input_grad_f16_i32_cin16_dense_c64",
+          "sparse_relation_conv_input_grad_f16_i32_cin16_dense_c64"}},
+    };
+    return find_channel_kernel_name(
+        kGroupedDenseInputGradKernels,
+        std::size(kGroupedDenseInputGradKernels),
+        shape,
+        fp16
+    );
 }
 
 const char* dense_weight_grad_kernel_name(SparseConvShape shape, bool fp16) {
-    if (shape.in_channels == 16) {
-        return typed_kernel_name(
-            "sparse_relation_conv_weight_grad_f32_i32_c4_dense_c16",
-            "sparse_relation_conv_weight_grad_f16_i32_c4_dense_c16",
-            fp16
-        );
-    }
-    if (shape.in_channels == 32) {
-        return typed_kernel_name(
-            "sparse_relation_conv_weight_grad_f32_i32_c4_dense_c32",
-            "sparse_relation_conv_weight_grad_f16_i32_c4_dense_c32",
-            fp16
-        );
-    }
-    return typed_kernel_name(
-        "sparse_relation_conv_weight_grad_f32_i32_c4_dense_c64",
-        "sparse_relation_conv_weight_grad_f16_i32_c4_dense_c64",
-        fp16
+    static constexpr ChannelKernelName kDenseWeightGradKernels[] = {
+        {16,
+         16,
+         {"sparse_relation_conv_weight_grad_f32_i32_c4_dense_c16",
+          "sparse_relation_conv_weight_grad_f16_i32_c4_dense_c16"}},
+        {32,
+         32,
+         {"sparse_relation_conv_weight_grad_f32_i32_c4_dense_c32",
+          "sparse_relation_conv_weight_grad_f16_i32_c4_dense_c32"}},
+        {64,
+         64,
+         {"sparse_relation_conv_weight_grad_f32_i32_c4_dense_c64",
+          "sparse_relation_conv_weight_grad_f16_i32_c4_dense_c64"}},
+    };
+    return find_channel_kernel_name(
+        kDenseWeightGradKernels, std::size(kDenseWeightGradKernels), shape, fp16
     );
 }
 
@@ -324,19 +312,23 @@ void encode_weight_grad_classic(
         encoder.set_input_array(inputs[index], index);
     }
     encoder.set_output_array(out, 9);
-    encoder.set_bytes(edge_count, 10);
-    encoder.set_bytes(shape.out_capacity, 11);
-    encoder.set_bytes(shape.n_kernels, 12);
-    encoder.set_bytes(shape.in_channels, 13);
-    encoder.set_bytes(shape.out_channels, 14);
-    encoder.set_bytes(stride_at(inputs[0], 0), 15);
-    encoder.set_bytes(stride_at(inputs[0], 1), 16);
-    encoder.set_bytes(stride_at(inputs[1], 0), 17);
-    encoder.set_bytes(stride_at(inputs[1], 1), 18);
-    encoder.set_bytes(shape.weight_layout, 19);
-    encoder.set_bytes(shape.kernel_x, 20);
-    encoder.set_bytes(shape.kernel_y, 21);
-    encoder.set_bytes(shape.kernel_z, 22);
+    set_bytes_range(
+        encoder,
+        10,
+        edge_count,
+        shape.out_capacity,
+        shape.n_kernels,
+        shape.in_channels,
+        shape.out_channels,
+        stride_at(inputs[0], 0),
+        stride_at(inputs[0], 1),
+        stride_at(inputs[1], 0),
+        stride_at(inputs[1], 1),
+        shape.weight_layout,
+        shape.kernel_x,
+        shape.kernel_y,
+        shape.kernel_z
+    );
     if (use_dense_c) {
         auto blocks = static_cast<size_t>(shape.in_channels / 4);
         auto total_tiles =
@@ -427,8 +419,9 @@ void eval(
     }
     encoder.set_output_array(out, 7);
     bind_common_shape(encoder, inputs, shape, 8);
-    encoder.set_bytes(stride_at(inputs[0], 0), 12);
-    encoder.set_bytes(stride_at(inputs[0], 1), 13);
+    set_bytes_range(
+        encoder, 12, stride_at(inputs[0], 0), stride_at(inputs[0], 1)
+    );
     bind_weight_shape(encoder, inputs[1], shape, 14);
     auto work_items =
         use_dense_c && shape.out_channels > 16
@@ -503,13 +496,17 @@ void eval_input_grad(
         encoder.set_input_array(inputs[index], index);
     }
     encoder.set_output_array(out, 9);
-    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 10);
-    encoder.set_bytes(shape.out_capacity, 11);
-    encoder.set_bytes(shape.in_capacity, 12);
-    encoder.set_bytes(shape.in_channels, 13);
-    encoder.set_bytes(shape.out_channels, 14);
-    encoder.set_bytes(stride_at(inputs[0], 0), 15);
-    encoder.set_bytes(stride_at(inputs[0], 1), 16);
+    set_bytes_range(
+        encoder,
+        10,
+        static_cast<int>(inputs[2].shape(0)),
+        shape.out_capacity,
+        shape.in_capacity,
+        shape.in_channels,
+        shape.out_channels,
+        stride_at(inputs[0], 0),
+        stride_at(inputs[0], 1)
+    );
     bind_weight_shape(encoder, inputs[1], shape, 17);
     auto work_items =
         use_grouped_dense_c ? static_cast<size_t>(shape.in_capacity) *

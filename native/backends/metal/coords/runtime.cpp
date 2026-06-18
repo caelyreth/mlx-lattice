@@ -91,17 +91,6 @@ struct StableCompactBuffers {
 constexpr int kStableCompactBlockSize = 256;
 constexpr int kParallelCompactThreshold = 4096;
 
-template <typename Encoder, typename Kernel>
-void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
-    auto threads = std::max<size_t>(elements, 1);
-    auto group = std::min(threads, kernel->maxTotalThreadsPerThreadgroup());
-    encoder.dispatch_threads(MTL::Size(threads, 1, 1), MTL::Size(group, 1, 1));
-}
-
-template <typename Encoder> void dispatch_single(Encoder& encoder) {
-    encoder.dispatch_threads(MTL::Size(1, 1, 1), MTL::Size(1, 1, 1));
-}
-
 template <typename Encoder>
 void bind_input_arrays(
     Encoder& encoder,

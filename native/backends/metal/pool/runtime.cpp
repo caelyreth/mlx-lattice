@@ -7,7 +7,6 @@
 #include "backends/metal/runtime_utils.h"
 
 #ifdef _METAL_
-#include "mlx/backend/metal/device.h"
 #endif
 
 namespace mlx_lattice::backend::metal::pool {
@@ -29,13 +28,6 @@ int stride_at(const mx::array& array, int dim) {
 }
 
 #ifdef _METAL_
-template <typename Encoder, typename Kernel>
-void dispatch_1d(Encoder& encoder, Kernel* kernel, size_t elements) {
-    auto threads = std::max<size_t>(elements, 1);
-    auto group = std::min(threads, kernel->maxTotalThreadsPerThreadgroup());
-    encoder.dispatch_threads(MTL::Size(threads, 1, 1), MTL::Size(group, 1, 1));
-}
-
 template <typename Encoder>
 void bind_forward_shape(
     Encoder& encoder,
@@ -43,11 +35,15 @@ void bind_forward_shape(
     PoolReduceOp reduce,
     SparsePoolShape shape
 ) {
-    encoder.set_bytes(reduce_id(reduce), 7);
-    encoder.set_bytes(shape.out_capacity, 8);
-    encoder.set_bytes(shape.channels, 9);
-    encoder.set_bytes(stride_at(inputs[0], 0), 10);
-    encoder.set_bytes(stride_at(inputs[0], 1), 11);
+    set_bytes_range(
+        encoder,
+        7,
+        reduce_id(reduce),
+        shape.out_capacity,
+        shape.channels,
+        stride_at(inputs[0], 0),
+        stride_at(inputs[0], 1)
+    );
 }
 
 template <typename Encoder>
@@ -58,17 +54,21 @@ void bind_autodiff_shape(
     SparsePoolShape shape,
     int first_index
 ) {
-    encoder.set_bytes(reduce_id(reduce), first_index);
-    encoder.set_bytes(shape.in_capacity, first_index + 1);
-    encoder.set_bytes(shape.out_capacity, first_index + 2);
-    encoder.set_bytes(shape.n_kernels, first_index + 3);
-    encoder.set_bytes(shape.channels, first_index + 4);
-    encoder.set_bytes(stride_at(inputs[0], 0), first_index + 5);
-    encoder.set_bytes(stride_at(inputs[0], 1), first_index + 6);
-    encoder.set_bytes(stride_at(inputs[1], 0), first_index + 7);
-    encoder.set_bytes(stride_at(inputs[1], 1), first_index + 8);
-    encoder.set_bytes(stride_at(inputs[2], 0), first_index + 9);
-    encoder.set_bytes(stride_at(inputs[2], 1), first_index + 10);
+    set_bytes_range(
+        encoder,
+        first_index,
+        reduce_id(reduce),
+        shape.in_capacity,
+        shape.out_capacity,
+        shape.n_kernels,
+        shape.channels,
+        stride_at(inputs[0], 0),
+        stride_at(inputs[0], 1),
+        stride_at(inputs[1], 0),
+        stride_at(inputs[1], 1),
+        stride_at(inputs[2], 0),
+        stride_at(inputs[2], 1)
+    );
 }
 #endif
 

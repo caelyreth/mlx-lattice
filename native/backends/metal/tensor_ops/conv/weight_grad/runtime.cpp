@@ -9,7 +9,6 @@
 #include "backends/metal/tensor_ops/capabilities.h"
 
 #ifdef _METAL_
-#include "mlx/backend/metal/device.h"
 #endif
 
 namespace mlx_lattice::backend::metal::tensor_ops::conv::weight_grad {
@@ -38,12 +37,6 @@ int partition_count(SparseConvShape shape) {
     return std::clamp(partitions, 1, kMaxPartitions);
 }
 
-template <typename Encoder, typename Kernel>
-void dispatch_1d(Encoder& encoder, Kernel* kernel, std::size_t elements) {
-    auto threads = std::max<std::size_t>(elements, 1);
-    auto group = std::min(threads, kernel->maxTotalThreadsPerThreadgroup());
-    encoder.dispatch_threads(MTL::Size(threads, 1, 1), MTL::Size(group, 1, 1));
-}
 #endif
 
 } // namespace
@@ -97,16 +90,20 @@ void encode(
     encoder.set_input_array(inputs[7], 5);
     encoder.set_input_array(inputs[8], 6);
     encoder.set_output_array(partials, 7);
-    encoder.set_bytes(static_cast<int>(inputs[2].shape(0)), 8);
-    encoder.set_bytes(shape.out_capacity, 9);
-    encoder.set_bytes(shape.n_kernels, 10);
-    encoder.set_bytes(partitions, 11);
-    encoder.set_bytes(static_cast<int>(inputs[0].strides(0)), 12);
-    encoder.set_bytes(static_cast<int>(inputs[0].strides(1)), 13);
-    encoder.set_bytes(static_cast<int>(inputs[1].strides(0)), 14);
-    encoder.set_bytes(static_cast<int>(inputs[1].strides(1)), 15);
-    encoder.set_bytes(shape.in_channels, 16);
-    encoder.set_bytes(shape.out_channels, 17);
+    set_bytes_range(
+        encoder,
+        8,
+        static_cast<int>(inputs[2].shape(0)),
+        shape.out_capacity,
+        shape.n_kernels,
+        partitions,
+        static_cast<int>(inputs[0].strides(0)),
+        static_cast<int>(inputs[0].strides(1)),
+        static_cast<int>(inputs[1].strides(0)),
+        static_cast<int>(inputs[1].strides(1)),
+        shape.in_channels,
+        shape.out_channels
+    );
     encoder.dispatch_threadgroups(
         MTL::Size(
             static_cast<std::size_t>(shape.n_kernels) *
@@ -127,14 +124,18 @@ void encode(
     encoder.set_compute_pipeline_state(reduce);
     encoder.set_input_array(partials, 0);
     encoder.set_output_array(out, 1);
-    encoder.set_bytes(shape.n_kernels, 2);
-    encoder.set_bytes(partitions, 3);
-    encoder.set_bytes(shape.weight_layout, 4);
-    encoder.set_bytes(shape.kernel_x, 5);
-    encoder.set_bytes(shape.kernel_y, 6);
-    encoder.set_bytes(shape.kernel_z, 7);
-    encoder.set_bytes(shape.in_channels, 8);
-    encoder.set_bytes(shape.out_channels, 9);
+    set_bytes_range(
+        encoder,
+        2,
+        shape.n_kernels,
+        partitions,
+        shape.weight_layout,
+        shape.kernel_x,
+        shape.kernel_y,
+        shape.kernel_z,
+        shape.in_channels,
+        shape.out_channels
+    );
     dispatch_1d(
         encoder,
         reduce,
