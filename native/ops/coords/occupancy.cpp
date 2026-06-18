@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "backends/cpu/coords/algorithms.h"
-#include "backends/metal/coords/runtime.h"
+#include "backends/gpu.h"
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
 #include "ops/coords/streams.h"
@@ -40,7 +40,7 @@ class OccupancyDownsample final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_occupancy_downsample(
+        backend::gpu::coords::eval_occupancy_downsample(
             shape_, stream(), inputs, outputs
         );
     }
@@ -75,7 +75,9 @@ class OccupancyExpand final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_occupancy_expand(shape_, stream(), inputs, outputs);
+        backend::gpu::coords::eval_occupancy_expand(
+            shape_, stream(), inputs, outputs
+        );
     }
 
     const char* name() const override { return "lattice::OccupancyExpand"; }
@@ -108,7 +110,7 @@ class ChildCoordsFromIndices final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_child_coords_from_indices(
+        backend::gpu::coords::eval_child_coords_from_indices(
             shape_, stream(), inputs, outputs
         );
     }

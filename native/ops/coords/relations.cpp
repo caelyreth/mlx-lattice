@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "backends/cpu/coords/algorithms.h"
-#include "backends/metal/coords/runtime.h"
+#include "backends/gpu.h"
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
 #include "ops/coords/streams.h"
@@ -169,7 +169,7 @@ class GenericKernelRelation final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_generic_kernel_relation(
+        backend::gpu::coords::eval_generic_kernel_relation(
             op_,
             rows_,
             kernel_count_,
@@ -230,7 +230,7 @@ class GenerativeKernelRelation final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_generative_kernel_relation(
+        backend::gpu::coords::eval_generative_kernel_relation(
             rows_, kernel_count_, stride_, stream(), inputs, outputs
         );
     }
@@ -282,7 +282,7 @@ class TargetKernelRelation final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_target_kernel_relation(
+        backend::gpu::coords::eval_target_kernel_relation(
             rows_,
             target_rows_,
             kernel_count_,
@@ -335,7 +335,7 @@ class RelationGroupedView final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_relation_grouped_view(
+        backend::gpu::coords::eval_relation_grouped_view(
             shape_, stream(), inputs, outputs
         );
     }
@@ -372,7 +372,7 @@ class RelationDirectView final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_relation_direct_view(
+        backend::gpu::coords::eval_relation_direct_view(
             shape_, stream(), inputs, outputs
         );
     }

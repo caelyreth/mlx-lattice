@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "backends/cpu/coords/algorithms.h"
-#include "backends/metal/coords/runtime.h"
+#include "backends/gpu.h"
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
 #include "ops/coords/streams.h"
@@ -30,7 +30,9 @@ class LookupCoords final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_lookup_coords(shape_, stream(), inputs, outputs);
+        backend::gpu::coords::eval_lookup_coords(
+            shape_, stream(), inputs, outputs
+        );
     }
 
     const char* name() const override { return "lattice::LookupCoords"; }

@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "backends/cpu/coords/algorithms.h"
-#include "backends/metal/coords/runtime.h"
+#include "backends/gpu.h"
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
 #include "ops/coords/streams.h"
@@ -114,7 +114,7 @@ class NeighborRelationPrimitive final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_neighbor_relation(
+        backend::gpu::coords::eval_neighbor_relation(
             op_, shape_, radius_squared_, stream(), inputs, outputs
         );
     }

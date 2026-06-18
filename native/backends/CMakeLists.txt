@@ -1,10 +1,12 @@
 # MARK: - options
 
 option(MLX_LATTICE_BUILD_METAL "Build mlx-lattice Metal coordinate backend" ON)
+option(MLX_LATTICE_BUILD_CUDA "Build mlx-lattice CUDA backend" ON)
 
 add_library(mlx_lattice_backends INTERFACE)
 
 set(MLX_LATTICE_HAS_METAL 0)
+set(MLX_LATTICE_HAS_CUDA 0)
 if(APPLE)
   cmake_host_system_information(
     RESULT MLX_LATTICE_MACOS_VERSION QUERY OS_RELEASE)
@@ -25,19 +27,58 @@ if(APPLE)
   endif()
 endif()
 
+if(NOT APPLE AND MLX_LATTICE_BUILD_CUDA)
+  include(CheckLanguage)
+  include(CheckIncludeFileCXX)
+  set(CMAKE_REQUIRED_INCLUDES ${MLX_INCLUDE_DIRS})
+  check_include_file_cxx("mlx/backend/cuda/cuda.h" MLX_LATTICE_HAS_MLX_CUDA)
+  unset(CMAKE_REQUIRED_INCLUDES)
+  find_package(CUDAToolkit QUIET)
+  check_language(CUDA)
+
+  if(MLX_LATTICE_HAS_MLX_CUDA AND CUDAToolkit_FOUND AND CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    set(MLX_LATTICE_HAS_CUDA 1)
+  endif()
+endif()
+
 target_compile_definitions(
   mlx_lattice_backends
   INTERFACE
     MLX_LATTICE_HAS_CPU=1
-    MLX_LATTICE_HAS_METAL=${MLX_LATTICE_HAS_METAL})
+    MLX_LATTICE_HAS_METAL=${MLX_LATTICE_HAS_METAL}
+    MLX_LATTICE_HAS_CUDA=${MLX_LATTICE_HAS_CUDA})
 
 # MARK: - backends
 
 add_subdirectory(cpu)
 add_subdirectory(metal)
+add_subdirectory(cuda)
+
+add_library(mlx_lattice_backend_gpu STATIC gpu.cpp)
+
+target_include_directories(
+  mlx_lattice_backend_gpu
+  PUBLIC ${PROJECT_SOURCE_DIR}/native)
+
+target_compile_definitions(
+  mlx_lattice_backend_gpu
+  PUBLIC
+    MLX_LATTICE_HAS_CPU=1
+    MLX_LATTICE_HAS_METAL=${MLX_LATTICE_HAS_METAL}
+    MLX_LATTICE_HAS_CUDA=${MLX_LATTICE_HAS_CUDA})
+
+target_link_libraries(
+  mlx_lattice_backend_gpu
+  PUBLIC
+    mlx_lattice_backend_cpu
+    mlx_lattice_backend_metal
+    mlx_lattice_backend_cuda)
 
 target_link_libraries(
   mlx_lattice_backends
   INTERFACE
     mlx_lattice_backend_cpu
-    mlx_lattice_backend_metal)
+    mlx_lattice_backend_metal
+    mlx_lattice_backend_cuda
+    mlx_lattice_backend_gpu)

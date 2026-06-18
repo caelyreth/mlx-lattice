@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "backends/cpu/coords/algorithms.h"
-#include "backends/metal/coords/runtime.h"
+#include "backends/gpu.h"
 #include "mlx/ops.h"
 #include "mlx/primitives.h"
 #include "ops/coords/streams.h"
@@ -35,7 +35,7 @@ class SetCoords final : public mx::Primitive {
         const std::vector<mx::array>& inputs,
         std::vector<mx::array>& outputs
     ) override {
-        coords::metal::eval_set_coords(
+        backend::gpu::coords::eval_set_coords(
             op_, stride_, shape_, stream(), inputs, outputs
         );
     }
