@@ -13,7 +13,6 @@ namespace mx = mlx::core;
 
 enum class NativeGpuBackend {
     Metal,
-    Cuda,
 };
 
 NativeGpuBackend current_backend(const mx::Stream& stream);

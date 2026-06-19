@@ -10,8 +10,8 @@ authors = [{ name = "Z.Y. Lin", email = "i@letter.cafe" }]
 keywords = ["mlx", "ml", "sparse", "convolution", "point-cloud"]
 dependencies = [
   "mlx==0.31.1; platform_system == 'Darwin'",
-  # MLX CUDA wheels are only published at 0.31.1 for now; keep Linux
-  # CPU/CUDA on one ABI line until upstream publishes matching wheels.
+  # Keep Linux on the same MLX ABI line as CUDA wheels. CUDA kernels use MLX's
+  # public mx.fast.cuda_kernel runtime instead of private native headers.
   "mlx[cpu]==0.31.1; platform_system == 'Linux'",
 ]
 

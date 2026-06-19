@@ -273,7 +273,7 @@ __device__ void weight_grad_kernel(
 
 } // namespace
 
-__global__ void sparse_conv_forward_f32(
+extern "C" __global__ void sparse_conv_forward_f32(
     const float* feats,
     const float* weights,
     const int* in_rows,
@@ -299,7 +299,7 @@ __global__ void sparse_conv_forward_f32(
     );
 }
 
-__global__ void sparse_conv_forward_f16(
+extern "C" __global__ void sparse_conv_forward_f16(
     const __half* feats,
     const __half* weights,
     const int* in_rows,
@@ -352,7 +352,7 @@ __device__ void forward_square_channels_entry(
     );
 }
 
-__global__ void sparse_conv_forward_f32_c16(
+extern "C" __global__ void sparse_conv_forward_f32_c16(
     const float* feats,
     const float* weights,
     const int* in_rows,
@@ -378,7 +378,7 @@ __global__ void sparse_conv_forward_f32_c16(
     );
 }
 
-__global__ void sparse_conv_forward_f32_c32(
+extern "C" __global__ void sparse_conv_forward_f32_c32(
     const float* feats,
     const float* weights,
     const int* in_rows,
@@ -404,7 +404,7 @@ __global__ void sparse_conv_forward_f32_c32(
     );
 }
 
-__global__ void sparse_conv_forward_f32_c64(
+extern "C" __global__ void sparse_conv_forward_f32_c64(
     const float* feats,
     const float* weights,
     const int* in_rows,
@@ -430,7 +430,7 @@ __global__ void sparse_conv_forward_f32_c64(
     );
 }
 
-__global__ void sparse_conv_forward_f16_c16(
+extern "C" __global__ void sparse_conv_forward_f16_c16(
     const __half* feats,
     const __half* weights,
     const int* in_rows,
@@ -456,7 +456,7 @@ __global__ void sparse_conv_forward_f16_c16(
     );
 }
 
-__global__ void sparse_conv_forward_f16_c32(
+extern "C" __global__ void sparse_conv_forward_f16_c32(
     const __half* feats,
     const __half* weights,
     const int* in_rows,
@@ -482,7 +482,7 @@ __global__ void sparse_conv_forward_f16_c32(
     );
 }
 
-__global__ void sparse_conv_forward_f16_c64(
+extern "C" __global__ void sparse_conv_forward_f16_c64(
     const __half* feats,
     const __half* weights,
     const int* in_rows,
@@ -508,7 +508,7 @@ __global__ void sparse_conv_forward_f16_c64(
     );
 }
 
-__global__ void sparse_conv_input_grad_f32(
+extern "C" __global__ void sparse_conv_input_grad_f32(
     const float* cotangent,
     const float* weights,
     const int* in_rows,
@@ -538,7 +538,7 @@ __global__ void sparse_conv_input_grad_f32(
     );
 }
 
-__global__ void sparse_conv_input_grad_f16(
+extern "C" __global__ void sparse_conv_input_grad_f16(
     const __half* cotangent,
     const __half* weights,
     const int* in_rows,
@@ -568,7 +568,7 @@ __global__ void sparse_conv_input_grad_f16(
     );
 }
 
-__global__ void sparse_conv_weight_grad_f32(
+extern "C" __global__ void sparse_conv_weight_grad_f32(
     const float* feats,
     const float* cotangent,
     const int* in_rows,
@@ -598,7 +598,7 @@ __global__ void sparse_conv_weight_grad_f32(
     );
 }
 
-__global__ void sparse_conv_weight_grad_f16(
+extern "C" __global__ void sparse_conv_weight_grad_f16(
     const __half* feats,
     const __half* cotangent,
     const int* in_rows,

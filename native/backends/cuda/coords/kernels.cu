@@ -94,19 +94,22 @@ __device__ void clear_i32(int* data, int count, int value) {
 
 } // namespace
 
-__global__ void set_coords_i32(
+extern "C" __global__ void set_coords_i32(
     const int* lhs,
     const int* rhs,
     int* out_coords,
     int* count,
     int op,
-    TripleArgs stride,
+    int stride_x,
+    int stride_y,
+    int stride_z,
     int lhs_rows,
     int rhs_rows
 ) {
     if (elem_1d() != 0) {
         return;
     }
+    TripleArgs stride{stride_x, stride_y, stride_z};
     int out_row = 0;
     if (op == 0) {
         for (int row = 0; row < lhs_rows; ++row) {
@@ -183,7 +186,7 @@ __global__ void set_coords_i32(
     count[0] = out_row;
 }
 
-__global__ void lookup_coords_i32(
+extern "C" __global__ void lookup_coords_i32(
     const int* coords,
     const int* queries,
     int* out,
@@ -201,7 +204,8 @@ __global__ void lookup_coords_i32(
     out[row] = find_coord(coords, rows, target);
 }
 
-__global__ void morton_codes_i32(const int* coords, long long* out, int rows) {
+extern "C" __global__ void
+morton_codes_i32(const int* coords, long long* out, int rows) {
     int row = elem_1d();
     if (row >= rows) {
         return;
@@ -217,7 +221,7 @@ __global__ void morton_codes_i32(const int* coords, long long* out, int rows) {
     out[row] = static_cast<long long>(code);
 }
 
-__global__ void occupancy_downsample_i32(
+extern "C" __global__ void occupancy_downsample_i32(
     const int* coords,
     const int* active_rows,
     int* out_coords,
@@ -251,7 +255,7 @@ __global__ void occupancy_downsample_i32(
     out_active_rows[0] = out_row;
 }
 
-__global__ void occupancy_expand_i32(
+extern "C" __global__ void occupancy_expand_i32(
     const int* coords,
     const int* active_rows,
     const int* occupancy,
@@ -289,7 +293,7 @@ __global__ void occupancy_expand_i32(
     out_active_rows[0] = out_row;
 }
 
-__global__ void child_coords_from_indices_i32(
+extern "C" __global__ void child_coords_from_indices_i32(
     const int* parent_coords,
     const int* child_indices,
     int* out,
@@ -311,7 +315,7 @@ __global__ void child_coords_from_indices_i32(
     );
 }
 
-__global__ void sparse_quantize_i32(
+extern "C" __global__ void sparse_quantize_i32(
     const float* points,
     const int* batch_indices,
     const int* active_rows,
@@ -319,12 +323,25 @@ __global__ void sparse_quantize_i32(
     int* out_active_rows,
     int* inverse_rows,
     int* counts,
-    QuantizeArgs spec,
+    float voxel_x,
+    float voxel_y,
+    float voxel_z,
+    float origin_x,
+    float origin_y,
+    float origin_z,
     int rows
 ) {
     if (elem_1d() != 0) {
         return;
     }
+    QuantizeArgs spec{
+        voxel_x,
+        voxel_y,
+        voxel_z,
+        origin_x,
+        origin_y,
+        origin_z,
+    };
     int logical = min(active_rows[0], rows);
     clear_i32(inverse_rows, rows, -1);
     clear_i32(counts, rows, 0);
@@ -359,21 +376,21 @@ __global__ void sparse_quantize_i32(
     out_active_rows[0] = out_row;
 }
 
-__global__ void clear_f32(float* out, int elements) {
+extern "C" __global__ void clear_f32(float* out, int elements) {
     int elem = elem_1d();
     if (elem < elements) {
         out[elem] = 0.0f;
     }
 }
 
-__global__ void clear_i32_kernel(int* out, int elements, int value) {
+extern "C" __global__ void clear_i32_kernel(int* out, int elements, int value) {
     int elem = elem_1d();
     if (elem < elements) {
         out[elem] = value;
     }
 }
 
-__global__ void voxelize_features_f32(
+extern "C" __global__ void voxelize_features_f32(
     const float* feats,
     const int* inverse_rows,
     const int* voxel_counts,
@@ -403,7 +420,7 @@ __global__ void voxelize_features_f32(
     atomicAdd(&out[voxel * channels + channel], feats[elem] * scale);
 }
 
-__global__ void voxelize_feature_grad_f32(
+extern "C" __global__ void voxelize_feature_grad_f32(
     const float* cotangent,
     const int* inverse_rows,
     const int* voxel_counts,
@@ -435,7 +452,7 @@ __global__ void voxelize_feature_grad_f32(
     out[elem] = cotangent[voxel * channels + channel] * scale;
 }
 
-__global__ void generic_kernel_relation_i32(
+extern "C" __global__ void generic_kernel_relation_i32(
     const int* coords,
     const int* offsets,
     const int* active_rows,
@@ -448,13 +465,19 @@ __global__ void generic_kernel_relation_i32(
     int op,
     int rows,
     int kernel_count,
-    TripleArgs stride,
-    TripleArgs padding,
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z,
     bool direct
 ) {
     if (elem_1d() != 0) {
         return;
     }
+    TripleArgs stride{stride_x, stride_y, stride_z};
+    TripleArgs padding{padding_x, padding_y, padding_z};
     counts[0] = 0;
     counts[1] = 0;
     int logical = min(active_rows[0], rows);
@@ -583,7 +606,7 @@ __global__ void generic_kernel_relation_i32(
     counts[1] = out_count;
 }
 
-__global__ void count_target_kernel_relation_i32(
+extern "C" __global__ void count_target_kernel_relation_i32(
     const int* coords,
     const int* offsets,
     const int* active_rows,
@@ -593,8 +616,12 @@ __global__ void count_target_kernel_relation_i32(
     int rows,
     int target_rows,
     int kernel_count,
-    TripleArgs stride,
-    TripleArgs padding
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z
 ) {
     int elem = elem_1d();
     int source_count = min(active_rows[0], rows);
@@ -603,6 +630,8 @@ __global__ void count_target_kernel_relation_i32(
     if (elem >= total) {
         return;
     }
+    TripleArgs stride{stride_x, stride_y, stride_z};
+    TripleArgs padding{padding_x, padding_y, padding_z};
 
     int out_row = elem / kernel_count;
     int kernel = elem - out_row * kernel_count;
@@ -619,7 +648,7 @@ __global__ void count_target_kernel_relation_i32(
     }
 }
 
-__global__ void prefix_relation_rows_i32(
+extern "C" __global__ void prefix_relation_rows_i32(
     int* row_offsets,
     int* counts,
     int row_count,
@@ -639,7 +668,7 @@ __global__ void prefix_relation_rows_i32(
     counts[1] = row_count;
 }
 
-__global__ void prefix_relation_rows_active_i32(
+extern "C" __global__ void prefix_relation_rows_active_i32(
     int* row_offsets,
     int* counts,
     const int* active_rows,
@@ -661,7 +690,7 @@ __global__ void prefix_relation_rows_active_i32(
     counts[1] = row_count;
 }
 
-__global__ void fill_target_kernel_relation_i32(
+extern "C" __global__ void fill_target_kernel_relation_i32(
     const int* coords,
     const int* offsets,
     const int* active_rows,
@@ -675,8 +704,12 @@ __global__ void fill_target_kernel_relation_i32(
     int rows,
     int target_rows,
     int kernel_count,
-    TripleArgs stride,
-    TripleArgs padding
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z
 ) {
     int elem = elem_1d();
     int source_count = min(active_rows[0], rows);
@@ -685,6 +718,8 @@ __global__ void fill_target_kernel_relation_i32(
     if (elem >= total) {
         return;
     }
+    TripleArgs stride{stride_x, stride_y, stride_z};
+    TripleArgs padding{padding_x, padding_y, padding_z};
 
     int out_row = elem / kernel_count;
     int kernel = elem - out_row * kernel_count;
@@ -707,7 +742,7 @@ __global__ void fill_target_kernel_relation_i32(
     kernel_ids[slot] = kernel;
 }
 
-__global__ void generative_kernel_relation_i32(
+extern "C" __global__ void generative_kernel_relation_i32(
     const int* coords,
     const int* offsets,
     const int* active_rows,
@@ -719,7 +754,9 @@ __global__ void generative_kernel_relation_i32(
     int* counts,
     int rows,
     int kernel_count,
-    TripleArgs stride
+    int stride_x,
+    int stride_y,
+    int stride_z
 ) {
     int elem = elem_1d();
     int logical = min(active_rows[0], rows);
@@ -732,6 +769,7 @@ __global__ void generative_kernel_relation_i32(
     if (elem >= total) {
         return;
     }
+    TripleArgs stride{stride_x, stride_y, stride_z};
     int in_row = elem / kernel_count;
     int kernel = elem - in_row * kernel_count;
     int in_base = in_row * 4;
@@ -749,7 +787,7 @@ __global__ void generative_kernel_relation_i32(
     );
 }
 
-__global__ void clear_relation_grouped_view_i32(
+extern "C" __global__ void clear_relation_grouped_view_i32(
     int* row_offsets,
     int* edge_ids,
     int edge_capacity,
@@ -768,7 +806,7 @@ __global__ void clear_relation_grouped_view_i32(
     }
 }
 
-__global__ void count_relation_grouped_view_i32(
+extern "C" __global__ void count_relation_grouped_view_i32(
     const int* group_ids,
     const int* counts,
     int* row_offsets,
@@ -786,7 +824,7 @@ __global__ void count_relation_grouped_view_i32(
     }
 }
 
-__global__ void fill_relation_grouped_view_i32(
+extern "C" __global__ void fill_relation_grouped_view_i32(
     const int* group_ids,
     const int* row_offsets,
     int* row_cursors,
@@ -806,14 +844,15 @@ __global__ void fill_relation_grouped_view_i32(
     edge_ids[slot] = edge;
 }
 
-__global__ void clear_relation_direct_view_i32(int* edge_ids, int group_count) {
+extern "C" __global__ void
+clear_relation_direct_view_i32(int* edge_ids, int group_count) {
     int elem = elem_1d();
     if (elem < group_count) {
         edge_ids[elem] = -1;
     }
 }
 
-__global__ void fill_relation_direct_view_i32(
+extern "C" __global__ void fill_relation_direct_view_i32(
     const int* group_ids,
     const int* counts,
     int* edge_ids,
@@ -831,7 +870,7 @@ __global__ void fill_relation_direct_view_i32(
     }
 }
 
-__global__ void neighbor_relation_i32(
+extern "C" __global__ void neighbor_relation_i32(
     const int* source_coords,
     const int* query_coords,
     const int* source_active_rows,

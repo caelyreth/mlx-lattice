@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import mlx.core as mx
 
 from mlx_lattice._native import ext
+from mlx_lattice.backends import cuda
 from mlx_lattice.core.coords.validation import (
     validate_coord_pair,
     validate_coords,
@@ -61,6 +62,8 @@ def intersection_coords(lhs: mx.array, rhs: mx.array) -> CoordinateSet:
 
 def lookup_coords(coords: mx.array, queries: mx.array) -> mx.array:
     validate_coord_pair(coords, queries, rhs_name='queries')
+    if cuda.selected():
+        return cuda.lookup_coords(coords, queries)
     return ext.lookup_coords(coords, queries)
 
 

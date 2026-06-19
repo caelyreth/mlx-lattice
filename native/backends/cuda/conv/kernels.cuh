@@ -9,7 +9,7 @@ struct __half {
 #endif
 
 #ifdef __CUDACC__
-#define MLX_LATTICE_CUDA_KERNEL __global__
+#define MLX_LATTICE_CUDA_KERNEL extern "C" __global__
 #else
 #define MLX_LATTICE_CUDA_KERNEL
 #endif

@@ -32,7 +32,7 @@ template <int Reduce> __device__ float reduce_finish(float value, int degree) {
 
 } // namespace
 
-__global__ void sparse_pool_relation_f32_i32(
+extern "C" __global__ void sparse_pool_relation_f32_i32(
     const float* feats,
     const int* in_rows,
     const int* out_rows,
@@ -123,7 +123,7 @@ __device__ void sparse_pool_relation_block_typed_f32_i32(
     }
 }
 
-__global__ void sparse_pool_relation_block_sum_f32_i32(
+extern "C" __global__ void sparse_pool_relation_block_sum_f32_i32(
     const float* feats,
     const int* in_rows,
     const int* row_offsets,
@@ -147,7 +147,7 @@ __global__ void sparse_pool_relation_block_sum_f32_i32(
     );
 }
 
-__global__ void sparse_pool_relation_block_max_f32_i32(
+extern "C" __global__ void sparse_pool_relation_block_max_f32_i32(
     const float* feats,
     const int* in_rows,
     const int* row_offsets,
@@ -171,7 +171,7 @@ __global__ void sparse_pool_relation_block_max_f32_i32(
     );
 }
 
-__global__ void sparse_pool_relation_block_avg_f32_i32(
+extern "C" __global__ void sparse_pool_relation_block_avg_f32_i32(
     const float* feats,
     const int* in_rows,
     const int* row_offsets,
@@ -195,7 +195,7 @@ __global__ void sparse_pool_relation_block_avg_f32_i32(
     );
 }
 
-__global__ void sparse_pool_relation_sum_avg_input_grad_f32_i32(
+extern "C" __global__ void sparse_pool_relation_sum_avg_input_grad_f32_i32(
     const float* cotangent,
     const float* feats,
     const float* pooled,
@@ -254,7 +254,7 @@ __global__ void sparse_pool_relation_sum_avg_input_grad_f32_i32(
     out[in_row * channels + channel] = acc;
 }
 
-__global__ void sparse_pool_relation_max_input_grad_f32_i32(
+extern "C" __global__ void sparse_pool_relation_max_input_grad_f32_i32(
     const float* cotangent,
     const float* feats,
     const float* pooled,
@@ -308,7 +308,7 @@ __global__ void sparse_pool_relation_max_input_grad_f32_i32(
     out[in_row * channels + channel] = acc;
 }
 
-__global__ void sparse_pool_relation_exclusive_input_grad_f32_i32(
+extern "C" __global__ void sparse_pool_relation_exclusive_input_grad_f32_i32(
     const float* cotangent,
     const float* feats,
     const float* pooled,
@@ -364,7 +364,7 @@ __global__ void sparse_pool_relation_exclusive_input_grad_f32_i32(
     out[in_row * channels + channel] = acc;
 }
 
-__global__ void sparse_pool_relation_jvp_f32_i32(
+extern "C" __global__ void sparse_pool_relation_jvp_f32_i32(
     const float* tangent,
     const float* feats,
     const float* pooled,

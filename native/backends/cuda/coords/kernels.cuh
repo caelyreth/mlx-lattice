@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef __CUDACC__
-#define MLX_LATTICE_CUDA_KERNEL __global__
+#define MLX_LATTICE_CUDA_KERNEL extern "C" __global__
 #else
 #define MLX_LATTICE_CUDA_KERNEL
 #endif
@@ -29,7 +29,9 @@ MLX_LATTICE_CUDA_KERNEL void set_coords_i32(
     int* out_coords,
     int* count,
     int op,
-    TripleArgs stride,
+    int stride_x,
+    int stride_y,
+    int stride_z,
     int lhs_rows,
     int rhs_rows
 );
@@ -80,7 +82,12 @@ MLX_LATTICE_CUDA_KERNEL void sparse_quantize_i32(
     int* out_active_rows,
     int* inverse_rows,
     int* counts,
-    QuantizeArgs spec,
+    float voxel_x,
+    float voxel_y,
+    float voxel_z,
+    float origin_x,
+    float origin_y,
+    float origin_z,
     int rows
 );
 
@@ -125,8 +132,12 @@ MLX_LATTICE_CUDA_KERNEL void generic_kernel_relation_i32(
     int op,
     int rows,
     int kernel_count,
-    TripleArgs stride,
-    TripleArgs padding,
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z,
     bool direct
 );
 
@@ -140,8 +151,12 @@ MLX_LATTICE_CUDA_KERNEL void count_target_kernel_relation_i32(
     int rows,
     int target_rows,
     int kernel_count,
-    TripleArgs stride,
-    TripleArgs padding
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z
 );
 
 MLX_LATTICE_CUDA_KERNEL void prefix_relation_rows_i32(
@@ -173,8 +188,12 @@ MLX_LATTICE_CUDA_KERNEL void fill_target_kernel_relation_i32(
     int rows,
     int target_rows,
     int kernel_count,
-    TripleArgs stride,
-    TripleArgs padding
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z
 );
 
 MLX_LATTICE_CUDA_KERNEL void generative_kernel_relation_i32(
@@ -189,7 +208,9 @@ MLX_LATTICE_CUDA_KERNEL void generative_kernel_relation_i32(
     int* counts,
     int rows,
     int kernel_count,
-    TripleArgs stride
+    int stride_x,
+    int stride_y,
+    int stride_z
 );
 
 MLX_LATTICE_CUDA_KERNEL void clear_relation_grouped_view_i32(
