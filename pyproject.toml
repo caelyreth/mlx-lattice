@@ -11,7 +11,8 @@ keywords = ["mlx", "ml", "sparse", "convolution", "point-cloud"]
 dependencies = [
   "mlx==0.31.1; platform_system == 'Darwin'",
   # Keep Linux on the same MLX ABI line as CUDA wheels. CUDA kernels use MLX's
-  # public mx.fast.cuda_kernel runtime instead of private native headers.
+  # public mx.fast.precompiled_cuda_kernel runtime instead of private native
+  # CUDA headers.
   "mlx[cpu]==0.31.1; platform_system == 'Linux'",
 ]
 

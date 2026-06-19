@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 
 import pytest
 
@@ -9,6 +9,7 @@ from tests.support import (
     backend_params,
     compile_backend,
     dtype_params,
+    mx,
     parity_backend_params,
     parity_backends,
     selected_backend,
@@ -70,6 +71,16 @@ def pytest_configure(config: pytest.Config) -> None:
     ]
     for name, description in markers:
         config.addinivalue_line('markers', f'{name}: {description}')
+
+
+@pytest.fixture(autouse=True)
+def default_cpu_device() -> Iterator[None]:
+    previous = mx.default_device()
+    try:
+        mx.set_default_device(mx.cpu)
+        yield
+    finally:
+        mx.set_default_device(previous)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
