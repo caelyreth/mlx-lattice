@@ -2,8 +2,9 @@
 
 #include <cstddef>
 
+#include <cuda_runtime_api.h>
+
 #include "mlx/array.h"
-#include "mlx/backend/cuda/device.h"
 #include "mlx/stream.h"
 
 namespace mlx_lattice::backend::cuda {

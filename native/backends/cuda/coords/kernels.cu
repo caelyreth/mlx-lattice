@@ -7,6 +7,8 @@ namespace {
 
 __device__ int elem_1d() { return int(blockIdx.x * blockDim.x + threadIdx.x); }
 
+constexpr float kInfinity = __builtin_inff();
+
 __device__ int floor_div_int(int value, int divisor) {
     int quotient = value / divisor;
     int remainder = value % divisor;
@@ -856,7 +858,7 @@ __global__ void neighbor_relation_i32(
         row_offsets[query] = edge;
         for (int neighbor = 0; neighbor < max_neighbors; ++neighbor) {
             int best_row = -1;
-            float best_distance = CUDART_INF_F;
+            float best_distance = kInfinity;
             for (int source = 0; source < active_sources; ++source) {
                 if (!same_batch(query_coords, query, source_coords, source)) {
                     continue;

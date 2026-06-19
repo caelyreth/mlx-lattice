@@ -1,7 +1,7 @@
 # MARK: - options
 
 option(MLX_LATTICE_BUILD_METAL "Build mlx-lattice Metal coordinate backend" ON)
-option(MLX_LATTICE_BUILD_CUDA "Build mlx-lattice CUDA backend" ON)
+option(MLX_LATTICE_BUILD_CUDA "Build mlx-lattice CUDA backend" OFF)
 
 add_library(mlx_lattice_backends INTERFACE)
 
@@ -27,6 +27,10 @@ if(APPLE)
   endif()
 endif()
 
+if(APPLE AND MLX_LATTICE_BUILD_CUDA)
+  message(FATAL_ERROR "MLX_LATTICE_BUILD_CUDA is only supported on Linux.")
+endif()
+
 if(NOT APPLE AND MLX_LATTICE_BUILD_CUDA)
   include(CheckLanguage)
   include(CheckIncludeFileCXX)
@@ -39,6 +43,13 @@ if(NOT APPLE AND MLX_LATTICE_BUILD_CUDA)
   if(MLX_LATTICE_HAS_MLX_CUDA AND CUDAToolkit_FOUND AND CMAKE_CUDA_COMPILER)
     enable_language(CUDA)
     set(MLX_LATTICE_HAS_CUDA 1)
+  else()
+    message(
+      FATAL_ERROR
+        "MLX_LATTICE_BUILD_CUDA=ON requires MLX CUDA headers, CUDAToolkit, "
+        "and a CUDA compiler. Install mlx[cuda12] or mlx[cuda13] and ensure "
+        "nvcc is available."
+    )
   endif()
 endif()
 

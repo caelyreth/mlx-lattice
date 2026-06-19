@@ -8,10 +8,12 @@ namespace {
 
 __device__ int elem_1d() { return int(blockIdx.x * blockDim.x + threadIdx.x); }
 
+constexpr float kInfinity = __builtin_inff();
+
 template <int Reduce> __device__ float reduce_init();
 
 template <> __device__ float reduce_init<0>() { return 0.0f; }
-template <> __device__ float reduce_init<1>() { return -CUDART_INF_F; }
+template <> __device__ float reduce_init<1>() { return -kInfinity; }
 template <> __device__ float reduce_init<2>() { return 0.0f; }
 
 template <int Reduce> __device__ float reduce_combine(float lhs, float rhs) {
@@ -55,11 +57,11 @@ __global__ void sparse_pool_relation_f32_i32(
     int out_row = elem / channels;
     int channel = elem - out_row * channels;
     if (out_row >= counts[1]) {
-        out[elem] = reduce == 1 ? -CUDART_INF_F : 0.0f;
+        out[elem] = reduce == 1 ? -kInfinity : 0.0f;
         return;
     }
 
-    float acc = reduce == 1 ? -CUDART_INF_F : 0.0f;
+    float acc = reduce == 1 ? -kInfinity : 0.0f;
     int degree = 0;
     for (int edge = row_offsets[out_row]; edge < row_offsets[out_row + 1];
          ++edge) {
