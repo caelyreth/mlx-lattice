@@ -217,9 +217,9 @@ def _import_runtime(*, preload_native: bool) -> _Runtime:
 
 
 def _preload_native_extension() -> None:
-    from mlx_lattice._native import ext
+    from mlx_lattice._native import native
 
-    ext.version()
+    native.preload()
 
 
 @contextmanager

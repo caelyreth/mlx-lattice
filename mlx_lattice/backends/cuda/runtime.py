@@ -31,13 +31,7 @@ type VoxelReduction = Literal['sum', 'mean']
 
 
 def runtime_available() -> bool:
-    cuda = getattr(mx, 'cuda', None)
-    return bool(
-        cuda is not None
-        and cuda.is_available()
-        and hasattr(mx.fast, 'precompiled_cuda_kernel')
-        and all(_artifact_exists(name) for name in _ARTIFACTS)
-    )
+    return not _availability_issues()
 
 
 def selected() -> bool:
@@ -45,11 +39,13 @@ def selected() -> bool:
 
 
 def info() -> dict[str, Any]:
+    issues = _availability_issues()
     return {
-        'available': runtime_available(),
+        'available': not issues,
         'api': 'mx.fast.precompiled_cuda_kernel',
         'artifact_package': _ARTIFACT_PACKAGE,
         'artifacts': _ARTIFACTS,
+        'missing': issues,
         'implemented_ops': tuple(sorted(_IMPLEMENTED_OPS)),
     }
 
@@ -932,6 +928,21 @@ def _require_int32_coords(value: mx.array, name: str) -> None:
         raise ValueError(
             f'CUDA {name} must have shape (N, 4) and int32 dtype.'
         )
+
+
+def _availability_issues() -> tuple[str, ...]:
+    issues = []
+    cuda = getattr(mx, 'cuda', None)
+    if cuda is None:
+        issues.append('mlx.core.cuda is unavailable')
+    elif not cuda.is_available():
+        issues.append('mlx.core.cuda reports unavailable')
+    if not hasattr(mx.fast, 'precompiled_cuda_kernel'):
+        issues.append('mx.fast.precompiled_cuda_kernel is unavailable')
+    for artifact in _ARTIFACTS:
+        if not _artifact_exists(artifact):
+            issues.append(f'missing artifact {artifact}')
+    return tuple(issues)
 
 
 def _artifact_exists(name: str) -> bool:

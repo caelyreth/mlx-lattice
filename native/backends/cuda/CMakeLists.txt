@@ -10,7 +10,10 @@ find_package(CUDAToolkit REQUIRED)
 
 set(MLX_LATTICE_CUDA_ARTIFACT_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/artifacts")
+set(MLX_LATTICE_CUDA_PACKAGE_ARTIFACT_DIR
+    "${PROJECT_SOURCE_DIR}/${MLX_LATTICE_CUDA_ARTIFACT_DESTINATION}")
 file(MAKE_DIRECTORY "${MLX_LATTICE_CUDA_ARTIFACT_DIR}")
+file(MAKE_DIRECTORY "${MLX_LATTICE_CUDA_PACKAGE_ARTIFACT_DIR}")
 
 function(mlx_lattice_cuda_ptx name source)
   set(output "${MLX_LATTICE_CUDA_ARTIFACT_DIR}/${name}.ptx")
@@ -48,6 +51,17 @@ mlx_lattice_cuda_ptx(
 add_custom_target(
   mlx_lattice_cuda_artifacts ALL
   DEPENDS ${MLX_LATTICE_CUDA_ARTIFACTS})
+
+foreach(artifact IN LISTS MLX_LATTICE_CUDA_ARTIFACTS)
+  add_custom_command(
+    TARGET mlx_lattice_cuda_artifacts
+    POST_BUILD
+    COMMAND
+      "${CMAKE_COMMAND}" -E copy_if_different "${artifact}"
+      "${MLX_LATTICE_CUDA_PACKAGE_ARTIFACT_DIR}"
+    VERBATIM
+    COMMENT "Copying CUDA PTX artifact into editable Python package")
+endforeach()
 
 install(
   FILES ${MLX_LATTICE_CUDA_ARTIFACTS}
