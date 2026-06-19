@@ -26,19 +26,6 @@ target_link_libraries(
   PUBLIC mlx)
 
 if(MLX_LATTICE_HAS_CUDA)
-  find_library(
-    MLX_CUDA_LIBRARY
-    NAMES mlx_cuda
-    PATHS ${MLX_LIBRARY_DIRS}
-    NO_DEFAULT_PATH)
-
-  if(NOT MLX_CUDA_LIBRARY)
-    message(
-      FATAL_ERROR
-        "MLX_LATTICE_BUILD_CUDA=ON requires libmlx_cuda. Install "
-        "mlx[cuda12] or mlx[cuda13] in the build environment.")
-  endif()
-
   set_target_properties(
     mlx_lattice_backend_cuda
     PROPERTIES
@@ -48,6 +35,5 @@ if(MLX_LATTICE_HAS_CUDA)
 
   target_link_libraries(
     mlx_lattice_backend_cuda
-    PUBLIC ${MLX_CUDA_LIBRARY}
     PRIVATE CUDA::cuda_driver CUDA::cudart)
 endif()

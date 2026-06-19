@@ -1,12 +1,15 @@
 #include "backends/cuda/conv/runtime.h"
 
+#if MLX_LATTICE_HAS_CUDA
+
 #include <stdexcept>
 #include <utility>
 
 #include "backends/array_utils.h"
 #include "backends/cuda/conv/kernels.cuh"
-#include "backends/cuda/runtime_api.h"
 #include "backends/cuda/runtime_utils.h"
+#include "mlx/backend/cuda/device.h"
+#include "mlx/backend/cuda/utils.h"
 
 namespace mlx_lattice::backend::cuda::conv {
 namespace {
@@ -330,3 +333,5 @@ void eval_weight_grad(
 }
 
 } // namespace mlx_lattice::backend::cuda::conv
+
+#endif

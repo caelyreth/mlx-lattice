@@ -1,13 +1,16 @@
 #include "backends/cuda/pool/runtime.h"
 
+#if MLX_LATTICE_HAS_CUDA
+
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
 
 #include "backends/array_utils.h"
 #include "backends/cuda/pool/kernels.cuh"
-#include "backends/cuda/runtime_api.h"
 #include "backends/cuda/runtime_utils.h"
+#include "mlx/backend/cuda/device.h"
+#include "mlx/backend/cuda/utils.h"
 
 namespace mlx_lattice::backend::cuda::pool {
 namespace {
@@ -269,3 +272,5 @@ void eval_jvp(
 }
 
 } // namespace mlx_lattice::backend::cuda::pool
+
+#endif

@@ -25,8 +25,8 @@ add_custom_command(
   OUTPUT ${MLX_LATTICE_EXT_STUB}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${MLX_LATTICE_STUB_DIR}
   COMMAND
-    ${Python_EXECUTABLE} -m nanobind.stubgen --quiet --module _ext
-    --import $<TARGET_FILE_DIR:_ext> --output-file ${MLX_LATTICE_EXT_STUB}
+    ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/stubgen.py --quiet --module
+    _ext --import $<TARGET_FILE_DIR:_ext> --output-file ${MLX_LATTICE_EXT_STUB}
   COMMAND
     ${CMAKE_COMMAND} -E copy_if_different ${MLX_LATTICE_EXT_STUB}
     ${MLX_LATTICE_SOURCE_EXT_STUB}

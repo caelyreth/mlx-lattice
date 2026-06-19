@@ -34,21 +34,34 @@ endif()
 if(NOT APPLE AND MLX_LATTICE_BUILD_CUDA)
   include(CheckLanguage)
   include(CheckIncludeFileCXX)
-  set(CMAKE_REQUIRED_INCLUDES ${MLX_INCLUDE_DIRS})
-  check_include_file_cxx("mlx/backend/cuda/cuda.h" MLX_LATTICE_HAS_MLX_CUDA)
-  unset(CMAKE_REQUIRED_INCLUDES)
   find_package(CUDAToolkit QUIET)
+  set(CMAKE_REQUIRED_INCLUDES ${MLX_INCLUDE_DIRS} ${CUDAToolkit_INCLUDE_DIRS})
+  check_include_file_cxx("mlx/backend/cuda/cuda.h" MLX_LATTICE_HAS_MLX_CUDA)
+  check_include_file_cxx("cudnn.h" MLX_LATTICE_HAS_CUDNN_HEADER)
+  check_include_file_cxx("fmt/format.h" MLX_LATTICE_HAS_FMT_HEADER)
+  unset(CMAKE_REQUIRED_INCLUDES)
   check_language(CUDA)
 
-  if(MLX_LATTICE_HAS_MLX_CUDA AND CUDAToolkit_FOUND AND CMAKE_CUDA_COMPILER)
+  if(MLX_LATTICE_HAS_MLX_CUDA
+     AND MLX_LATTICE_HAS_CUDNN_HEADER
+     AND MLX_LATTICE_HAS_FMT_HEADER
+     AND CUDAToolkit_FOUND
+     AND CMAKE_CUDA_COMPILER)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES
+       OR CMAKE_CUDA_ARCHITECTURES STREQUAL "52")
+      set(CMAKE_CUDA_ARCHITECTURES
+          native
+          CACHE STRING "CUDA architectures for mlx-lattice kernels" FORCE)
+    endif()
     enable_language(CUDA)
     set(MLX_LATTICE_HAS_CUDA 1)
   else()
     message(
       FATAL_ERROR
         "MLX_LATTICE_BUILD_CUDA=ON requires MLX CUDA headers, CUDAToolkit, "
-        "and a CUDA compiler. Install mlx[cuda12] or mlx[cuda13] and ensure "
-        "nvcc is available."
+        "CUDNN headers, fmt headers, and a CUDA compiler. Install "
+        "mlx[cuda12] or mlx[cuda13], libcudnn development headers, fmt "
+        "development headers, and ensure nvcc is available."
     )
   endif()
 endif()
