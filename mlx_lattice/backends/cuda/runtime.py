@@ -548,13 +548,16 @@ def _voxelize_features_jvp(primals, tangents):
     tangent, *_ = tangents
     if tangent is None:
         return mx.zeros((voxel_rows, 0), dtype=mx.float32)
-    return _voxelize_features_run(
-        tangent,
-        mx.stop_gradient(inverse_rows),
-        mx.stop_gradient(voxel_counts),
-        mx.stop_gradient(active_rows),
-        reduce_id,
-        voxel_rows,
+    return cast(
+        mx.array,
+        _voxelize_features(
+            tangent,
+            mx.stop_gradient(inverse_rows),
+            mx.stop_gradient(voxel_counts),
+            mx.stop_gradient(active_rows),
+            reduce_id,
+            voxel_rows,
+        ),
     )
 
 
@@ -730,28 +733,42 @@ def _sparse_conv_features_jvp(primals, tangents):
     feat_tangent, weight_tangent, *_ = tangents
     out = None
     if feat_tangent is not None:
-        out = _sparse_conv_forward_run(
-            feat_tangent,
-            mx.stop_gradient(weights),
-            mx.stop_gradient(in_rows),
-            mx.stop_gradient(out_rows),
-            mx.stop_gradient(kernel_ids),
-            mx.stop_gradient(counts),
-            mx.stop_gradient(row_offsets),
-            out_capacity,
-            n_kernels,
+        out = cast(
+            mx.array,
+            _sparse_conv_features(
+                feat_tangent,
+                mx.stop_gradient(weights),
+                mx.stop_gradient(in_rows),
+                mx.stop_gradient(out_rows),
+                mx.stop_gradient(kernel_ids),
+                mx.stop_gradient(counts),
+                mx.stop_gradient(row_offsets),
+                mx.stop_gradient(primals[7]),
+                mx.stop_gradient(primals[8]),
+                mx.stop_gradient(primals[9]),
+                mx.stop_gradient(primals[10]),
+                out_capacity,
+                n_kernels,
+            ),
         )
     if weight_tangent is not None:
-        component = _sparse_conv_forward_run(
-            mx.stop_gradient(feats),
-            weight_tangent,
-            mx.stop_gradient(in_rows),
-            mx.stop_gradient(out_rows),
-            mx.stop_gradient(kernel_ids),
-            mx.stop_gradient(counts),
-            mx.stop_gradient(row_offsets),
-            out_capacity,
-            n_kernels,
+        component = cast(
+            mx.array,
+            _sparse_conv_features(
+                mx.stop_gradient(feats),
+                weight_tangent,
+                mx.stop_gradient(in_rows),
+                mx.stop_gradient(out_rows),
+                mx.stop_gradient(kernel_ids),
+                mx.stop_gradient(counts),
+                mx.stop_gradient(row_offsets),
+                mx.stop_gradient(primals[7]),
+                mx.stop_gradient(primals[8]),
+                mx.stop_gradient(primals[9]),
+                mx.stop_gradient(primals[10]),
+                out_capacity,
+                n_kernels,
+            ),
         )
         out = component if out is None else out + component
     if out is None:
@@ -963,10 +980,9 @@ def _sparse_pool_features_jvp(primals, tangents):
         reduce_id,
         out_capacity,
     )
-    return _run(
-        artifact='pool.ptx',
-        name='sparse_pool_relation_jvp_f32_i32',
-        inputs=[
+    return cast(
+        mx.array,
+        _sparse_pool_jvp_features(
             tangent,
             mx.stop_gradient(feats),
             mx.stop_gradient(pooled),
@@ -975,25 +991,11 @@ def _sparse_pool_features_jvp(primals, tangents):
             mx.stop_gradient(kernel_ids),
             mx.stop_gradient(row_offsets),
             mx.stop_gradient(counts),
-        ],
-        output_shapes=[pooled.shape],
-        output_dtypes=[feats.dtype],
-        scalars=[
             reduce_id,
-            feats.shape[0],
             out_capacity,
             n_kernels,
-            feats.shape[1],
-            tangent.shape[1],
-            1,
-            feats.shape[1],
-            1,
-            pooled.shape[1],
-            1,
-        ],
-        grid=_grid_1d(pooled.size),
-        threadgroup=(256, 1, 1),
-    )[0]
+        ),
+    )
 
 
 def sparse_pool_features(
@@ -1029,6 +1031,71 @@ def sparse_pool_features(
     )
 
 
+@mx.custom_function
+def _sparse_pool_jvp_features(
+    tangent: mx.array,
+    feats: mx.array,
+    pooled: mx.array,
+    in_rows: mx.array,
+    out_rows: mx.array,
+    kernel_ids: mx.array,
+    row_offsets: mx.array,
+    counts: mx.array,
+    reduce_id: int,
+    out_capacity: int,
+    n_kernels: int,
+) -> mx.array:
+    return _sparse_pool_jvp_run(
+        tangent,
+        feats,
+        pooled,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
+        counts,
+        reduce_id,
+        out_capacity,
+        n_kernels,
+    )
+
+
+@_sparse_pool_jvp_features.jvp
+def _sparse_pool_jvp_features_jvp(primals, tangents):
+    (
+        primal_tangent,
+        feats,
+        pooled,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        row_offsets,
+        counts,
+        reduce_id,
+        out_capacity,
+        n_kernels,
+    ) = primals
+    tangent, *_ = tangents
+    if tangent is None:
+        return mx.zeros(
+            (out_capacity, primal_tangent.shape[1]),
+            dtype=primal_tangent.dtype,
+        )
+    return _sparse_pool_jvp_run(
+        tangent,
+        mx.stop_gradient(feats),
+        mx.stop_gradient(pooled),
+        mx.stop_gradient(in_rows),
+        mx.stop_gradient(out_rows),
+        mx.stop_gradient(kernel_ids),
+        mx.stop_gradient(row_offsets),
+        mx.stop_gradient(counts),
+        reduce_id,
+        out_capacity,
+        n_kernels,
+    )
+
+
 def _sparse_pool_forward_run(
     feats: mx.array,
     in_rows: mx.array,
@@ -1054,6 +1121,52 @@ def _sparse_pool_forward_run(
         scalars=[out_capacity, feats.shape[1], feats.shape[1], 1],
         grid=(out_capacity * 128, feats.shape[1], 1),
         threadgroup=(128, 1, 1),
+    )[0]
+
+
+def _sparse_pool_jvp_run(
+    tangent: mx.array,
+    feats: mx.array,
+    pooled: mx.array,
+    in_rows: mx.array,
+    out_rows: mx.array,
+    kernel_ids: mx.array,
+    row_offsets: mx.array,
+    counts: mx.array,
+    reduce_id: int,
+    out_capacity: int,
+    n_kernels: int,
+) -> mx.array:
+    return _run(
+        artifact='pool.ptx',
+        name='sparse_pool_relation_jvp_f32_i32',
+        inputs=[
+            tangent,
+            feats,
+            pooled,
+            in_rows,
+            out_rows,
+            kernel_ids,
+            row_offsets,
+            counts,
+        ],
+        output_shapes=[pooled.shape],
+        output_dtypes=[tangent.dtype],
+        scalars=[
+            reduce_id,
+            feats.shape[0],
+            out_capacity,
+            n_kernels,
+            feats.shape[1],
+            tangent.shape[1],
+            1,
+            feats.shape[1],
+            1,
+            pooled.shape[1],
+            1,
+        ],
+        grid=_grid_1d(pooled.size),
+        threadgroup=(256, 1, 1),
     )[0]
 
 
