@@ -21,6 +21,7 @@ int reduce_id(PoolReduceOp op) {
     case PoolReduceOp::Avg:
         return 2;
     }
+    throw std::invalid_argument("Unsupported CUDA sparse pooling reduction.");
 }
 
 int stride_at(const mx::array& array, int dim) {
