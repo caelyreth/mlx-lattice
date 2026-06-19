@@ -12,6 +12,12 @@ _ARTIFACTS = ('coords.ptx', 'conv.ptx', 'pool.ptx')
 _IMPLEMENTED_OPS = frozenset(
     {
         'child_coords_from_indices',
+        'build_generative_relation',
+        'build_kernel_relation',
+        'build_knn_relation',
+        'build_radius_relation',
+        'build_target_kernel_relation',
+        'build_transposed_kernel_relation',
         'downsample_coords',
         'intersection_coords',
         'lookup_coords',
@@ -28,6 +34,7 @@ _IMPLEMENTED_OPS = frozenset(
 
 type Reduction = Literal['sum', 'max', 'avg']
 type VoxelReduction = Literal['sum', 'mean']
+type Triple = tuple[int, int, int]
 
 
 def runtime_available() -> bool:
@@ -119,6 +126,7 @@ def lookup_coords(coords: mx.array, queries: mx.array) -> mx.array:
         scalars=[coords.shape[0], queries.shape[0]],
         grid=_grid_1d(queries.shape[0]),
         threadgroup=(256, 1, 1),
+        init_value=-1.0,
     )[0]
 
 
@@ -228,6 +236,253 @@ def sparse_quantize(
     return out[0], out[1], out[2], out[3]
 
 
+# MARK: - relations
+
+
+def build_kernel_relation(
+    coords: mx.array,
+    active_rows: mx.array,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    return _generic_kernel_relation(
+        coords=coords,
+        active_rows=active_rows,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        op=0,
+        direct=False,
+        out_capacity=coords.shape[0],
+        edge_capacity=coords.shape[0] * _kernel_count(kernel_size),
+    )
+
+
+def build_transposed_kernel_relation(
+    coords: mx.array,
+    active_rows: mx.array,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    offsets = _kernel_offsets(kernel_size, dilation)
+    return _generic_kernel_relation(
+        coords=coords,
+        active_rows=active_rows,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        op=1,
+        direct=_can_use_direct_transposed_relation(offsets, stride),
+        out_capacity=coords.shape[0] * len(offsets),
+        edge_capacity=coords.shape[0] * len(offsets),
+    )
+
+
+def build_generative_relation(
+    coords: mx.array,
+    active_rows: mx.array,
+    kernel_size: Triple,
+    stride: Triple,
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    _require_int32_coords(coords, 'coords')
+    offsets = _kernel_offsets(kernel_size, (1, 1, 1))
+    edge_capacity = coords.shape[0] * len(offsets)
+    out = _run(
+        artifact='coords.ptx',
+        name='generative_kernel_relation_full_i32',
+        inputs=[coords, _offset_array(offsets), active_rows],
+        output_shapes=[
+            (edge_capacity,),
+            (edge_capacity,),
+            (edge_capacity,),
+            (edge_capacity + 1,),
+            (edge_capacity, 4),
+            (2,),
+            (coords.shape[0] + 1,),
+            (edge_capacity,),
+            (len(offsets) + 1,),
+            (edge_capacity,),
+        ],
+        output_dtypes=[
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+        ],
+        scalars=[coords.shape[0], len(offsets), *stride],
+        grid=(1, 1, 1),
+        threadgroup=(1, 1, 1),
+        init_value=0.0,
+    )
+    return _relation_tuple(out)
+
+
+def build_target_kernel_relation(
+    coords: mx.array,
+    active_rows: mx.array,
+    target_coords: mx.array,
+    target_active_rows: mx.array,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    _require_int32_coords(coords, 'coords')
+    _require_int32_coords(target_coords, 'target_coords')
+    offsets = _kernel_offsets(kernel_size, dilation)
+    edge_capacity = target_coords.shape[0] * len(offsets)
+    out = _run(
+        artifact='coords.ptx',
+        name='target_kernel_relation_full_i32',
+        inputs=[
+            coords,
+            _offset_array(offsets),
+            active_rows,
+            target_coords,
+            target_active_rows,
+        ],
+        output_shapes=[
+            (edge_capacity,),
+            (edge_capacity,),
+            (edge_capacity,),
+            (target_coords.shape[0] + 1,),
+            (2,),
+            (coords.shape[0] + 1,),
+            (edge_capacity,),
+            (len(offsets) + 1,),
+            (edge_capacity,),
+        ],
+        output_dtypes=[
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+        ],
+        scalars=[
+            coords.shape[0],
+            target_coords.shape[0],
+            len(offsets),
+            *stride,
+            *padding,
+        ],
+        grid=(1, 1, 1),
+        threadgroup=(1, 1, 1),
+        init_value=0.0,
+    )
+    return (
+        out[0],
+        out[1],
+        out[2],
+        out[3],
+        target_coords,
+        out[4],
+        out[5],
+        out[6],
+        out[7],
+        out[8],
+    )
+
+
+def build_knn_relation(
+    source_coords: mx.array,
+    source_active_rows: mx.array,
+    query_coords: mx.array,
+    query_active_rows: mx.array,
+    k: int,
+) -> tuple[mx.array, mx.array, mx.array, mx.array, mx.array, mx.array]:
+    return _neighbor_relation(
+        source_coords,
+        source_active_rows,
+        query_coords,
+        query_active_rows,
+        max_neighbors=int(k),
+        radius_squared=0.0,
+        op=0,
+    )
+
+
+def build_radius_relation(
+    source_coords: mx.array,
+    source_active_rows: mx.array,
+    query_coords: mx.array,
+    query_active_rows: mx.array,
+    radius: float,
+    max_neighbors: int,
+) -> tuple[mx.array, mx.array, mx.array, mx.array, mx.array, mx.array]:
+    return _neighbor_relation(
+        source_coords,
+        source_active_rows,
+        query_coords,
+        query_active_rows,
+        max_neighbors=_radius_neighbor_capacity(radius)
+        if max_neighbors == 0
+        else int(max_neighbors),
+        radius_squared=float(radius) * float(radius),
+        op=1,
+    )
+
+
 @mx.custom_function
 def _voxelize_features(
     feats: mx.array,
@@ -257,7 +512,7 @@ def _voxelize_features_vjp(primals, cotangents, outputs):
         reduce_id,
         voxel_rows,
     ) = primals
-    (cotangent,) = cotangents
+    cotangent = _single(cotangents)
     del outputs, voxel_rows
     grad_feats = _run(
         artifact='coords.ptx',
@@ -386,7 +641,7 @@ def _sparse_conv_features_vjp(primals, cotangents, outputs):
         out_capacity,
         n_kernels,
     ) = primals
-    (cotangent,) = cotangents
+    cotangent = _single(cotangents)
     del outputs
     shape = _conv_shape(feats, weights, out_capacity, n_kernels)
     grad_feats = _run(
@@ -611,8 +866,8 @@ def _sparse_pool_features_vjp(primals, cotangents, outputs):
         out_capacity,
         n_kernels,
     ) = primals
-    (cotangent,) = cotangents
-    (pooled,) = outputs
+    cotangent = _single(cotangents)
+    pooled = _single(outputs)
     if input_exclusive:
         kernel_name = 'sparse_pool_relation_exclusive_input_grad_f32_i32'
     else:
@@ -789,12 +1044,224 @@ def _sparse_pool_forward_run(
         output_shapes=[(out_capacity, feats.shape[1])],
         output_dtypes=[feats.dtype],
         scalars=[out_capacity, feats.shape[1], feats.shape[1], 1],
-        grid=(out_capacity, feats.shape[1], 1),
+        grid=(out_capacity * 128, feats.shape[1], 1),
         threadgroup=(128, 1, 1),
     )[0]
 
 
+# MARK: - relation helpers
+
+
+def _generic_kernel_relation(
+    *,
+    coords: mx.array,
+    active_rows: mx.array,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+    op: int,
+    direct: bool,
+    out_capacity: int,
+    edge_capacity: int,
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    _require_int32_coords(coords, 'coords')
+    offsets = _kernel_offsets(kernel_size, dilation)
+    out = _run(
+        artifact='coords.ptx',
+        name='generic_kernel_relation_full_i32',
+        inputs=[coords, _offset_array(offsets), active_rows],
+        output_shapes=[
+            (edge_capacity,),
+            (edge_capacity,),
+            (edge_capacity,),
+            (out_capacity + 1,),
+            (out_capacity, 4),
+            (2,),
+            (coords.shape[0] + 1,),
+            (edge_capacity,),
+            (len(offsets) + 1,),
+            (edge_capacity,),
+        ],
+        output_dtypes=[
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.int32,
+        ],
+        scalars=[
+            op,
+            coords.shape[0],
+            len(offsets),
+            *stride,
+            *padding,
+            bool(direct),
+        ],
+        grid=(1, 1, 1),
+        threadgroup=(1, 1, 1),
+        init_value=0.0,
+    )
+    return _relation_tuple(out)
+
+
+def _neighbor_relation(
+    source_coords: mx.array,
+    source_active_rows: mx.array,
+    query_coords: mx.array,
+    query_active_rows: mx.array,
+    *,
+    max_neighbors: int,
+    radius_squared: float,
+    op: int,
+) -> tuple[mx.array, mx.array, mx.array, mx.array, mx.array, mx.array]:
+    _require_int32_coords(source_coords, 'source_coords')
+    _require_int32_coords(query_coords, 'query_coords')
+    edge_capacity = query_coords.shape[0] * max_neighbors
+    out = _run(
+        artifact='coords.ptx',
+        name='neighbor_relation_i32',
+        inputs=[
+            source_coords,
+            query_coords,
+            source_active_rows,
+            query_active_rows,
+        ],
+        output_shapes=[
+            (edge_capacity,),
+            (edge_capacity,),
+            (edge_capacity,),
+            (edge_capacity,),
+            (query_coords.shape[0] + 1,),
+            (2,),
+        ],
+        output_dtypes=[
+            mx.int32,
+            mx.int32,
+            mx.int32,
+            mx.float32,
+            mx.int32,
+            mx.int32,
+        ],
+        scalars=[
+            op,
+            source_coords.shape[0],
+            query_coords.shape[0],
+            max_neighbors,
+            radius_squared,
+        ],
+        grid=(1, 1, 1),
+        threadgroup=(1, 1, 1),
+        init_value=0.0,
+    )
+    return out[0], out[1], out[2], out[3], out[4], out[5]
+
+
+def _relation_tuple(
+    out: list[mx.array],
+) -> tuple[
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+    mx.array,
+]:
+    return (
+        out[0],
+        out[1],
+        out[2],
+        out[3],
+        out[4],
+        out[5],
+        out[6],
+        out[7],
+        out[8],
+        out[9],
+    )
+
+
+def _kernel_offsets(
+    kernel_size: Triple,
+    dilation: Triple,
+) -> tuple[Triple, ...]:
+    axes = []
+    for size in kernel_size:
+        if size % 2 == 1:
+            radius = size // 2
+            axes.append(range(-radius, radius + 1))
+        else:
+            axes.append(range(size))
+    return tuple(
+        (int(x * dilation[0]), int(y * dilation[1]), int(z * dilation[2]))
+        for x in axes[0]
+        for y in axes[1]
+        for z in axes[2]
+    )
+
+
+def _kernel_count(kernel_size: Triple) -> int:
+    return int(kernel_size[0] * kernel_size[1] * kernel_size[2])
+
+
+def _offset_array(offsets: tuple[Triple, ...]) -> mx.array:
+    return mx.array(offsets, dtype=mx.int32)
+
+
+def _can_use_direct_transposed_relation(
+    offsets: tuple[Triple, ...],
+    stride: Triple,
+) -> bool:
+    if not offsets:
+        return False
+    for axis in range(3):
+        values = [offset[axis] for offset in offsets]
+        if stride[axis] <= max(values) - min(values):
+            return False
+    return True
+
+
+def _radius_neighbor_capacity(radius: float) -> int:
+    import math
+
+    limit = math.ceil(radius)
+    radius_squared = radius * radius
+    count = 0
+    for dz in range(-limit, limit + 1):
+        for dy in range(-limit, limit + 1):
+            for dx in range(-limit, limit + 1):
+                if dx * dx + dy * dy + dz * dz <= radius_squared:
+                    count += 1
+    return max(count, 1)
+
+
 # MARK: - low-level helpers
+
+
+def _single(value: Any) -> Any:
+    if isinstance(value, tuple | list):
+        return value[0]
+    return value
 
 
 def _run(
@@ -920,13 +1387,15 @@ def _pool_reduce_id(reduce: Reduction) -> int:
 
 
 def _grid_1d(elements: int, block: int = 256) -> tuple[int, int, int]:
-    return (max((int(elements) + block - 1) // block, 1), 1, 1)
+    total = max(int(elements), 1)
+    return (((total + block - 1) // block) * block, 1, 1)
 
 
 def _require_int32_coords(value: mx.array, name: str) -> None:
     if value.dtype != mx.int32 or value.ndim != 2 or value.shape[1] != 4:
         raise ValueError(
-            f'CUDA {name} must have shape (N, 4) and int32 dtype.'
+            f'CUDA coordinate kernels require {name} to have shape '
+            '(N, 4) and int32 dtype.'
         )
 
 

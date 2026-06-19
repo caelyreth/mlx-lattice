@@ -92,6 +92,39 @@ __device__ void clear_i32(int* data, int count, int value) {
     }
 }
 
+__device__ void fill_grouped_view(
+    const int* group_ids,
+    int edge_count,
+    int group_count,
+    int* row_offsets,
+    int* edge_ids
+) {
+    for (int group = 0; group <= group_count; ++group) {
+        row_offsets[group] = 0;
+    }
+    for (int edge = 0; edge < edge_count; ++edge) {
+        edge_ids[edge] = -1;
+        int group = group_ids[edge];
+        if (group >= 0 && group < group_count) {
+            row_offsets[group + 1] += 1;
+        }
+    }
+    for (int group = 0; group < group_count; ++group) {
+        row_offsets[group + 1] += row_offsets[group];
+    }
+    for (int edge = 0; edge < edge_count; ++edge) {
+        int group = group_ids[edge];
+        if (group < 0 || group >= group_count) {
+            continue;
+        }
+        int prior = 0;
+        for (int cursor = 0; cursor < edge; ++cursor) {
+            prior += group_ids[cursor] == group ? 1 : 0;
+        }
+        edge_ids[row_offsets[group] + prior] = edge;
+    }
+}
+
 } // namespace
 
 extern "C" __global__ void set_coords_i32(
@@ -606,6 +639,166 @@ extern "C" __global__ void generic_kernel_relation_i32(
     counts[1] = out_count;
 }
 
+extern "C" __global__ void generic_kernel_relation_full_i32(
+    const int* coords,
+    const int* offsets,
+    const int* active_rows,
+    int* in_rows,
+    int* out_rows,
+    int* kernel_ids,
+    int* row_offsets,
+    int* out_coords,
+    int* counts,
+    int* in_row_offsets,
+    int* in_edge_ids,
+    int* kernel_row_offsets,
+    int* kernel_edge_ids,
+    int op,
+    int rows,
+    int kernel_count,
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z,
+    bool direct
+) {
+    if (elem_1d() != 0) {
+        return;
+    }
+    TripleArgs stride{stride_x, stride_y, stride_z};
+    TripleArgs padding{padding_x, padding_y, padding_z};
+    int logical = min(active_rows[0], rows);
+    int edge = 0;
+    int out_count = 0;
+
+    if (op == 0) {
+        out_count = logical;
+        if (!(stride.x == 1 && stride.y == 1 && stride.z == 1 &&
+              padding.x == 0 && padding.y == 0 && padding.z == 0)) {
+            out_count = 0;
+            for (int row = 0; row < logical; ++row) {
+                int base = row * 4;
+                int candidate[4] = {
+                    coords[base],
+                    floor_div_int(coords[base + 1], stride.x),
+                    floor_div_int(coords[base + 2], stride.y),
+                    floor_div_int(coords[base + 3], stride.z),
+                };
+                if (find_coord(out_coords, out_count, candidate) < 0) {
+                    write_coord(
+                        out_coords,
+                        out_count++,
+                        candidate[0],
+                        candidate[1],
+                        candidate[2],
+                        candidate[3]
+                    );
+                }
+            }
+        } else {
+            for (int row = 0; row < logical; ++row) {
+                int base = row * 4;
+                write_coord(
+                    out_coords,
+                    row,
+                    coords[base],
+                    coords[base + 1],
+                    coords[base + 2],
+                    coords[base + 3]
+                );
+            }
+        }
+        for (int out_row = 0; out_row < out_count; ++out_row) {
+            row_offsets[out_row] = edge;
+            int out_base = out_row * 4;
+            for (int kernel = 0; kernel < kernel_count; ++kernel) {
+                int candidate[4];
+                kernel_input_coord(
+                    &out_coords[out_base],
+                    &offsets[kernel * 3],
+                    stride,
+                    padding,
+                    candidate
+                );
+                int in_row = find_coord(coords, logical, candidate);
+                if (in_row < 0) {
+                    continue;
+                }
+                in_rows[edge] = in_row;
+                out_rows[edge] = out_row;
+                kernel_ids[edge] = kernel;
+                ++edge;
+            }
+        }
+        row_offsets[out_count] = edge;
+    } else {
+        for (int in_row = 0; in_row < logical; ++in_row) {
+            int base = in_row * 4;
+            for (int kernel = 0; kernel < kernel_count; ++kernel) {
+                int out_row =
+                    direct ? in_row * kernel_count + kernel : out_count;
+                int candidate[4] = {
+                    coords[base],
+                    coords[base + 1] * stride.x + offsets[kernel * 3] -
+                        padding.x,
+                    coords[base + 2] * stride.y + offsets[kernel * 3 + 1] -
+                        padding.y,
+                    coords[base + 3] * stride.z + offsets[kernel * 3 + 2] -
+                        padding.z,
+                };
+                if (!direct) {
+                    int existing = find_coord(out_coords, out_count, candidate);
+                    if (existing >= 0) {
+                        out_row = existing;
+                    } else {
+                        out_row = out_count++;
+                        write_coord(
+                            out_coords,
+                            out_row,
+                            candidate[0],
+                            candidate[1],
+                            candidate[2],
+                            candidate[3]
+                        );
+                    }
+                } else {
+                    write_coord(
+                        out_coords,
+                        out_row,
+                        candidate[0],
+                        candidate[1],
+                        candidate[2],
+                        candidate[3]
+                    );
+                    out_count = max(out_count, out_row + 1);
+                }
+                in_rows[edge] = in_row;
+                out_rows[edge] = out_row;
+                kernel_ids[edge] = kernel;
+                ++edge;
+            }
+        }
+        for (int row = 0; row <= out_count; ++row) {
+            row_offsets[row] = 0;
+        }
+        for (int cursor = 0; cursor < edge; ++cursor) {
+            ++row_offsets[out_rows[cursor] + 1];
+        }
+        for (int row = 0; row < out_count; ++row) {
+            row_offsets[row + 1] += row_offsets[row];
+        }
+    }
+
+    counts[0] = edge;
+    counts[1] = out_count;
+    fill_grouped_view(in_rows, edge, rows, in_row_offsets, in_edge_ids);
+    fill_grouped_view(
+        kernel_ids, edge, kernel_count, kernel_row_offsets, kernel_edge_ids
+    );
+}
+
 extern "C" __global__ void count_target_kernel_relation_i32(
     const int* coords,
     const int* offsets,
@@ -742,6 +935,69 @@ extern "C" __global__ void fill_target_kernel_relation_i32(
     kernel_ids[slot] = kernel;
 }
 
+extern "C" __global__ void target_kernel_relation_full_i32(
+    const int* coords,
+    const int* offsets,
+    const int* active_rows,
+    const int* target_coords,
+    const int* target_active_rows,
+    int* in_rows,
+    int* out_rows,
+    int* kernel_ids,
+    int* row_offsets,
+    int* counts,
+    int* in_row_offsets,
+    int* in_edge_ids,
+    int* kernel_row_offsets,
+    int* kernel_edge_ids,
+    int rows,
+    int target_rows,
+    int kernel_count,
+    int stride_x,
+    int stride_y,
+    int stride_z,
+    int padding_x,
+    int padding_y,
+    int padding_z
+) {
+    if (elem_1d() != 0) {
+        return;
+    }
+    TripleArgs stride{stride_x, stride_y, stride_z};
+    TripleArgs padding{padding_x, padding_y, padding_z};
+    int source_count = min(active_rows[0], rows);
+    int out_count = min(target_active_rows[0], target_rows);
+    int edge = 0;
+    for (int out_row = 0; out_row < out_count; ++out_row) {
+        row_offsets[out_row] = edge;
+        for (int kernel = 0; kernel < kernel_count; ++kernel) {
+            int candidate[4];
+            kernel_input_coord(
+                &target_coords[out_row * 4],
+                &offsets[kernel * 3],
+                stride,
+                padding,
+                candidate
+            );
+            int in_row = find_coord(coords, source_count, candidate);
+            if (in_row < 0) {
+                continue;
+            }
+            in_rows[edge] = in_row;
+            out_rows[edge] = out_row;
+            kernel_ids[edge] = kernel;
+            ++edge;
+        }
+    }
+    row_offsets[out_count] = edge;
+    counts[0] = edge;
+    counts[1] = out_count;
+    fill_grouped_view(in_rows, edge, rows, in_row_offsets, in_edge_ids);
+    fill_grouped_view(
+        kernel_ids, edge, kernel_count, kernel_row_offsets, kernel_edge_ids
+    );
+}
+
 extern "C" __global__ void generative_kernel_relation_i32(
     const int* coords,
     const int* offsets,
@@ -784,6 +1040,59 @@ extern "C" __global__ void generative_kernel_relation_i32(
         coords[in_base + 1] * stride.x + offsets[kernel * 3],
         coords[in_base + 2] * stride.y + offsets[kernel * 3 + 1],
         coords[in_base + 3] * stride.z + offsets[kernel * 3 + 2]
+    );
+}
+
+extern "C" __global__ void generative_kernel_relation_full_i32(
+    const int* coords,
+    const int* offsets,
+    const int* active_rows,
+    int* in_rows,
+    int* out_rows,
+    int* kernel_ids,
+    int* row_offsets,
+    int* out_coords,
+    int* counts,
+    int* in_row_offsets,
+    int* in_edge_ids,
+    int* kernel_row_offsets,
+    int* kernel_edge_ids,
+    int rows,
+    int kernel_count,
+    int stride_x,
+    int stride_y,
+    int stride_z
+) {
+    if (elem_1d() != 0) {
+        return;
+    }
+    TripleArgs stride{stride_x, stride_y, stride_z};
+    int logical = min(active_rows[0], rows);
+    int edge = 0;
+    for (int in_row = 0; in_row < logical; ++in_row) {
+        int in_base = in_row * 4;
+        for (int kernel = 0; kernel < kernel_count; ++kernel) {
+            in_rows[edge] = in_row;
+            out_rows[edge] = edge;
+            kernel_ids[edge] = kernel;
+            row_offsets[edge] = edge;
+            write_coord(
+                out_coords,
+                edge,
+                coords[in_base],
+                coords[in_base + 1] * stride.x + offsets[kernel * 3],
+                coords[in_base + 2] * stride.y + offsets[kernel * 3 + 1],
+                coords[in_base + 3] * stride.z + offsets[kernel * 3 + 2]
+            );
+            ++edge;
+        }
+    }
+    row_offsets[edge] = edge;
+    counts[0] = edge;
+    counts[1] = edge;
+    fill_grouped_view(in_rows, edge, rows, in_row_offsets, in_edge_ids);
+    fill_grouped_view(
+        kernel_ids, edge, kernel_count, kernel_row_offsets, kernel_edge_ids
     );
 }
 

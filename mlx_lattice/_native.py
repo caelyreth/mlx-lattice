@@ -291,22 +291,22 @@ class CudaBackend:
         return cuda.child_coords_from_indices(parent_coords, child_indices)
 
     def build_target_kernel_relation(self, *args):
-        return self._compiled.build_target_kernel_relation(*args)
+        return cuda.build_target_kernel_relation(*args)
 
     def build_kernel_relation(self, *args):
-        return self._compiled.build_kernel_relation(*args)
+        return cuda.build_kernel_relation(*args)
 
     def build_generative_relation(self, *args):
-        return self._compiled.build_generative_relation(*args)
+        return cuda.build_generative_relation(*args)
 
     def build_transposed_kernel_relation(self, *args):
-        return self._compiled.build_transposed_kernel_relation(*args)
+        return cuda.build_transposed_kernel_relation(*args)
 
     def build_knn_relation(self, *args):
-        return self._compiled.build_knn_relation(*args)
+        return cuda.build_knn_relation(*args)
 
     def build_radius_relation(self, *args):
-        return self._compiled.build_radius_relation(*args)
+        return cuda.build_radius_relation(*args)
 
     def sparse_quantize(
         self,

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 from mlx_lattice.backends.cuda.runtime import (
+    build_generative_relation,
+    build_kernel_relation,
+    build_knn_relation,
+    build_radius_relation,
+    build_target_kernel_relation,
+    build_transposed_kernel_relation,
     child_coords_from_indices,
     downsample_coords,
     info,
@@ -19,6 +25,12 @@ from mlx_lattice.backends.cuda.runtime import (
 )
 
 __all__ = [
+    'build_generative_relation',
+    'build_kernel_relation',
+    'build_knn_relation',
+    'build_radius_relation',
+    'build_target_kernel_relation',
+    'build_transposed_kernel_relation',
     'child_coords_from_indices',
     'downsample_coords',
     'info',
