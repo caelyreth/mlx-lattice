@@ -542,9 +542,9 @@ def _voxelize_features_jvp(primals, tangents):
         return mx.zeros((voxel_rows, 0), dtype=mx.float32)
     return _voxelize_features_run(
         tangent,
-        inverse_rows,
-        voxel_counts,
-        active_rows,
+        mx.stop_gradient(inverse_rows),
+        mx.stop_gradient(voxel_counts),
+        mx.stop_gradient(active_rows),
         reduce_id,
         voxel_rows,
     )
@@ -724,24 +724,24 @@ def _sparse_conv_features_jvp(primals, tangents):
     if feat_tangent is not None:
         out = _sparse_conv_forward_run(
             feat_tangent,
-            weights,
-            in_rows,
-            out_rows,
-            kernel_ids,
-            counts,
-            row_offsets,
+            mx.stop_gradient(weights),
+            mx.stop_gradient(in_rows),
+            mx.stop_gradient(out_rows),
+            mx.stop_gradient(kernel_ids),
+            mx.stop_gradient(counts),
+            mx.stop_gradient(row_offsets),
             out_capacity,
             n_kernels,
         )
     if weight_tangent is not None:
         component = _sparse_conv_forward_run(
-            feats,
+            mx.stop_gradient(feats),
             weight_tangent,
-            in_rows,
-            out_rows,
-            kernel_ids,
-            counts,
-            row_offsets,
+            mx.stop_gradient(in_rows),
+            mx.stop_gradient(out_rows),
+            mx.stop_gradient(kernel_ids),
+            mx.stop_gradient(counts),
+            mx.stop_gradient(row_offsets),
             out_capacity,
             n_kernels,
         )
@@ -946,12 +946,12 @@ def _sparse_pool_features_jvp(primals, tangents):
     if tangent is None:
         return mx.zeros((out_capacity, feats.shape[1]), dtype=feats.dtype)
     pooled = _sparse_pool_forward_run(
-        feats,
-        in_rows,
-        out_rows,
-        kernel_ids,
-        row_offsets,
-        counts,
+        mx.stop_gradient(feats),
+        mx.stop_gradient(in_rows),
+        mx.stop_gradient(out_rows),
+        mx.stop_gradient(kernel_ids),
+        mx.stop_gradient(row_offsets),
+        mx.stop_gradient(counts),
         reduce_id,
         out_capacity,
     )
@@ -960,13 +960,13 @@ def _sparse_pool_features_jvp(primals, tangents):
         name='sparse_pool_relation_jvp_f32_i32',
         inputs=[
             tangent,
-            feats,
-            pooled,
-            in_rows,
-            out_rows,
-            kernel_ids,
-            row_offsets,
-            counts,
+            mx.stop_gradient(feats),
+            mx.stop_gradient(pooled),
+            mx.stop_gradient(in_rows),
+            mx.stop_gradient(out_rows),
+            mx.stop_gradient(kernel_ids),
+            mx.stop_gradient(row_offsets),
+            mx.stop_gradient(counts),
         ],
         output_shapes=[pooled.shape],
         output_dtypes=[feats.dtype],

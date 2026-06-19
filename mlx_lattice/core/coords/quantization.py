@@ -133,7 +133,7 @@ def _float_triple(
     name: str,
 ) -> tuple[float, float, float]:
     if isinstance(value, int | float):
-        return (float(value), float(value), float(value))
+        values = (float(value), float(value), float(value))
     else:
         raw = tuple(float(item) for item in value)
         if len(raw) != 3:
