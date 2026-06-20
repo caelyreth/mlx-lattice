@@ -811,6 +811,83 @@ using namespace metal;
     }
 }
 
+[[kernel]] void clear_relation_implicit_gemm_view_i32(
+    device int* out_in_map [[buffer(0)]],
+    device int* row_masks [[buffer(1)]],
+    constant const int& total_slots [[buffer(2)]],
+    constant const int& total_mask_words [[buffer(3)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    if (elem < uint(total_slots)) {
+        out_in_map[elem] = -1;
+    }
+    if (elem < uint(total_mask_words)) {
+        row_masks[elem] = 0;
+    }
+}
+
+[[kernel]] void build_relation_implicit_gemm_view_i32(
+    device const int* source_coords [[buffer(0)]],
+    device const int* source_active_rows [[buffer(1)]],
+    device const int* output_coords [[buffer(2)]],
+    device const int* output_active_rows [[buffer(3)]],
+    device const int* kernel_offsets [[buffer(4)]],
+    device const int* table_rows [[buffer(5)]],
+    device int* out_in_map [[buffer(6)]],
+    device atomic_int* row_masks [[buffer(7)]],
+    constant const int& source_rows [[buffer(8)]],
+    constant const int& output_rows [[buffer(9)]],
+    constant const int& kernel_count [[buffer(10)]],
+    constant const int& table_capacity [[buffer(11)]],
+    constant const int& mask_words [[buffer(12)]],
+    constant const int& stride_x [[buffer(13)]],
+    constant const int& stride_y [[buffer(14)]],
+    constant const int& stride_z [[buffer(15)]],
+    constant const int& pad_x [[buffer(16)]],
+    constant const int& pad_y [[buffer(17)]],
+    constant const int& pad_z [[buffer(18)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int total = output_rows * kernel_count;
+    if (elem >= uint(total)) {
+        return;
+    }
+
+    int out_row = int(elem) / kernel_count;
+    int kernel_id = int(elem) - out_row * kernel_count;
+    int output_active = min(output_active_rows[0], output_rows);
+    if (out_row >= output_active) {
+        return;
+    }
+
+    int out_base = out_row * 4;
+    int offset_base = kernel_id * 3;
+    int candidate[4] = {
+        output_coords[out_base],
+        output_coords[out_base + 1] * stride_x + kernel_offsets[offset_base] -
+            pad_x,
+        output_coords[out_base + 2] * stride_y +
+            kernel_offsets[offset_base + 1] - pad_y,
+        output_coords[out_base + 3] * stride_z +
+            kernel_offsets[offset_base + 2] - pad_z,
+    };
+    int in_row = lookup_coord_row_hash(
+        source_coords, table_rows, table_capacity, candidate
+    );
+    int source_active = min(source_active_rows[0], source_rows);
+    if (in_row < 0 || in_row >= source_active) {
+        return;
+    }
+    out_in_map[elem] = in_row;
+    int word = kernel_id / 32;
+    int bit = kernel_id - word * 32;
+    atomic_fetch_or_explicit(
+        &row_masks[out_row * mask_words + word],
+        int(1u << uint(bit)),
+        memory_order_relaxed
+    );
+}
+
 // MARK: - neighbor relations
 
 [[kernel]] void build_neighbor_relation_i32(

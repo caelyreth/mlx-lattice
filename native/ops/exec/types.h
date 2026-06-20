@@ -70,6 +70,29 @@ struct SparseConvPlan {
     mx::array kernel_edge_ids;
 };
 
+struct SparseRelationEdges {
+    mx::array in_rows;
+    mx::array out_rows;
+    mx::array kernel_ids;
+};
+
+struct SparseRelationContract {
+    mx::array counts;
+    int out_capacity;
+    int n_kernels;
+};
+
+struct SparseRelationCSRView {
+    mx::array row_offsets;
+    mx::array edge_ids;
+};
+
+struct SparseRelationExecutionViews {
+    SparseRelationCSRView output_csr;
+    SparseRelationCSRView input_csr;
+    SparseRelationCSRView kernel_csr;
+};
+
 struct SparsePoolShape {
     int in_capacity;
     int out_capacity;

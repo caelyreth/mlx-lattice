@@ -40,6 +40,12 @@ enum RelationGroupedViewOutputSlot : std::size_t {
     RelationGroupedViewOutputCount,
 };
 
+enum RelationImplicitGemmViewOutputSlot : std::size_t {
+    RelationImplicitGemmOutInMap = 0,
+    RelationImplicitGemmRowMasks,
+    RelationImplicitGemmViewOutputCount,
+};
+
 enum class NeighborRelationOp : std::uint8_t {
     Knn,
     Radius,
@@ -61,12 +67,13 @@ enum NeighborRelationOutputSlot : std::size_t {
 };
 
 struct NativeKernelRelation {
-    // Edges are ordered by output row. Other execution views stay lazy until
-    // a backward path or diagnostic consumer requests them.
+    // Contract arrays plus materialized execution views. The edge arrays are
+    // diagnostic storage; kernels should consume named views instead of
+    // treating any one layout as the relation source.
     mx::array in_rows;
     mx::array out_rows;
     mx::array kernel_ids;
-    mx::array row_offsets;
+    mx::array output_row_offsets;
     mx::array out_coords;
     mx::array counts;
     mx::array in_row_offsets;
@@ -89,6 +96,11 @@ struct NativeRelationGroupedView {
 
 struct NativeRelationDirectView {
     mx::array edge_ids;
+};
+
+struct NativeRelationImplicitGemmView {
+    mx::array out_in_map;
+    mx::array row_masks;
 };
 
 struct NativeNeighborRelation {
@@ -167,6 +179,34 @@ operator==(RelationGroupedViewShape lhs, RelationGroupedViewShape rhs) {
 
 inline bool
 operator!=(RelationGroupedViewShape lhs, RelationGroupedViewShape rhs) {
+    return !(lhs == rhs);
+}
+
+struct RelationImplicitGemmViewShape {
+    int source_rows;
+    int output_rows;
+    int kernel_count;
+    int mask_words;
+    CoordRelationOp op;
+    Triple stride;
+    Triple padding;
+};
+
+inline bool operator==(
+    RelationImplicitGemmViewShape lhs,
+    RelationImplicitGemmViewShape rhs
+) {
+    return lhs.source_rows == rhs.source_rows &&
+           lhs.output_rows == rhs.output_rows &&
+           lhs.kernel_count == rhs.kernel_count &&
+           lhs.mask_words == rhs.mask_words && lhs.op == rhs.op &&
+           lhs.stride == rhs.stride && lhs.padding == rhs.padding;
+}
+
+inline bool operator!=(
+    RelationImplicitGemmViewShape lhs,
+    RelationImplicitGemmViewShape rhs
+) {
     return !(lhs == rhs);
 }
 

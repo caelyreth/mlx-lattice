@@ -4,9 +4,11 @@ from collections.abc import Sequence
 
 import mlx.core as mx
 
-from mlx_lattice._native import ext
 from mlx_lattice.core import CoordinateMapKey, KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
+from mlx_lattice.ops._relation_exec import (
+    sparse_conv_features_from_relation,
+)
 
 __all__ = [
     'conv3d',
@@ -161,22 +163,7 @@ def _relation_conv(
         raise ValueError(
             'kernel relation is missing static shape metadata.'
         )
-
-    feats = ext.sparse_conv_features(
-        x.feats,
-        weight,
-        relation.edges.in_rows,
-        relation.edges.out_rows,
-        relation.edges.kernel_ids,
-        relation.counts,
-        relation.row_offsets,
-        relation.in_row_offsets,
-        relation.in_edge_ids,
-        relation.kernel_row_offsets,
-        relation.kernel_edge_ids,
-        relation.n_out_capacity,
-        relation.n_kernels,
-    )
+    feats = sparse_conv_features_from_relation(x.feats, weight, relation)
     if reuse_input_coords:
         return x.replace(feats=_with_bias(feats, bias))
     if relation.out_coords is None:

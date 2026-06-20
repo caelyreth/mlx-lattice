@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import mlx.core as mx
 
 from mlx_lattice.core.types import Triple
+
+RelationKind = Literal['forward', 'target', 'transposed', 'generative']
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +35,8 @@ class RelationEdges:
 
 
 @dataclass(frozen=True, slots=True)
-class RelationView:
-    """CSR-style execution view over relation edge arrays."""
+class RelationCSRView:
+    """CSR execution view over relation edge arrays."""
 
     row_offsets: mx.array
     edge_ids: mx.array | None = None
@@ -42,6 +45,140 @@ class RelationView:
         _validate_row_offsets(self.row_offsets)
         if self.edge_ids is not None:
             _validate_row_array(self.edge_ids, name='edge_ids')
+
+
+RelationView = RelationCSRView
+
+
+@dataclass(frozen=True, slots=True)
+class RelationImplicitGemmView:
+    """Reserved relation view for future implicit-GEMM/TensorOps kernels."""
+
+    out_in_map: mx.array
+    row_masks: mx.array
+    sorted_out_in_map: mx.array | None = None
+    reorder_rows: mx.array | None = None
+    tile_masks: mx.array | None = None
+
+    def __post_init__(self) -> None:
+        if self.out_in_map.ndim != 2:
+            raise ValueError('out_in_map must have shape (Nout, K).')
+        if self.out_in_map.dtype not in (mx.int32, mx.int64):
+            raise ValueError('out_in_map must be int32 or int64.')
+        if self.row_masks.ndim != 2:
+            raise ValueError('row_masks must have shape (Nout, M).')
+        if self.row_masks.dtype not in (mx.int32, mx.int64):
+            raise ValueError('row_masks must be int32 or int64.')
+        if int(self.row_masks.shape[0]) != int(self.out_in_map.shape[0]):
+            raise ValueError(
+                'row_masks must have one row per out_in_map row.'
+            )
+        expected_mask_words = (int(self.out_in_map.shape[1]) + 31) // 32
+        if int(self.row_masks.shape[1]) != expected_mask_words:
+            raise ValueError(
+                'row_masks must have ceil(K / 32) words per output row.'
+            )
+        for name, value in (
+            ('sorted_out_in_map', self.sorted_out_in_map),
+            ('reorder_rows', self.reorder_rows),
+            ('tile_masks', self.tile_masks),
+        ):
+            if value is None:
+                continue
+            if name == 'sorted_out_in_map':
+                if value.shape != self.out_in_map.shape:
+                    raise ValueError(
+                        'sorted_out_in_map must match out_in_map shape.'
+                    )
+                if value.dtype != self.out_in_map.dtype:
+                    raise ValueError(
+                        'sorted_out_in_map must match out_in_map dtype.'
+                    )
+            else:
+                _validate_row_array(value, name=name)
+
+
+@dataclass(frozen=True, slots=True)
+class SparseRelationContract:
+    """Logical sparse relation contract shared by all execution views."""
+
+    counts: mx.array
+    kernel_offsets: tuple[Triple, ...]
+    out_coords: mx.array | None = None
+    n_in_capacity: int | None = None
+    n_out_capacity: int | None = None
+    n_kernels: int | None = None
+    source_coords: mx.array | None = None
+    source_active_rows: mx.array | None = None
+    target_coords: mx.array | None = None
+    target_active_rows: mx.array | None = None
+    stride: Triple = (1, 1, 1)
+    padding: Triple = (0, 0, 0)
+    kind: RelationKind = 'forward'
+
+    def __post_init__(self) -> None:
+        _validate_counts(self.counts)
+        if self.out_coords is not None:
+            _validate_coords(self.out_coords, name='out_coords')
+        if self.source_coords is not None:
+            _validate_coords(self.source_coords, name='source_coords')
+        if self.target_coords is not None:
+            _validate_coords(self.target_coords, name='target_coords')
+        if self.source_active_rows is not None:
+            _validate_active_rows(
+                self.source_active_rows, name='source_active_rows'
+            )
+        if self.target_active_rows is not None:
+            _validate_active_rows(
+                self.target_active_rows, name='target_active_rows'
+            )
+        if self.kind not in (
+            'forward',
+            'target',
+            'transposed',
+            'generative',
+        ):
+            raise ValueError(
+                "relation kind must be 'forward', 'target', "
+                "'transposed', or 'generative'."
+            )
+        normalized_offsets = tuple(
+            (int(x), int(y), int(z)) for x, y, z in self.kernel_offsets
+        )
+        object.__setattr__(self, 'kernel_offsets', normalized_offsets)
+        object.__setattr__(
+            self, 'stride', tuple(int(value) for value in self.stride)
+        )
+        object.__setattr__(
+            self, 'padding', tuple(int(value) for value in self.padding)
+        )
+        n_in = _optional_count(self.n_in_capacity, 'n_in_capacity')
+        n_out = _optional_count(self.n_out_capacity, 'n_out_capacity')
+        n_kernels = _optional_count(self.n_kernels, 'n_kernels')
+        if normalized_offsets:
+            if n_kernels is not None and n_kernels != len(
+                normalized_offsets
+            ):
+                raise ValueError('n_kernels must match kernel_offsets.')
+            n_kernels = len(normalized_offsets)
+        if self.out_coords is not None:
+            out_capacity = int(self.out_coords.shape[0])
+            if n_out is not None and n_out != out_capacity:
+                raise ValueError(
+                    'n_out_capacity must match out_coords capacity.'
+                )
+            n_out = out_capacity
+        object.__setattr__(self, 'n_in_capacity', n_in)
+        object.__setattr__(self, 'n_out_capacity', n_out)
+        object.__setattr__(self, 'n_kernels', n_kernels)
+
+    @property
+    def edge_count(self) -> mx.array:
+        return self.counts[:1]
+
+    @property
+    def out_count(self) -> mx.array:
+        return self.counts[1:2]
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,21 +207,12 @@ class NeighborEdges:
 
 @dataclass(frozen=True, slots=True, init=False)
 class KernelRelation:
+    contract: SparseRelationContract
     edges: RelationEdges
-    row_offsets: mx.array
-    in_row_offsets: mx.array
-    in_edge_ids: mx.array
-    kernel_row_offsets: mx.array
-    kernel_edge_ids: mx.array
-    out_view: RelationView
-    in_view: RelationView
-    kernel_view: RelationView
-    counts: mx.array
-    kernel_offsets: tuple[Triple, ...]
-    out_coords: mx.array | None = None
-    n_in_capacity: int | None = None
-    n_out_capacity: int | None = None
-    n_kernels: int | None = None
+    output_csr: RelationCSRView
+    input_csr: RelationCSRView
+    kernel_csr: RelationCSRView
+    implicit_gemm: RelationImplicitGemmView | None = None
 
     def __init__(
         self,
@@ -103,9 +231,15 @@ class KernelRelation:
         n_in_capacity: int | None = None,
         n_out_capacity: int | None = None,
         n_kernels: int | None = None,
+        source_coords: mx.array | None = None,
+        source_active_rows: mx.array | None = None,
+        target_coords: mx.array | None = None,
+        target_active_rows: mx.array | None = None,
+        stride: Triple = (1, 1, 1),
+        padding: Triple = (0, 0, 0),
+        kind: RelationKind = 'forward',
+        implicit_gemm: RelationImplicitGemmView | None = None,
     ) -> None:
-        if out_coords is not None:
-            _validate_coords(out_coords, name='out_coords')
         if counts is None:
             counts = mx.array(
                 [
@@ -115,95 +249,155 @@ class KernelRelation:
                 dtype=mx.int32,
             )
         _validate_counts(counts)
+        contract = SparseRelationContract(
+            counts=counts,
+            kernel_offsets=kernel_offsets,
+            out_coords=out_coords,
+            n_in_capacity=n_in_capacity,
+            n_out_capacity=n_out_capacity,
+            n_kernels=n_kernels,
+            source_coords=source_coords,
+            source_active_rows=source_active_rows,
+            target_coords=target_coords,
+            target_active_rows=target_active_rows,
+            stride=stride,
+            padding=padding,
+            kind=kind,
+        )
         if row_offsets is None:
             out_capacity = (
-                0 if out_coords is None else int(out_coords.shape[0])
+                0
+                if contract.n_out_capacity is None
+                else int(contract.n_out_capacity)
             )
             row_offsets = mx.array([0] * (out_capacity + 1), dtype=mx.int32)
         _validate_row_offsets(row_offsets)
 
         edges = RelationEdges(in_rows, out_rows, kernel_ids)
         if in_row_offsets is None:
-            in_capacity = 0 if n_in_capacity is None else int(n_in_capacity)
+            in_capacity = (
+                0
+                if contract.n_in_capacity is None
+                else int(contract.n_in_capacity)
+            )
             in_row_offsets = mx.array(
                 [0] * (in_capacity + 1), dtype=mx.int32
             )
         if in_edge_ids is None:
             in_edge_ids = mx.array([0] * edges.capacity, dtype=mx.int32)
         if kernel_row_offsets is None:
-            kernel_capacity = 0 if n_kernels is None else int(n_kernels)
+            kernel_capacity = (
+                0 if contract.n_kernels is None else int(contract.n_kernels)
+            )
             kernel_row_offsets = mx.array(
                 [0] * (kernel_capacity + 1), dtype=mx.int32
             )
         if kernel_edge_ids is None:
             kernel_edge_ids = mx.array([0] * edges.capacity, dtype=mx.int32)
-        in_view = RelationView(in_row_offsets, in_edge_ids)
-        kernel_view = RelationView(kernel_row_offsets, kernel_edge_ids)
-        out_view = RelationView(row_offsets)
-        normalized_kernel_offsets = tuple(
-            (int(x), int(y), int(z)) for x, y, z in kernel_offsets
-        )
-        normalized_n_in_capacity = _optional_count(
-            n_in_capacity, 'n_in_capacity'
-        )
-        normalized_n_out_capacity = _optional_count(
-            n_out_capacity, 'n_out_capacity'
-        )
-        normalized_n_kernels = _optional_count(n_kernels, 'n_kernels')
+        output_csr = RelationCSRView(row_offsets)
+        input_csr = RelationCSRView(in_row_offsets, in_edge_ids)
+        kernel_csr = RelationCSRView(kernel_row_offsets, kernel_edge_ids)
         if (
-            normalized_kernel_offsets
-            and normalized_n_kernels is not None
-            and len(normalized_kernel_offsets) != normalized_n_kernels
+            contract.n_out_capacity is not None
+            and int(row_offsets.shape[0])
+            != int(contract.n_out_capacity) + 1
         ):
-            raise ValueError('n_kernels must match kernel_offsets.')
-        if normalized_kernel_offsets:
-            normalized_n_kernels = len(normalized_kernel_offsets)
-        if out_coords is not None:
-            out_coord_capacity = int(out_coords.shape[0])
-            if int(row_offsets.shape[0]) != out_coord_capacity + 1:
-                raise ValueError(
-                    'row_offsets must have length n_out_capacity + 1.'
-                )
-            if (
-                normalized_n_out_capacity is not None
-                and normalized_n_out_capacity != out_coord_capacity
-            ):
-                raise ValueError(
-                    'n_out_capacity must match out_coords capacity.'
-                )
-            normalized_n_out_capacity = out_coord_capacity
+            raise ValueError(
+                'row_offsets must have length n_out_capacity + 1.'
+            )
 
+        object.__setattr__(self, 'contract', contract)
         object.__setattr__(self, 'edges', edges)
-        object.__setattr__(self, 'row_offsets', row_offsets)
-        object.__setattr__(self, 'in_row_offsets', in_row_offsets)
-        object.__setattr__(self, 'in_edge_ids', in_edge_ids)
-        object.__setattr__(self, 'kernel_row_offsets', kernel_row_offsets)
-        object.__setattr__(self, 'kernel_edge_ids', kernel_edge_ids)
-        object.__setattr__(self, 'out_view', out_view)
-        object.__setattr__(self, 'in_view', in_view)
-        object.__setattr__(self, 'kernel_view', kernel_view)
-        object.__setattr__(self, 'counts', counts)
-        object.__setattr__(
-            self, 'kernel_offsets', normalized_kernel_offsets
-        )
-        object.__setattr__(self, 'out_coords', out_coords)
-        object.__setattr__(self, 'n_in_capacity', normalized_n_in_capacity)
-        object.__setattr__(
-            self, 'n_out_capacity', normalized_n_out_capacity
-        )
-        object.__setattr__(self, 'n_kernels', normalized_n_kernels)
+        object.__setattr__(self, 'output_csr', output_csr)
+        object.__setattr__(self, 'input_csr', input_csr)
+        object.__setattr__(self, 'kernel_csr', kernel_csr)
+        object.__setattr__(self, 'implicit_gemm', implicit_gemm)
 
     @property
     def edge_capacity(self) -> int:
         return self.edges.capacity
 
     @property
+    def counts(self) -> mx.array:
+        return self.contract.counts
+
+    @property
     def edge_count(self) -> mx.array:
-        return self.counts[:1]
+        return self.contract.edge_count
 
     @property
     def out_count(self) -> mx.array:
-        return self.counts[1:2]
+        return self.contract.out_count
+
+    @property
+    def kernel_offsets(self) -> tuple[Triple, ...]:
+        return self.contract.kernel_offsets
+
+    @property
+    def out_coords(self) -> mx.array | None:
+        return self.contract.out_coords
+
+    @property
+    def n_in_capacity(self) -> int | None:
+        return self.contract.n_in_capacity
+
+    @property
+    def n_out_capacity(self) -> int | None:
+        return self.contract.n_out_capacity
+
+    @property
+    def n_kernels(self) -> int | None:
+        return self.contract.n_kernels
+
+    @property
+    def row_offsets(self) -> mx.array:
+        return self.output_csr.row_offsets
+
+    @property
+    def in_row_offsets(self) -> mx.array:
+        return self.input_csr.row_offsets
+
+    @property
+    def in_edge_ids(self) -> mx.array:
+        edge_ids = self.input_csr.edge_ids
+        if edge_ids is None:
+            raise ValueError('input CSR view is missing edge ids.')
+        return edge_ids
+
+    @property
+    def kernel_row_offsets(self) -> mx.array:
+        return self.kernel_csr.row_offsets
+
+    @property
+    def kernel_edge_ids(self) -> mx.array:
+        edge_ids = self.kernel_csr.edge_ids
+        if edge_ids is None:
+            raise ValueError('kernel CSR view is missing edge ids.')
+        return edge_ids
+
+    @property
+    def out_view(self) -> RelationCSRView:
+        return self.output_csr
+
+    @property
+    def in_view(self) -> RelationCSRView:
+        return self.input_csr
+
+    @property
+    def kernel_view(self) -> RelationCSRView:
+        return self.kernel_csr
+
+    def require_implicit_gemm(self) -> RelationImplicitGemmView:
+        view = self.implicit_gemm
+        if view is not None:
+            return view
+        from mlx_lattice.core.coords.builders import (
+            build_relation_implicit_gemm_view,
+        )
+
+        view = build_relation_implicit_gemm_view(self)
+        object.__setattr__(self, 'implicit_gemm', view)
+        return view
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -309,6 +503,11 @@ def _validate_counts(value: mx.array) -> None:
         raise ValueError(
             'relation counts must have shape (2,) and int32 dtype.'
         )
+
+
+def _validate_active_rows(value: mx.array, *, name: str) -> None:
+    if value.shape != (1,) or value.dtype != mx.int32:
+        raise ValueError(f'{name} must have shape (1,) and int32 dtype.')
 
 
 def _validate_row_offsets(value: mx.array) -> None:

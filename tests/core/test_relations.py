@@ -7,8 +7,13 @@ from mlx_lattice.core import (
     KernelSpec,
     NeighborEdges,
     NeighborRelation,
+    RelationCSRView,
     RelationEdges,
-    RelationView,
+    SparseRelationContract,
+)
+from mlx_lattice.core.coords.builders import (
+    build_kernel_relation,
+    build_target_kernel_relation,
 )
 from tests.support import mx
 
@@ -55,13 +60,18 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
     )
 
     assert relation.edge_capacity == 2
+    assert isinstance(relation.contract, SparseRelationContract)
     assert isinstance(relation.edges, RelationEdges)
     assert relation.n_out_capacity == 2
     assert relation.n_in_capacity == 2
     assert relation.n_kernels == 2
-    assert isinstance(relation.out_view, RelationView)
-    assert isinstance(relation.in_view, RelationView)
-    assert isinstance(relation.kernel_view, RelationView)
+    assert isinstance(relation.output_csr, RelationCSRView)
+    assert isinstance(relation.input_csr, RelationCSRView)
+    assert isinstance(relation.kernel_csr, RelationCSRView)
+    assert relation.out_view is relation.output_csr
+    assert relation.in_view is relation.input_csr
+    assert relation.kernel_view is relation.kernel_csr
+    assert relation.row_offsets is relation.output_csr.row_offsets
 
     with pytest.raises(ValueError, match='same row count'):
         KernelRelation(rows, short, rows)
@@ -69,6 +79,64 @@ def test_kernel_relation_accepts_and_validates_edge_contract() -> None:
         KernelRelation(
             rows, rows, rows, kernel_offsets=((0, 0, 0),), n_kernels=2
         )
+
+
+def test_kernel_relation_materializes_implicit_gemm_view_lazily() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    relation = build_kernel_relation(coords, kernel_size=(3, 1, 1))
+
+    assert relation.implicit_gemm is None
+
+    view = relation.require_implicit_gemm()
+    mx.eval(view.out_in_map, view.row_masks)
+
+    assert view is relation.require_implicit_gemm()
+    assert view.out_in_map.tolist() == [
+        [-1, 0, 1],
+        [0, 1, 2],
+        [1, 2, -1],
+    ]
+    assert view.row_masks.tolist() == [[6], [7], [3]]
+
+
+def test_target_relation_materializes_implicit_gemm_from_target_coords() -> (
+    None
+):
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    target = mx.array([[0, 1, 0, 0], [0, 3, 0, 0]], dtype=mx.int32)
+    relation = build_target_kernel_relation(
+        coords,
+        target,
+        kernel_size=(3, 1, 1),
+    )
+
+    view = relation.require_implicit_gemm()
+    mx.eval(view.out_in_map, view.row_masks)
+
+    assert view.out_in_map.tolist() == [
+        [0, 1, 2],
+        [2, -1, -1],
+    ]
+    assert view.row_masks.tolist() == [[7], [1]]
+
+
+def test_implicit_gemm_row_masks_scale_past_single_word() -> None:
+    coords = mx.array([[0, 0, 0, 0]], dtype=mx.int32)
+    relation = build_kernel_relation(coords, kernel_size=(33, 1, 1))
+
+    view = relation.require_implicit_gemm()
+    mx.eval(view.out_in_map, view.row_masks)
+
+    assert view.out_in_map.shape == (1, 33)
+    assert view.row_masks.shape == (1, 2)
+    assert view.out_in_map.tolist()[0][16] == 0
+    assert view.row_masks.tolist() == [[1 << 16, 0]]
 
 
 def test_neighbor_relation_accepts_and_validates_query_contract() -> None:

@@ -5,9 +5,11 @@ from typing import Literal
 
 import mlx.core as mx
 
-from mlx_lattice._native import ext
 from mlx_lattice.core import KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
+from mlx_lattice.ops._relation_exec import (
+    sparse_pool_features_from_relation,
+)
 
 PoolMode = Literal['sum', 'max', 'avg']
 
@@ -138,17 +140,11 @@ def _fused_pool(
         )
     if relation.out_coords is None:
         raise ValueError('kernel relation is missing output coordinates.')
-    feats = ext.sparse_pool_features(
+    feats = sparse_pool_features_from_relation(
         x.feats,
-        relation.edges.in_rows,
-        relation.edges.out_rows,
-        relation.edges.kernel_ids,
-        relation.row_offsets,
-        relation.counts,
-        _input_exclusive(spec),
-        mode,
-        relation.n_out_capacity,
-        relation.n_kernels,
+        relation,
+        input_exclusive=_input_exclusive(spec),
+        mode=mode,
     )
     return SparseTensor(
         relation.out_coords,

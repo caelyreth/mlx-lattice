@@ -49,7 +49,7 @@ nb::tuple relation_tuple(const NativeKernelRelation& relation) {
         relation.in_rows,
         relation.out_rows,
         relation.kernel_ids,
-        relation.row_offsets,
+        relation.output_row_offsets,
         relation.out_coords,
         relation.counts,
         relation.in_row_offsets,
@@ -68,6 +68,10 @@ nb::tuple neighbor_tuple(const NativeNeighborRelation& relation) {
         relation.row_offsets,
         relation.counts
     );
+}
+
+nb::tuple implicit_gemm_view_tuple(const NativeRelationImplicitGemmView& view) {
+    return nb::make_tuple(view.out_in_map, view.row_masks);
 }
 
 nb::tuple coord_set_tuple(const NativeCoordSet& result) {
@@ -401,6 +405,44 @@ void register_coords(nb::module_& module) {
             "mlx.core.array]"
         ),
         "Build a target-coordinate sparse kernel relation."
+    );
+    module.def(
+        "build_relation_implicit_gemm_view",
+        [](const mx::array& source_coords,
+           const mx::array& source_active_rows,
+           const mx::array& output_coords,
+           const mx::array& output_active_rows,
+           const mx::array& offsets,
+           const std::vector<int>& stride,
+           const std::vector<int>& padding) {
+            return implicit_gemm_view_tuple(build_relation_implicit_gemm_view(
+                source_coords,
+                source_active_rows,
+                output_coords,
+                output_active_rows,
+                offsets,
+                CoordRelationOp::Forward,
+                triple_from_values(stride, "stride"),
+                triple_from_values(padding, "padding")
+            ));
+        },
+        "source_coords"_a,
+        "source_active_rows"_a,
+        "output_coords"_a,
+        "output_active_rows"_a,
+        "offsets"_a,
+        "stride"_a,
+        "padding"_a,
+        nb::sig(
+            "def build_relation_implicit_gemm_view(source_coords: "
+            "mlx.core.array, source_active_rows: mlx.core.array, "
+            "output_coords: mlx.core.array, output_active_rows: "
+            "mlx.core.array, offsets: mlx.core.array, "
+            "stride: collections.abc.Sequence[int], "
+            "padding: collections.abc.Sequence[int]) -> "
+            "tuple[mlx.core.array, mlx.core.array]"
+        ),
+        "Build a direct implicit-GEMM relation view."
     );
     module.def(
         "build_knn_relation",

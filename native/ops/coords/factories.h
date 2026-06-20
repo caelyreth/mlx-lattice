@@ -95,6 +95,17 @@ NativeRelationDirectView make_relation_direct_view(
     int group_count
 );
 
+NativeRelationImplicitGemmView make_relation_implicit_gemm_view(
+    const mx::array& source_coords,
+    const mx::array& source_active_rows,
+    const mx::array& output_coords,
+    const mx::array& output_active_rows,
+    const mx::array& offsets,
+    CoordRelationOp op,
+    Triple stride,
+    Triple padding
+);
+
 NativeNeighborRelation make_knn_relation(
     const mx::array& source_coords,
     const mx::array& source_active_rows,

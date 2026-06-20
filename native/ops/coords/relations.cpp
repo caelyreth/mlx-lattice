@@ -391,6 +391,48 @@ class RelationDirectView final : public mx::Primitive {
     RelationGroupedViewShape shape_;
 };
 
+class RelationImplicitGemmView final : public mx::Primitive {
+  public:
+    RelationImplicitGemmView(
+        mx::Stream stream,
+        RelationImplicitGemmViewShape shape
+    )
+        : mx::Primitive(stream), shape_(shape) {}
+
+    void eval_cpu(
+        const std::vector<mx::array>& inputs,
+        std::vector<mx::array>& outputs
+    ) override {
+        coords::cpu::eval_relation_implicit_gemm_view(
+            shape_, stream(), inputs, outputs
+        );
+    }
+
+    void eval_gpu(
+        const std::vector<mx::array>& inputs,
+        std::vector<mx::array>& outputs
+    ) override {
+        coords::metal::eval_relation_implicit_gemm_view(
+            shape_, stream(), inputs, outputs
+        );
+    }
+
+    const char* name() const override {
+        return "lattice::RelationImplicitGemmView";
+    }
+
+    bool is_equivalent(const mx::Primitive& other) const override {
+        if (typeid(other) != typeid(RelationImplicitGemmView)) {
+            return false;
+        }
+        const auto& view = static_cast<const RelationImplicitGemmView&>(other);
+        return shape_ == view.shape_;
+    }
+
+  private:
+    RelationImplicitGemmViewShape shape_;
+};
+
 } // namespace
 
 NativeRelationGroupedView make_relation_grouped_view(
@@ -451,6 +493,48 @@ NativeRelationDirectView make_relation_direct_view(
          mx::contiguous(counts, false, device)}
     );
     return {outputs[0]};
+}
+
+NativeRelationImplicitGemmView make_relation_implicit_gemm_view(
+    const mx::array& source_coords,
+    const mx::array& source_active_rows,
+    const mx::array& output_coords,
+    const mx::array& output_active_rows,
+    const mx::array& offsets,
+    CoordRelationOp op,
+    Triple stride,
+    Triple padding
+) {
+    auto kernel_count = offsets.shape(0);
+    auto output_rows = output_coords.shape(0);
+    auto mask_words = (kernel_count + 31) / 32;
+    auto shape = RelationImplicitGemmViewShape{
+        source_coords.shape(0),
+        output_rows,
+        kernel_count,
+        mask_words,
+        op,
+        stride,
+        padding,
+    };
+    auto device = coord_device();
+    auto outputs = mx::array::make_arrays(
+        {mx::Shape{output_rows, kernel_count},
+         mx::Shape{output_rows, mask_words}},
+        {mx::int32, mx::int32},
+        std::make_shared<RelationImplicitGemmView>(coord_stream(device), shape),
+        {
+            mx::contiguous(source_coords, false, device),
+            mx::contiguous(source_active_rows, false, device),
+            mx::contiguous(output_coords, false, device),
+            mx::contiguous(output_active_rows, false, device),
+            mx::contiguous(offsets, false, device),
+        }
+    );
+    return {
+        outputs[RelationImplicitGemmOutInMap],
+        outputs[RelationImplicitGemmRowMasks],
+    };
 }
 
 NativeKernelRelation make_kernel_relation(

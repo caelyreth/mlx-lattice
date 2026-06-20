@@ -126,20 +126,14 @@ mx::array sparse_conv_features(
             "weights kernel rows must match n_kernels."
         );
     }
-    return make_sparse_conv_features(
-        feats,
-        weights,
-        in_rows,
-        out_rows,
-        kernel_ids,
-        counts,
-        row_offsets,
-        SparseConvPlan{
-            in_row_offsets, in_edge_ids, kernel_row_offsets, kernel_edge_ids
-        },
-        out_capacity,
-        n_kernels
-    );
+    auto edges = SparseRelationEdges{in_rows, out_rows, kernel_ids};
+    auto contract = SparseRelationContract{counts, out_capacity, n_kernels};
+    auto views = SparseRelationExecutionViews{
+        SparseRelationCSRView{row_offsets, row_offsets},
+        SparseRelationCSRView{in_row_offsets, in_edge_ids},
+        SparseRelationCSRView{kernel_row_offsets, kernel_edge_ids},
+    };
+    return make_sparse_conv_features(feats, weights, edges, contract, views);
 }
 
 mx::array sparse_pool_features(
@@ -167,13 +161,9 @@ mx::array sparse_pool_features(
     return make_sparse_pool_features(
         op,
         feats,
-        in_rows,
-        out_rows,
-        kernel_ids,
-        row_offsets,
-        counts,
-        out_capacity,
-        n_kernels,
+        SparseRelationEdges{in_rows, out_rows, kernel_ids},
+        SparseRelationContract{counts, out_capacity, n_kernels},
+        SparseRelationCSRView{row_offsets, row_offsets},
         input_layout
     );
 }

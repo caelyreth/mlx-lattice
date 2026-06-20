@@ -1716,6 +1716,81 @@ void eval_relation_direct_view(
 #endif
 }
 
+void eval_relation_implicit_gemm_view(
+    RelationImplicitGemmViewShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    require_i32_inputs(
+        inputs,
+        {"source coords",
+         "source active rows",
+         "output coords",
+         "output active rows",
+         "kernel offsets"}
+    );
+
+#ifdef _METAL_
+    backend::allocate_all(outputs);
+
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+
+    auto table_capacity = coord_hash_capacity(shape.source_rows);
+    auto table = make_int32_temp(table_capacity);
+    encoder.add_temporary(table);
+    clear_coord_hash(device, library, encoder, table, table_capacity);
+    insert_coord_hash(
+        device,
+        library,
+        encoder,
+        inputs[0],
+        table,
+        CoordHashShape{shape.source_rows, table_capacity}
+    );
+
+    auto total_slots = shape.output_rows * shape.kernel_count;
+    auto clear =
+        device.get_kernel("clear_relation_implicit_gemm_view_i32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(outputs[RelationImplicitGemmOutInMap], 0);
+    encoder.set_output_array(outputs[RelationImplicitGemmRowMasks], 1);
+    encoder.set_bytes(total_slots, 2);
+    auto total_mask_words = shape.output_rows * shape.mask_words;
+    encoder.set_bytes(total_mask_words, 3);
+    dispatch_1d(
+        encoder,
+        clear,
+        static_cast<size_t>(std::max(total_slots, total_mask_words))
+    );
+
+    auto build =
+        device.get_kernel("build_relation_implicit_gemm_view_i32", library);
+    encoder.set_compute_pipeline_state(build);
+    bind_input_arrays(encoder, inputs, 0);
+    encoder.set_input_array(table, 5);
+    encoder.set_output_array(outputs[RelationImplicitGemmOutInMap], 6);
+    encoder.set_output_array(outputs[RelationImplicitGemmRowMasks], 7);
+    encoder.set_bytes(shape.source_rows, 8);
+    encoder.set_bytes(shape.output_rows, 9);
+    encoder.set_bytes(shape.kernel_count, 10);
+    encoder.set_bytes(table_capacity, 11);
+    encoder.set_bytes(shape.mask_words, 12);
+    bind_triple_bytes(encoder, shape.stride, 13);
+    bind_triple_bytes(encoder, shape.padding, 16);
+    dispatch_1d(encoder, build, static_cast<size_t>(total_slots));
+#else
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
 void eval_neighbor_relation(
     NeighborRelationOp op,
     NeighborRelationShape shape,

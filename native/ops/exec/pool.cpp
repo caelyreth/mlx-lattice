@@ -77,13 +77,11 @@ class SparsePoolFeatures final : public SparsePrimitive {
                 auto pooled = make_sparse_pool_features(
                     reduce_,
                     primals[0],
-                    primals[1],
-                    primals[2],
-                    primals[3],
-                    primals[4],
-                    primals[5],
-                    shape_.out_capacity,
-                    shape_.n_kernels,
+                    SparseRelationEdges{primals[1], primals[2], primals[3]},
+                    SparseRelationContract{
+                        primals[5], shape_.out_capacity, shape_.n_kernels
+                    },
+                    SparseRelationCSRView{primals[4], primals[4]},
                     shape_.input_exclusive ? PoolInputLayout::Exclusive
                                            : PoolInputLayout::Overlap
                 );
@@ -263,36 +261,38 @@ mx::Stream pool_stream(
 mx::array make_sparse_pool_features(
     PoolReduceOp reduce,
     const mx::array& feats,
-    const mx::array& in_rows,
-    const mx::array& out_rows,
-    const mx::array& kernel_ids,
-    const mx::array& row_offsets,
-    const mx::array& counts,
-    int out_capacity,
-    int n_kernels,
+    const SparseRelationEdges& edges,
+    const SparseRelationContract& contract,
+    const SparseRelationCSRView& output_csr,
     PoolInputLayout input_layout
 ) {
     auto shape = SparsePoolShape{
         feats.shape(0),
-        out_capacity,
-        n_kernels,
+        contract.out_capacity,
+        contract.n_kernels,
         feats.shape(1),
         input_layout == PoolInputLayout::Exclusive,
     };
-    auto stream =
-        pool_stream(feats, in_rows, out_rows, kernel_ids, row_offsets, counts);
+    auto stream = pool_stream(
+        feats,
+        edges.in_rows,
+        edges.out_rows,
+        edges.kernel_ids,
+        output_csr.row_offsets,
+        contract.counts
+    );
     auto primitive =
         std::make_shared<SparsePoolFeatures>(stream, reduce, shape);
     auto inputs = std::vector<mx::array>{
         feats,
-        in_rows,
-        out_rows,
-        kernel_ids,
-        row_offsets,
-        counts,
+        edges.in_rows,
+        edges.out_rows,
+        edges.kernel_ids,
+        output_csr.row_offsets,
+        contract.counts,
     };
     return mx::array::make_arrays(
-        {mx::Shape{out_capacity, feats.shape(1)}},
+        {mx::Shape{contract.out_capacity, feats.shape(1)}},
         {feats.dtype()},
         primitive,
         inputs

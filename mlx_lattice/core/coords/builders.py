@@ -11,6 +11,7 @@ from mlx_lattice.core.relations import (
     KernelRelation,
     KernelSpec,
     NeighborRelation,
+    RelationImplicitGemmView,
 )
 from mlx_lattice.core.types import Triple, triple
 
@@ -34,6 +35,46 @@ type NativeNeighborRelation = tuple[
     mx.array,
     mx.array,
 ]
+type NativeImplicitGemmView = tuple[mx.array, mx.array]
+
+
+def build_relation_implicit_gemm_view(
+    relation: KernelRelation,
+) -> RelationImplicitGemmView:
+    contract = relation.contract
+    if contract.kind not in ('forward', 'target'):
+        raise ValueError(
+            'implicit GEMM view currently supports forward and target '
+            'relations.'
+        )
+    if (
+        contract.source_coords is None
+        or contract.source_active_rows is None
+        or contract.out_coords is None
+    ):
+        raise ValueError(
+            'kernel relation is missing coordinate context for implicit GEMM.'
+        )
+    output_active = (
+        contract.target_active_rows
+        if contract.kind == 'target'
+        else contract.out_count
+    )
+    if output_active is None:
+        raise ValueError(
+            'kernel relation is missing output activity for implicit GEMM.'
+        )
+    offsets = _offset_array(contract.kernel_offsets)
+    out_in_map, row_masks = ext.build_relation_implicit_gemm_view(
+        contract.source_coords,
+        contract.source_active_rows,
+        contract.out_coords,
+        output_active,
+        offsets,
+        contract.stride,
+        contract.padding,
+    )
+    return RelationImplicitGemmView(out_in_map, row_masks=row_masks)
 
 
 def build_target_kernel_relation(
@@ -57,11 +98,13 @@ def build_target_kernel_relation(
         dilation=dilation,
     )
     offsets = kernel_offsets(spec.size, spec.dilation)
+    source_active = _active_rows(active_rows, coords)
+    target_active = _active_rows(target_active_rows, target_coords)
     native = ext.build_target_kernel_relation(
         coords,
-        _active_rows(active_rows, coords),
+        source_active,
         target_coords,
-        _active_rows(target_active_rows, target_coords),
+        target_active,
         spec.size,
         spec.stride,
         spec.padding,
@@ -71,6 +114,13 @@ def build_target_kernel_relation(
         native,
         offsets=offsets,
         in_capacity=int(coords.shape[0]),
+        source_coords=coords,
+        source_active_rows=source_active,
+        target_coords=target_coords,
+        target_active_rows=target_active,
+        stride=spec.stride,
+        padding=spec.padding,
+        kind='target',
     )
 
 
@@ -115,9 +165,10 @@ def build_kernel_relation(
         dilation=dilation,
     )
     offsets = kernel_offsets(spec.size, spec.dilation)
+    source_active = _active_rows(active_rows, coords)
     native = ext.build_kernel_relation(
         coords,
-        _active_rows(active_rows, coords),
+        source_active,
         spec.size,
         spec.stride,
         spec.padding,
@@ -127,6 +178,11 @@ def build_kernel_relation(
         native,
         offsets=offsets,
         in_capacity=int(coords.shape[0]),
+        source_coords=coords,
+        source_active_rows=source_active,
+        stride=spec.stride,
+        padding=spec.padding,
+        kind='forward',
     )
 
 
@@ -143,9 +199,10 @@ def build_generative_relation(
     _require_positive(step, 'stride')
 
     offsets = kernel_offsets(kernel)
+    source_active = _active_rows(active_rows, coords)
     native = ext.build_generative_relation(
         coords,
-        _active_rows(active_rows, coords),
+        source_active,
         kernel,
         step,
     )
@@ -153,6 +210,10 @@ def build_generative_relation(
         native,
         offsets=offsets,
         in_capacity=int(coords.shape[0]),
+        source_coords=coords,
+        source_active_rows=source_active,
+        stride=step,
+        kind='generative',
     )
 
 
@@ -175,9 +236,10 @@ def build_transposed_kernel_relation(
     _require_positive(rate, 'dilation')
 
     offsets = kernel_offsets(kernel, rate)
+    source_active = _active_rows(active_rows, coords)
     native = ext.build_transposed_kernel_relation(
         coords,
-        _active_rows(active_rows, coords),
+        source_active,
         kernel,
         step,
         pad,
@@ -187,6 +249,11 @@ def build_transposed_kernel_relation(
         native,
         offsets=offsets,
         in_capacity=int(coords.shape[0]),
+        source_coords=coords,
+        source_active_rows=source_active,
+        stride=step,
+        padding=pad,
+        kind='transposed',
     )
 
 
@@ -277,6 +344,13 @@ def _kernel_relation_from_native(
     *,
     offsets: tuple[Triple, ...],
     in_capacity: int,
+    source_coords: mx.array,
+    source_active_rows: mx.array,
+    target_coords: mx.array | None = None,
+    target_active_rows: mx.array | None = None,
+    stride: Triple = (1, 1, 1),
+    padding: Triple = (0, 0, 0),
+    kind: str = 'forward',
 ) -> KernelRelation:
     (
         in_rows,
@@ -305,6 +379,13 @@ def _kernel_relation_from_native(
         n_in_capacity=in_capacity,
         n_out_capacity=int(out_coords.shape[0]),
         n_kernels=len(offsets),
+        source_coords=source_coords,
+        source_active_rows=source_active_rows,
+        target_coords=target_coords,
+        target_active_rows=target_active_rows,
+        stride=stride,
+        padding=padding,
+        kind=kind,
     )
 
 
@@ -337,6 +418,10 @@ def _neighbor_relation_from_native(
 
 
 # MARK: - helpers
+
+
+def _offset_array(offsets: tuple[Triple, ...]) -> mx.array:
+    return mx.array(offsets, dtype=mx.int32)
 
 
 def _require_positive(values: Triple, name: str) -> None:

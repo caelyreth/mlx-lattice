@@ -490,6 +490,55 @@ void write_relation_grouped_view(
     write_i32(outputs[RelationViewEdgeIds], edge_ids, -1);
 }
 
+void write_relation_implicit_gemm_view(
+    std::vector<mx::array>& outputs,
+    const std::vector<mx::array>& inputs,
+    RelationImplicitGemmViewShape shape
+) {
+    auto source_values = read_coords(inputs[0]);
+    auto source_active =
+        std::clamp(read_scalar_i32(inputs[1]), 0, shape.source_rows);
+    auto output_values = read_coords(inputs[2]);
+    auto output_active =
+        std::clamp(read_scalar_i32(inputs[3]), 0, shape.output_rows);
+    auto offsets = read_offsets(inputs[4]);
+    auto source_rows = first_row_map(source_values);
+
+    std::vector<int32_t> out_in_map(
+        static_cast<std::size_t>(shape.output_rows) * shape.kernel_count, -1
+    );
+    std::vector<int32_t> row_masks(
+        static_cast<std::size_t>(shape.output_rows) * shape.mask_words, 0
+    );
+
+    for (int out_row = 0; out_row < output_active; ++out_row) {
+        auto out_coord = output_values[static_cast<std::size_t>(out_row)];
+        for (int kernel = 0; kernel < shape.kernel_count; ++kernel) {
+            auto candidate = kernel_input_coord(
+                out_coord,
+                offsets[static_cast<std::size_t>(kernel)],
+                shape.stride,
+                shape.padding
+            );
+            auto found = source_rows.find(candidate);
+            if (found == source_rows.end() || found->second >= source_active) {
+                continue;
+            }
+            out_in_map
+                [static_cast<std::size_t>(out_row) * shape.kernel_count +
+                 kernel] = found->second;
+            auto word = kernel / 32;
+            auto bit = kernel % 32;
+            row_masks
+                [static_cast<std::size_t>(out_row) * shape.mask_words + word] |=
+                int32_t(uint32_t(1) << bit);
+        }
+    }
+
+    write_i32(outputs[RelationImplicitGemmOutInMap], out_in_map, -1);
+    write_i32(outputs[RelationImplicitGemmRowMasks], row_masks);
+}
+
 void write_relation_direct_view(
     std::vector<mx::array>& outputs,
     const std::vector<mx::array>& inputs,
@@ -1329,6 +1378,26 @@ void eval_relation_direct_view(
             const std::vector<mx::array>& task_inputs,
             std::vector<mx::array>& task_outputs
         ) { write_relation_direct_view(task_outputs, task_inputs, shape); }
+    );
+}
+
+void eval_relation_implicit_gemm_view(
+    RelationImplicitGemmViewShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    backend::allocate_all(outputs);
+    backend::schedule_cpu(
+        stream,
+        inputs,
+        outputs,
+        [shape](
+            const std::vector<mx::array>& task_inputs,
+            std::vector<mx::array>& task_outputs
+        ) {
+            write_relation_implicit_gemm_view(task_outputs, task_inputs, shape);
+        }
     );
 }
 

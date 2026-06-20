@@ -5,8 +5,12 @@ from mlx_lattice.core.relations.views import (
     KernelRelation,
     NeighborEdges,
     NeighborRelation,
+    RelationCSRView,
     RelationEdges,
+    RelationImplicitGemmView,
+    RelationKind,
     RelationView,
+    SparseRelationContract,
 )
 
 __all__ = [
@@ -14,6 +18,10 @@ __all__ = [
     'KernelSpec',
     'NeighborEdges',
     'NeighborRelation',
+    'RelationCSRView',
     'RelationEdges',
+    'RelationImplicitGemmView',
+    'RelationKind',
     'RelationView',
+    'SparseRelationContract',
 ]

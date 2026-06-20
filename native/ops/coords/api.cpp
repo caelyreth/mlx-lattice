@@ -177,6 +177,44 @@ NativeKernelRelation build_target_kernel_relation(
     );
 }
 
+NativeRelationImplicitGemmView build_relation_implicit_gemm_view(
+    const mx::array& source_coords,
+    const mx::array& source_active_rows,
+    const mx::array& output_coords,
+    const mx::array& output_active_rows,
+    const mx::array& offsets,
+    CoordRelationOp op,
+    Triple stride,
+    Triple padding
+) {
+    validate_coord_pair(source_coords, output_coords);
+    validate_active_rows(source_active_rows);
+    validate_active_rows(output_active_rows);
+    validate_positive(stride, "stride");
+    validate_nonnegative(padding, "padding");
+    if (offsets.ndim() != 2 || offsets.shape(1) != 3 ||
+        offsets.dtype() != mx::int32) {
+        throw std::invalid_argument(
+            "offsets must have shape (K, 3) and int32 dtype."
+        );
+    }
+    if (op != CoordRelationOp::Forward) {
+        throw std::invalid_argument(
+            "implicit GEMM view currently supports forward-style relations."
+        );
+    }
+    return make_relation_implicit_gemm_view(
+        source_coords,
+        source_active_rows,
+        output_coords,
+        output_active_rows,
+        offsets,
+        op,
+        stride,
+        padding
+    );
+}
+
 NativeNeighborRelation build_knn_relation(
     const mx::array& source_coords,
     const mx::array& source_active_rows,

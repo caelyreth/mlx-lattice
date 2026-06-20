@@ -121,6 +121,13 @@ void eval_relation_direct_view(
     std::vector<mx::array>& outputs
 );
 
+void eval_relation_implicit_gemm_view(
+    RelationImplicitGemmViewShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+);
+
 void eval_neighbor_relation(
     NeighborRelationOp op,
     NeighborRelationShape shape,

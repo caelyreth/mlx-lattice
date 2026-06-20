@@ -83,14 +83,19 @@ class SparseConvFeatures final : public SparsePrimitive {
                 auto component = make_sparse_conv_features(
                     tangents[index],
                     primals[1],
-                    primals[2],
-                    primals[3],
-                    primals[4],
-                    primals[5],
-                    primals[6],
-                    plan_,
-                    shape_.out_capacity,
-                    shape_.n_kernels
+                    SparseRelationEdges{primals[2], primals[3], primals[4]},
+                    SparseRelationContract{
+                        primals[5], shape_.out_capacity, shape_.n_kernels
+                    },
+                    SparseRelationExecutionViews{
+                        SparseRelationCSRView{primals[6], primals[6]},
+                        SparseRelationCSRView{
+                            plan_.in_row_offsets, plan_.in_edge_ids
+                        },
+                        SparseRelationCSRView{
+                            plan_.kernel_row_offsets, plan_.kernel_edge_ids
+                        },
+                    }
                 );
                 out =
                     has_tangent ? mx::add(out, component, stream()) : component;
@@ -99,14 +104,19 @@ class SparseConvFeatures final : public SparsePrimitive {
                 auto component = make_sparse_conv_features(
                     primals[0],
                     tangents[index],
-                    primals[2],
-                    primals[3],
-                    primals[4],
-                    primals[5],
-                    primals[6],
-                    plan_,
-                    shape_.out_capacity,
-                    shape_.n_kernels
+                    SparseRelationEdges{primals[2], primals[3], primals[4]},
+                    SparseRelationContract{
+                        primals[5], shape_.out_capacity, shape_.n_kernels
+                    },
+                    SparseRelationExecutionViews{
+                        SparseRelationCSRView{primals[6], primals[6]},
+                        SparseRelationCSRView{
+                            plan_.in_row_offsets, plan_.in_edge_ids
+                        },
+                        SparseRelationCSRView{
+                            plan_.kernel_row_offsets, plan_.kernel_edge_ids
+                        },
+                    }
                 );
                 out =
                     has_tangent ? mx::add(out, component, stream()) : component;
@@ -250,42 +260,52 @@ class SparseConvFeaturesWeightGrad final : public SparseConvFeaturesInputGrad {
 mx::array make_sparse_conv_features(
     const mx::array& feats,
     const mx::array& weights,
-    const mx::array& in_rows,
-    const mx::array& out_rows,
-    const mx::array& kernel_ids,
-    const mx::array& counts,
-    const mx::array& row_offsets,
-    const SparseConvPlan& plan,
-    int out_capacity,
-    int n_kernels
+    const SparseRelationEdges& edges,
+    const SparseRelationContract& contract,
+    const SparseRelationExecutionViews& views
 ) {
     auto mapped_weight = weights.ndim() == 3;
     auto shape = SparseConvShape{
         feats.shape(0),
-        out_capacity,
-        n_kernels,
+        contract.out_capacity,
+        contract.n_kernels,
         feats.shape(1),
         mapped_weight ? weights.shape(2) : weights.shape(0),
         mapped_weight ? 0 : 1,
-        mapped_weight ? n_kernels : weights.shape(1),
+        mapped_weight ? contract.n_kernels : weights.shape(1),
         mapped_weight ? 1 : weights.shape(2),
         mapped_weight ? 1 : weights.shape(3),
     };
     auto stream = sparse_conv_features_stream(
-        feats, weights, in_rows, out_rows, kernel_ids, counts, row_offsets
+        feats,
+        weights,
+        edges.in_rows,
+        edges.out_rows,
+        edges.kernel_ids,
+        contract.counts,
+        views.output_csr.row_offsets
     );
-    auto primitive = std::make_shared<SparseConvFeatures>(stream, shape, plan);
+    auto primitive = std::make_shared<SparseConvFeatures>(
+        stream,
+        shape,
+        SparseConvPlan{
+            views.input_csr.row_offsets,
+            views.input_csr.edge_ids,
+            views.kernel_csr.row_offsets,
+            views.kernel_csr.edge_ids,
+        }
+    );
     auto inputs = std::vector<mx::array>{
         feats,
         weights,
-        in_rows,
-        out_rows,
-        kernel_ids,
-        counts,
-        row_offsets,
+        edges.in_rows,
+        edges.out_rows,
+        edges.kernel_ids,
+        contract.counts,
+        views.output_csr.row_offsets,
     };
     return mx::array::make_arrays(
-        {mx::Shape{out_capacity, shape.out_channels}},
+        {mx::Shape{contract.out_capacity, shape.out_channels}},
         {feats.dtype()},
         primitive,
         inputs

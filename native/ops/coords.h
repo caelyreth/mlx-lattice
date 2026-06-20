@@ -94,4 +94,15 @@ NativeNeighborRelation build_radius_relation(
     int max_neighbors
 );
 
+NativeRelationImplicitGemmView build_relation_implicit_gemm_view(
+    const mx::array& source_coords,
+    const mx::array& source_active_rows,
+    const mx::array& output_coords,
+    const mx::array& output_active_rows,
+    const mx::array& offsets,
+    CoordRelationOp op,
+    Triple stride,
+    Triple padding
+);
+
 } // namespace mlx_lattice

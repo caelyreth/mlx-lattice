@@ -17,8 +17,11 @@ from mlx_lattice.core.relations import (
     KernelSpec,
     NeighborEdges,
     NeighborRelation,
+    RelationCSRView,
     RelationEdges,
+    RelationImplicitGemmView,
     RelationView,
+    SparseRelationContract,
 )
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import Triple, triple
@@ -33,10 +36,13 @@ __all__ = [
     'NeighborEdges',
     'NeighborRelation',
     'OccupancyExpansion',
+    'RelationCSRView',
     'RelationEdges',
+    'RelationImplicitGemmView',
     'RelationView',
     'SparseOccupancy',
     'SparseQuantization',
+    'SparseRelationContract',
     'SparseTensor',
     'Triple',
     'child_coords_from_indices',
