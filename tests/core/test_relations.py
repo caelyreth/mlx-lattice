@@ -135,7 +135,7 @@ def test_implicit_gemm_row_masks_scale_past_single_word() -> None:
 
     assert view.out_in_map.shape == (1, 33)
     assert view.row_masks.shape == (1, 2)
-    assert view.out_in_map.tolist()[0][16] == 0
+    assert int(view.out_in_map[0, 16].item()) == 0
     assert view.row_masks.tolist() == [[1 << 16, 0]]
 
 

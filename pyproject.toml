@@ -94,6 +94,9 @@ line-ending = "lf"
 unused-ignore-comment = "warn"
 redundant-cast = "warn"
 
+[tool.ty.environment]
+extra-paths = ["benchmarks"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

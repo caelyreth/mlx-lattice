@@ -1,5 +1,7 @@
 #include "bindings/registrations.h"
 
+#include "bindings/array_arg.h"
+
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
@@ -89,10 +91,11 @@ nb::tuple quantization_tuple(const NativeSparseQuantization& result) {
 void register_coords(nb::module_& module) {
     module.def(
         "downsample_coords",
-        [](const mx::array& coords, const std::vector<int>& stride) {
-            return coord_set_tuple(
-                downsample_coords(coords, triple_from_values(stride, "stride"))
-            );
+        [](nb::handle coords, const std::vector<int>& stride) {
+            return coord_set_tuple(downsample_coords(
+                array_arg(coords, "coords"),
+                triple_from_values(stride, "stride")
+            ));
         },
         "coords"_a,
         "stride"_a,
@@ -105,8 +108,10 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "union_coords",
-        [](const mx::array& lhs, const mx::array& rhs) {
-            return coord_set_tuple(union_coords(lhs, rhs));
+        [](nb::handle lhs, nb::handle rhs) {
+            return coord_set_tuple(
+                union_coords(array_arg(lhs, "lhs"), array_arg(rhs, "rhs"))
+            );
         },
         "lhs"_a,
         "rhs"_a,
@@ -118,8 +123,10 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "intersection_coords",
-        [](const mx::array& lhs, const mx::array& rhs) {
-            return coord_set_tuple(intersection_coords(lhs, rhs));
+        [](nb::handle lhs, nb::handle rhs) {
+            return coord_set_tuple(intersection_coords(
+                array_arg(lhs, "lhs"), array_arg(rhs, "rhs")
+            ));
         },
         "lhs"_a,
         "rhs"_a,
@@ -131,7 +138,11 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "lookup_coords",
-        &lookup_coords,
+        [](nb::handle coords, nb::handle queries) {
+            return lookup_coords(
+                array_arg(coords, "coords"), array_arg(queries, "queries")
+            );
+        },
         "coords"_a,
         "queries"_a,
         nb::sig(
@@ -142,15 +153,20 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "morton_codes",
-        &morton_codes,
+        [](nb::handle coords) {
+            return morton_codes(array_arg(coords, "coords"));
+        },
         "coords"_a,
         nb::sig("def morton_codes(coords: mlx.core.array) -> mlx.core.array"),
         "Return Gameleon-compatible 3D Morton codes for sparse coordinates."
     );
     module.def(
         "occupancy_downsample",
-        [](const mx::array& coords, const mx::array& active_rows) {
-            const auto& result = occupancy_downsample(coords, active_rows);
+        [](nb::handle coords, nb::handle active_rows) {
+            const auto& result = occupancy_downsample(
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows")
+            );
             return nb::make_tuple(
                 result.coords, result.active_rows, result.occupancy
             );
@@ -166,11 +182,12 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "occupancy_expand",
-        [](const mx::array& coords,
-           const mx::array& active_rows,
-           const mx::array& occupancy) {
-            const auto& result =
-                occupancy_expand(coords, active_rows, occupancy);
+        [](nb::handle coords, nb::handle active_rows, nb::handle occupancy) {
+            const auto& result = occupancy_expand(
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows"),
+                array_arg(occupancy, "occupancy")
+            );
             return nb::make_tuple(
                 result.coords,
                 result.active_rows,
@@ -191,7 +208,12 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "child_coords_from_indices",
-        &child_coords_from_indices,
+        [](nb::handle parent_coords, nb::handle child_indices) {
+            return child_coords_from_indices(
+                array_arg(parent_coords, "parent_coords"),
+                array_arg(child_indices, "child_indices")
+            );
+        },
         "parent_coords"_a,
         "child_indices"_a,
         nb::sig(
@@ -202,15 +224,15 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "sparse_quantize",
-        [](const mx::array& points,
-           const mx::array& batch_indices,
-           const mx::array& active_rows,
+        [](nb::handle points,
+           nb::handle batch_indices,
+           nb::handle active_rows,
            const std::vector<float>& voxel_size,
            const std::vector<float>& origin) {
             return quantization_tuple(sparse_quantize(
-                points,
-                batch_indices,
-                active_rows,
+                array_arg(points, "points"),
+                array_arg(batch_indices, "batch_indices"),
+                array_arg(active_rows, "active_rows"),
                 QuantizationSpec{
                     float_triple_from_values(voxel_size, "voxel_size"),
                     float_triple_from_values(origin, "origin"),
@@ -234,16 +256,16 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "voxelize_features",
-        [](const mx::array& feats,
-           const mx::array& inverse_rows,
-           const mx::array& voxel_counts,
-           const mx::array& active_rows,
+        [](nb::handle feats,
+           nb::handle inverse_rows,
+           nb::handle voxel_counts,
+           nb::handle active_rows,
            const std::string& reduction) {
             return voxelize_features(
-                feats,
-                inverse_rows,
-                voxel_counts,
-                active_rows,
+                array_arg(feats, "feats"),
+                array_arg(inverse_rows, "inverse_rows"),
+                array_arg(voxel_counts, "voxel_counts"),
+                array_arg(active_rows, "active_rows"),
                 voxel_reduce_from_name(reduction)
             );
         },
@@ -261,15 +283,15 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_kernel_relation",
-        [](const mx::array& coords,
-           const mx::array& active_rows,
+        [](nb::handle coords,
+           nb::handle active_rows,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride,
            const std::vector<int>& padding,
            const std::vector<int>& dilation) {
             return relation_tuple(build_kernel_relation(
-                coords,
-                active_rows,
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows"),
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride"),
                 triple_from_values(padding, "padding"),
@@ -298,13 +320,13 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_generative_relation",
-        [](const mx::array& coords,
-           const mx::array& active_rows,
+        [](nb::handle coords,
+           nb::handle active_rows,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride) {
             return relation_tuple(build_generative_relation(
-                coords,
-                active_rows,
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows"),
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride")
             ));
@@ -327,15 +349,15 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_transposed_kernel_relation",
-        [](const mx::array& coords,
-           const mx::array& active_rows,
+        [](nb::handle coords,
+           nb::handle active_rows,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride,
            const std::vector<int>& padding,
            const std::vector<int>& dilation) {
             return relation_tuple(build_transposed_kernel_relation(
-                coords,
-                active_rows,
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows"),
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride"),
                 triple_from_values(padding, "padding"),
@@ -364,19 +386,19 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_target_kernel_relation",
-        [](const mx::array& coords,
-           const mx::array& active_rows,
-           const mx::array& target_coords,
-           const mx::array& target_active_rows,
+        [](nb::handle coords,
+           nb::handle active_rows,
+           nb::handle target_coords,
+           nb::handle target_active_rows,
            const std::vector<int>& kernel_size,
            const std::vector<int>& stride,
            const std::vector<int>& padding,
            const std::vector<int>& dilation) {
             return relation_tuple(build_target_kernel_relation(
-                coords,
-                active_rows,
-                target_coords,
-                target_active_rows,
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows"),
+                array_arg(target_coords, "target_coords"),
+                array_arg(target_active_rows, "target_active_rows"),
                 triple_from_values(kernel_size, "kernel_size"),
                 triple_from_values(stride, "stride"),
                 triple_from_values(padding, "padding"),
@@ -408,19 +430,19 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_relation_implicit_gemm_view",
-        [](const mx::array& source_coords,
-           const mx::array& source_active_rows,
-           const mx::array& output_coords,
-           const mx::array& output_active_rows,
-           const mx::array& offsets,
+        [](nb::handle source_coords,
+           nb::handle source_active_rows,
+           nb::handle output_coords,
+           nb::handle output_active_rows,
+           nb::handle offsets,
            const std::vector<int>& stride,
            const std::vector<int>& padding) {
             return implicit_gemm_view_tuple(build_relation_implicit_gemm_view(
-                source_coords,
-                source_active_rows,
-                output_coords,
-                output_active_rows,
-                offsets,
+                array_arg(source_coords, "source_coords"),
+                array_arg(source_active_rows, "source_active_rows"),
+                array_arg(output_coords, "output_coords"),
+                array_arg(output_active_rows, "output_active_rows"),
+                array_arg(offsets, "offsets"),
                 CoordRelationOp::Forward,
                 triple_from_values(stride, "stride"),
                 triple_from_values(padding, "padding")
@@ -446,16 +468,16 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_knn_relation",
-        [](const mx::array& source_coords,
-           const mx::array& source_active_rows,
-           const mx::array& query_coords,
-           const mx::array& query_active_rows,
+        [](nb::handle source_coords,
+           nb::handle source_active_rows,
+           nb::handle query_coords,
+           nb::handle query_active_rows,
            int k) {
             return neighbor_tuple(build_knn_relation(
-                source_coords,
-                source_active_rows,
-                query_coords,
-                query_active_rows,
+                array_arg(source_coords, "source_coords"),
+                array_arg(source_active_rows, "source_active_rows"),
+                array_arg(query_coords, "query_coords"),
+                array_arg(query_active_rows, "query_active_rows"),
                 k
             ));
         },
@@ -476,17 +498,17 @@ void register_coords(nb::module_& module) {
     );
     module.def(
         "build_radius_relation",
-        [](const mx::array& source_coords,
-           const mx::array& source_active_rows,
-           const mx::array& query_coords,
-           const mx::array& query_active_rows,
+        [](nb::handle source_coords,
+           nb::handle source_active_rows,
+           nb::handle query_coords,
+           nb::handle query_active_rows,
            double radius,
            int max_neighbors) {
             return neighbor_tuple(build_radius_relation(
-                source_coords,
-                source_active_rows,
-                query_coords,
-                query_active_rows,
+                array_arg(source_coords, "source_coords"),
+                array_arg(source_active_rows, "source_active_rows"),
+                array_arg(query_coords, "query_coords"),
+                array_arg(query_active_rows, "query_active_rows"),
                 radius,
                 max_neighbors
             ));

@@ -1,5 +1,7 @@
 #include "bindings/registrations.h"
 
+#include "bindings/array_arg.h"
+
 #include <nanobind/stl/string.h>
 
 #include <stdexcept>
@@ -14,12 +16,12 @@ using namespace nb::literals;
 void register_exec(nb::module_& module) {
     module.def(
         "sparse_pool_features",
-        [](const mx::array& feats,
-           const mx::array& in_rows,
-           const mx::array& out_rows,
-           const mx::array& kernel_ids,
-           const mx::array& row_offsets,
-           const mx::array& counts,
+        [](nb::handle feats,
+           nb::handle in_rows,
+           nb::handle out_rows,
+           nb::handle kernel_ids,
+           nb::handle row_offsets,
+           nb::handle counts,
            bool input_exclusive,
            const std::string& reduce,
            int out_capacity,
@@ -36,12 +38,12 @@ void register_exec(nb::module_& module) {
             }
             return sparse_pool_features(
                 op,
-                feats,
-                in_rows,
-                out_rows,
-                kernel_ids,
-                row_offsets,
-                counts,
+                array_arg(feats, "feats"),
+                array_arg(in_rows, "in_rows"),
+                array_arg(out_rows, "out_rows"),
+                array_arg(kernel_ids, "kernel_ids"),
+                array_arg(row_offsets, "row_offsets"),
+                array_arg(counts, "counts"),
                 out_capacity,
                 n_kernels,
                 input_exclusive ? PoolInputLayout::Exclusive
@@ -70,31 +72,31 @@ void register_exec(nb::module_& module) {
     );
     module.def(
         "sparse_conv_features",
-        [](const mx::array& feats,
-           const mx::array& weights,
-           const mx::array& in_rows,
-           const mx::array& out_rows,
-           const mx::array& kernel_ids,
-           const mx::array& counts,
-           const mx::array& row_offsets,
-           const mx::array& in_row_offsets,
-           const mx::array& in_edge_ids,
-           const mx::array& kernel_row_offsets,
-           const mx::array& kernel_edge_ids,
+        [](nb::handle feats,
+           nb::handle weights,
+           nb::handle in_rows,
+           nb::handle out_rows,
+           nb::handle kernel_ids,
+           nb::handle counts,
+           nb::handle row_offsets,
+           nb::handle in_row_offsets,
+           nb::handle in_edge_ids,
+           nb::handle kernel_row_offsets,
+           nb::handle kernel_edge_ids,
            int out_capacity,
            int n_kernels) {
             return sparse_conv_features(
-                feats,
-                weights,
-                in_rows,
-                out_rows,
-                kernel_ids,
-                counts,
-                row_offsets,
-                in_row_offsets,
-                in_edge_ids,
-                kernel_row_offsets,
-                kernel_edge_ids,
+                array_arg(feats, "feats"),
+                array_arg(weights, "weights"),
+                array_arg(in_rows, "in_rows"),
+                array_arg(out_rows, "out_rows"),
+                array_arg(kernel_ids, "kernel_ids"),
+                array_arg(counts, "counts"),
+                array_arg(row_offsets, "row_offsets"),
+                array_arg(in_row_offsets, "in_row_offsets"),
+                array_arg(in_edge_ids, "in_edge_ids"),
+                array_arg(kernel_row_offsets, "kernel_row_offsets"),
+                array_arg(kernel_edge_ids, "kernel_edge_ids"),
                 out_capacity,
                 n_kernels
             );
@@ -127,19 +129,19 @@ void register_exec(nb::module_& module) {
     );
     module.def(
         "sparse_conv_features_sorted_implicit_gemm",
-        [](const mx::array& feats,
-           const mx::array& weights,
-           const mx::array& sorted_out_in_map,
-           const mx::array& reorder_rows,
-           const mx::array& tile_masks,
+        [](nb::handle feats,
+           nb::handle weights,
+           nb::handle sorted_out_in_map,
+           nb::handle reorder_rows,
+           nb::handle tile_masks,
            int out_capacity,
            int n_kernels) {
             return sparse_conv_features_sorted_implicit_gemm(
-                feats,
-                weights,
-                sorted_out_in_map,
-                reorder_rows,
-                tile_masks,
+                array_arg(feats, "feats"),
+                array_arg(weights, "weights"),
+                array_arg(sorted_out_in_map, "sorted_out_in_map"),
+                array_arg(reorder_rows, "reorder_rows"),
+                array_arg(tile_masks, "tile_masks"),
                 out_capacity,
                 n_kernels
             );

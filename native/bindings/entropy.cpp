@@ -1,5 +1,7 @@
 #include "bindings/registrations.h"
 
+#include "bindings/array_arg.h"
+
 #include <nanobind/stl/string.h>
 
 #include <stdexcept>
@@ -14,15 +16,19 @@ using namespace nb::literals;
 void register_entropy(nb::module_& module) {
     module.def(
         "normalized_cdf",
-        [](const mx::array& prob) { return mlx_lattice::normalized_cdf(prob); },
+        [](nb::handle prob) {
+            return mlx_lattice::normalized_cdf(array_arg(prob, "prob"));
+        },
         "prob"_a,
         nb::sig("def normalized_cdf(prob: mlx.core.array) -> mlx.core.array"),
         "Convert probability rows to int16 normalized CDF rows."
     );
     module.def(
         "range_encode",
-        [](const mx::array& cdf, const mx::array& symbols) {
-            auto encoded = mlx_lattice::range_encode(cdf, symbols);
+        [](nb::handle cdf, nb::handle symbols) {
+            auto encoded = mlx_lattice::range_encode(
+                array_arg(cdf, "cdf"), array_arg(symbols, "symbols")
+            );
             return nb::bytes(encoded.data(), encoded.size());
         },
         "cdf"_a,
@@ -35,14 +41,15 @@ void register_entropy(nb::module_& module) {
     );
     module.def(
         "range_decode",
-        [](const mx::array& cdf, const nb::bytes& stream) {
+        [](nb::handle cdf, const nb::bytes& stream) {
             char* data = nullptr;
             Py_ssize_t size = 0;
             if (PyBytes_AsStringAndSize(stream.ptr(), &data, &size) != 0) {
                 throw std::invalid_argument("stream must be bytes.");
             }
             return mlx_lattice::range_decode(
-                cdf, std::string(data, static_cast<size_t>(size))
+                array_arg(cdf, "cdf"),
+                std::string(data, static_cast<size_t>(size))
             );
         },
         "cdf"_a,
@@ -55,8 +62,10 @@ void register_entropy(nb::module_& module) {
     );
     module.def(
         "range_encode_from_prob",
-        [](const mx::array& prob, const mx::array& symbols) {
-            auto encoded = mlx_lattice::range_encode_from_prob(prob, symbols);
+        [](nb::handle prob, nb::handle symbols) {
+            auto encoded = mlx_lattice::range_encode_from_prob(
+                array_arg(prob, "prob"), array_arg(symbols, "symbols")
+            );
             return nb::bytes(encoded.data(), encoded.size());
         },
         "prob"_a,
@@ -69,14 +78,15 @@ void register_entropy(nb::module_& module) {
     );
     module.def(
         "range_decode_from_prob",
-        [](const mx::array& prob, const nb::bytes& stream) {
+        [](nb::handle prob, const nb::bytes& stream) {
             char* data = nullptr;
             Py_ssize_t size = 0;
             if (PyBytes_AsStringAndSize(stream.ptr(), &data, &size) != 0) {
                 throw std::invalid_argument("stream must be bytes.");
             }
             return mlx_lattice::range_decode_from_prob(
-                prob, std::string(data, static_cast<size_t>(size))
+                array_arg(prob, "prob"),
+                std::string(data, static_cast<size_t>(size))
             );
         },
         "prob"_a,
@@ -90,8 +100,10 @@ void register_entropy(nb::module_& module) {
     );
     module.def(
         "rans_encode_from_prob",
-        [](const mx::array& prob, const mx::array& symbols) {
-            auto encoded = mlx_lattice::rans_encode_from_prob(prob, symbols);
+        [](nb::handle prob, nb::handle symbols) {
+            auto encoded = mlx_lattice::rans_encode_from_prob(
+                array_arg(prob, "prob"), array_arg(symbols, "symbols")
+            );
             return nb::bytes(encoded.data(), encoded.size());
         },
         "prob"_a,
@@ -104,14 +116,15 @@ void register_entropy(nb::module_& module) {
     );
     module.def(
         "rans_decode_from_prob",
-        [](const mx::array& prob, const nb::bytes& stream) {
+        [](nb::handle prob, const nb::bytes& stream) {
             char* data = nullptr;
             Py_ssize_t size = 0;
             if (PyBytes_AsStringAndSize(stream.ptr(), &data, &size) != 0) {
                 throw std::invalid_argument("stream must be bytes.");
             }
             return mlx_lattice::rans_decode_from_prob(
-                prob, std::string(data, static_cast<size_t>(size))
+                array_arg(prob, "prob"),
+                std::string(data, static_cast<size_t>(size))
             );
         },
         "prob"_a,

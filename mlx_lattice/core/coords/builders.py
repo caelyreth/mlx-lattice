@@ -13,6 +13,7 @@ from mlx_lattice.core.relations import (
     NeighborRelation,
     RelationImplicitGemmView,
 )
+from mlx_lattice.core.relations.views import RelationKind
 from mlx_lattice.core.types import Triple, triple
 
 type NativeKernelRelation = tuple[
@@ -350,7 +351,7 @@ def _kernel_relation_from_native(
     target_active_rows: mx.array | None = None,
     stride: Triple = (1, 1, 1),
     padding: Triple = (0, 0, 0),
-    kind: str = 'forward',
+    kind: RelationKind = 'forward',
 ) -> KernelRelation:
     (
         in_rows,
