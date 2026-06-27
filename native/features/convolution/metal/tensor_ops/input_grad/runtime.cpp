@@ -28,7 +28,7 @@ bool supports(SparseConvShape shape) {
 
 bool is_preferred(SparseConvShape shape, const mx::Stream& stream) {
     return supports(shape) && shape.in_capacity >= kMinInputRows &&
-           has_nax_acceleration(stream);
+           has_neural_acceleration(stream);
 }
 
 void encode(

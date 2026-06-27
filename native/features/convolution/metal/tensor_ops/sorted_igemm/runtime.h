@@ -8,6 +8,11 @@
 namespace mlx_lattice::backend::metal::tensor_ops::conv::sorted_igemm {
 
 bool supports(SparseConvShape shape, const std::vector<mx::array>& inputs);
+bool is_preferred(
+    SparseConvShape shape,
+    const std::vector<mx::array>& inputs,
+    const mx::Stream& stream
+);
 
 void encode(
     SparseConvShape shape,

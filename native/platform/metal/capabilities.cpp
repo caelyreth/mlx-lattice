@@ -6,28 +6,32 @@
 
 namespace mlx_lattice::backend::metal::tensor_ops {
 
-bool is_available(const mlx::core::Stream& stream) {
-    (void)stream;
-    if (__builtin_available(macOS 26.2, *)) {
-        return true;
-    }
-    return false;
-}
-
-bool has_nax_acceleration(const mlx::core::Stream& stream) {
+CapabilityTier capability_tier(const mlx::core::Stream& stream) {
 #ifdef _METAL_
-    if (!is_available(stream)) {
-        return false;
+    if (!__builtin_available(macOS 26.2, *)) {
+        return CapabilityTier::unavailable;
     }
     auto& device = mlx::core::metal::device(stream.device);
-    const auto& architecture = device.get_architecture();
-    const auto generation = device.get_architecture_gen();
-    return !architecture.empty() &&
-           generation >= (architecture.back() == 'p' ? 18 : 17);
+    auto* metal_device = device.mtl_device();
+    if (metal_device == nullptr ||
+        !metal_device->supportsFamily(MTL::GPUFamilyApple7)) {
+        return CapabilityTier::unavailable;
+    }
+    return metal_device->supportsFamily(MTL::GPUFamilyApple10)
+               ? CapabilityTier::neural_accelerator
+               : CapabilityTier::gpu;
 #else
     (void)stream;
-    return false;
+    return CapabilityTier::unavailable;
 #endif
+}
+
+bool is_available(const mlx::core::Stream& stream) {
+    return capability_tier(stream) != CapabilityTier::unavailable;
+}
+
+bool has_neural_acceleration(const mlx::core::Stream& stream) {
+    return capability_tier(stream) == CapabilityTier::neural_accelerator;
 }
 
 } // namespace mlx_lattice::backend::metal::tensor_ops

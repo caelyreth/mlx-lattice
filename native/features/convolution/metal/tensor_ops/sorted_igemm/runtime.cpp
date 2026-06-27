@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "foundation/array_utils.h"
+#include "platform/metal/capabilities.h"
 #include "platform/metal/runtime_utils.h"
 
 #ifdef _METAL_
@@ -33,6 +34,14 @@ bool supports(SparseConvShape shape, const std::vector<mx::array>& inputs) {
            stride_at(inputs[1], 0) == shape.in_channels * shape.out_channels;
 }
 
+bool is_preferred(
+    SparseConvShape shape,
+    const std::vector<mx::array>& inputs,
+    const mx::Stream& stream
+) {
+    return supports(shape, inputs) && has_neural_acceleration(stream);
+}
+
 void encode(
     SparseConvShape shape,
     const mx::Stream& stream,
@@ -40,10 +49,11 @@ void encode(
     mx::array& out
 ) {
 #ifdef _METAL_
-    if (!supports(shape, inputs)) {
+    if (!is_preferred(shape, inputs, stream)) {
         throw std::invalid_argument(
             "sorted implicit GEMM conv supports only contiguous "
-            "fp16 mapped weights with K=27 and Cin=Cout in {32, 64}."
+            "fp16 mapped weights with K=27 and Cin=Cout in {32, 64} "
+            "on neural-accelerator Metal devices."
         );
     }
 
