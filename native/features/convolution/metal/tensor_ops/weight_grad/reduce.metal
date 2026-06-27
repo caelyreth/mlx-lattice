@@ -19,8 +19,9 @@ inline void sparse_relation_conv_weight_grad_tensor_ops_reduce_impl(
     uint elem
 ) {
     const int values_per_kernel = 16 * 16;
-    const int channel_blocks = in_channels / 16;
-    const int channel_tiles = channel_blocks * channel_blocks;
+    const int in_channel_blocks = in_channels / 16;
+    const int out_channel_blocks = out_channels / 16;
+    const int channel_tiles = in_channel_blocks * out_channel_blocks;
     const int total = n_kernels * channel_tiles * values_per_kernel;
     if (elem >= uint(total)) {
         return;
@@ -30,8 +31,9 @@ inline void sparse_relation_conv_weight_grad_tensor_ops_reduce_impl(
     const int kernel_id = kernel_tile / channel_tiles;
     const int channel_tile = kernel_tile - kernel_id * channel_tiles;
     const int channel = int(elem) - kernel_tile * values_per_kernel;
-    const int ci_base = (channel_tile / channel_blocks) * 16;
-    const int co_base = (channel_tile - (ci_base / 16) * channel_blocks) * 16;
+    const int ci_base = (channel_tile / out_channel_blocks) * 16;
+    const int co_base =
+        (channel_tile - (ci_base / 16) * out_channel_blocks) * 16;
     const int ci = ci_base + channel / 16;
     const int co = co_base + channel - (channel / 16) * 16;
 

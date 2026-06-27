@@ -33,13 +33,15 @@ inline void sparse_relation_conv_weight_grad_tensor_ops_impl(
     threadgroup T* rhs_tile,
     threadgroup float* out_tile
 ) {
-    const int channel_blocks = in_channels / 16;
-    const int channel_tiles = channel_blocks * channel_blocks;
+    const int in_channel_blocks = in_channels / 16;
+    const int out_channel_blocks = out_channels / 16;
+    const int channel_tiles = in_channel_blocks * out_channel_blocks;
     const int kernel_tile = int(group_id) % (n_kernels * channel_tiles);
     const int kernel_id = kernel_tile / channel_tiles;
     const int channel_tile = kernel_tile - kernel_id * channel_tiles;
-    const int ci_base = (channel_tile / channel_blocks) * 16;
-    const int co_base = (channel_tile - (ci_base / 16) * channel_blocks) * 16;
+    const int ci_base = (channel_tile / out_channel_blocks) * 16;
+    const int co_base =
+        (channel_tile - (ci_base / 16) * out_channel_blocks) * 16;
     const int partition = int(group_id) / (n_kernels * channel_tiles);
     const int edge_count = min(counts[0], edge_capacity);
     const int kernel_start = kernel_row_offsets[kernel_id];

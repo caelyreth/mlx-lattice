@@ -42,10 +42,11 @@ int partition_count(SparseConvShape shape) {
 } // namespace
 
 bool supports(SparseConvShape shape) {
-    return shape.in_channels == shape.out_channels &&
-           (shape.in_channels == 16 || shape.in_channels == 32 ||
-            shape.in_channels == 64) &&
-           shape.n_kernels >= 16;
+    auto supported_channels = [](int channels) {
+        return channels == 16 || channels == 32 || channels == 64;
+    };
+    return supported_channels(shape.in_channels) &&
+           supported_channels(shape.out_channels) && shape.n_kernels >= 16;
 }
 
 bool is_preferred(SparseConvShape shape, const mx::Stream& stream) {
@@ -61,8 +62,9 @@ void encode(
 ) {
 #ifdef _METAL_
     auto partitions = partition_count(shape);
-    auto channel_blocks = shape.in_channels / kChannels;
-    auto channel_tiles = channel_blocks * channel_blocks;
+    auto in_channel_blocks = shape.in_channels / kChannels;
+    auto out_channel_blocks = shape.out_channels / kChannels;
+    auto channel_tiles = in_channel_blocks * out_channel_blocks;
     auto partial_values = static_cast<std::size_t>(partitions) *
                           static_cast<std::size_t>(shape.n_kernels) *
                           static_cast<std::size_t>(channel_tiles) * kChannels *
