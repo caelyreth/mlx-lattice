@@ -10,6 +10,7 @@ from mlx_lattice._native import ext
 from mlx_lattice.core.coords.validation import validate_coords
 
 type VoxelReduction = Literal['sum', 'mean']
+type PointVoxelInterpolation = Literal['nearest', 'linear']
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +55,30 @@ class SparseQuantization:
         return self.active_rows
 
 
+@dataclass(frozen=True, slots=True)
+class PointVoxelMap:
+    """Fixed-width point-to-voxel interpolation rows and weights."""
+
+    rows: mx.array
+    weights: mx.array
+
+    def __post_init__(self) -> None:
+        if (
+            self.rows.ndim != 2
+            or self.rows.shape[1] != 8
+            or self.rows.dtype != mx.int32
+        ):
+            raise ValueError('rows must have shape (N, 8) and int32 dtype.')
+        if self.weights.shape != self.rows.shape:
+            raise ValueError('weights must have the same shape as rows.')
+        if self.weights.dtype != mx.float32:
+            raise ValueError('weights must be float32.')
+
+    @property
+    def point_count(self) -> int:
+        return int(self.rows.shape[0])
+
+
 def sparse_quantize(
     points: mx.array,
     voxel_size: float | Sequence[float] = 1.0,
@@ -95,6 +120,58 @@ def voxelize_features(
         quantization.counts,
         point_rows,
         _validate_reduction(reduction),
+    )
+
+
+def build_point_voxel_map(
+    points: mx.array,
+    voxel_coords: mx.array,
+    voxel_active_rows: mx.array,
+    voxel_size: float | Sequence[float] = 1.0,
+    *,
+    batch_indices: mx.array | None = None,
+    point_active_rows: mx.array | None = None,
+    origin: float | Sequence[float] = 0.0,
+    interpolation: PointVoxelInterpolation = 'linear',
+) -> PointVoxelMap:
+    _validate_points(points)
+    validate_coords(voxel_coords)
+    if voxel_coords.dtype != mx.int32:
+        raise ValueError('voxel_coords must be int32.')
+    batches = _batch_indices(batch_indices, points.shape[0])
+    point_rows = _active_rows(point_active_rows, points.shape[0])
+    if (
+        voxel_active_rows.shape != (1,)
+        or voxel_active_rows.dtype != mx.int32
+    ):
+        raise ValueError(
+            'voxel_active_rows must have shape (1,) and int32 dtype.'
+        )
+    native = ext.build_point_voxel_map(
+        points,
+        batches,
+        point_rows,
+        voxel_coords,
+        voxel_active_rows,
+        _float_triple(voxel_size, 'voxel_size'),
+        _float_triple(origin, 'origin'),
+        _validate_interpolation(interpolation),
+    )
+    return PointVoxelMap(*native)
+
+
+def interpolate_point_features(
+    voxel_feats: mx.array,
+    point_voxel_map: PointVoxelMap,
+) -> mx.array:
+    if voxel_feats.ndim != 2:
+        raise ValueError('voxel_feats must have shape (N, C).')
+    if voxel_feats.dtype != mx.float32:
+        raise ValueError('point interpolation currently supports float32.')
+    return ext.interpolate_point_features(
+        voxel_feats,
+        point_voxel_map.rows,
+        point_voxel_map.weights,
     )
 
 
@@ -147,3 +224,11 @@ def _validate_reduction(value: str) -> VoxelReduction:
     if value == 'mean':
         return 'mean'
     raise ValueError("reduction must be 'sum' or 'mean'.")
+
+
+def _validate_interpolation(value: str) -> PointVoxelInterpolation:
+    if value == 'nearest':
+        return 'nearest'
+    if value == 'linear':
+        return 'linear'
+    raise ValueError("interpolation must be 'nearest' or 'linear'.")

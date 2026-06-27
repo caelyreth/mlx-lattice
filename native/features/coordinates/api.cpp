@@ -95,6 +95,43 @@ mx::array voxelize_features(
     );
 }
 
+NativePointVoxelMap build_point_voxel_map(
+    const mx::array& points,
+    const mx::array& batch_indices,
+    const mx::array& point_active_rows,
+    const mx::array& voxel_coords,
+    const mx::array& voxel_active_rows,
+    QuantizationSpec spec,
+    PointVoxelInterpolationOp interpolation
+) {
+    validate_points(points);
+    validate_batch_indices(batch_indices, points.shape(0));
+    validate_active_rows(point_active_rows);
+    validate_coords(voxel_coords);
+    validate_active_rows(voxel_active_rows);
+    validate_positive(spec.voxel_size, "voxel_size");
+    return make_point_voxel_map(
+        points,
+        batch_indices,
+        point_active_rows,
+        voxel_coords,
+        voxel_active_rows,
+        spec,
+        interpolation
+    );
+}
+
+mx::array interpolate_point_features(
+    const mx::array& voxel_feats,
+    const mx::array& rows,
+    const mx::array& weights
+) {
+    validate_feature_matrix(voxel_feats);
+    validate_interpolation_rows(rows, rows.shape(0));
+    validate_interpolation_weights(weights, rows.shape(0));
+    return make_interpolate_point_features(voxel_feats, rows, weights);
+}
+
 // MARK: - relations
 
 NativeKernelRelation build_kernel_relation(

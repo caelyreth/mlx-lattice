@@ -59,6 +59,9 @@ from mlx_lattice.ops.pool import (
     sum_pool3d,
 )
 from mlx_lattice.ops.quantization import (
+    build_point_voxel_map,
+    devoxelize,
+    interpolate_point_features,
     voxelize,
     voxelize_with_quantization,
 )
@@ -97,6 +100,7 @@ __all__ = [
     'build_generative_relation',
     'build_kernel_relation',
     'build_knn_relation',
+    'build_point_voxel_map',
     'build_radius_relation',
     'build_target_kernel_relation',
     'build_transposed_kernel_relation',
@@ -105,6 +109,7 @@ __all__ = [
     'contains_coords',
     'conv3d',
     'conv_transpose3d',
+    'devoxelize',
     'downsample_coords',
     'dropout',
     'gather_neighbor_features',
@@ -114,6 +119,7 @@ __all__ = [
     'global_avg_pool',
     'global_max_pool',
     'global_sum_pool',
+    'interpolate_point_features',
     'intersection_coords',
     'inverse_map',
     'kernel_offsets',

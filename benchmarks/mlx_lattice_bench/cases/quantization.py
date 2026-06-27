@@ -8,6 +8,9 @@ import mlx.core as mx
 from mlx_lattice.core import SparseQuantization, SparseTensor
 from mlx_lattice.core.coords.quantization import VoxelReduction
 from mlx_lattice.ops import (
+    build_point_voxel_map,
+    devoxelize,
+    interpolate_point_features,
     sparse_quantize,
     voxelize,
     voxelize_with_quantization,
@@ -38,6 +41,19 @@ class FixedVoxelInputs:
     feats: mx.array
     quantization: SparseQuantization
     template: SparseTensor
+
+
+@dataclass(frozen=True, slots=True)
+class PointVoxelFixture:
+    points: PointArrays
+    voxels: SparseTensor
+
+
+@dataclass(frozen=True, slots=True)
+class PointVoxelInputs:
+    points: mx.array
+    batch_indices: mx.array
+    voxels: SparseTensor
 
 
 def cases(
@@ -132,6 +148,53 @@ def cases(
             backward=_backward_voxelize_fixed('sum'),
             units=('points', 'n_out', 'elements'),
         ),
+        BenchmarkCase(
+            name='point_voxel_map_linear',
+            group='quantization',
+            params=params,
+            setup=_setup_point_voxel,
+            prepare=_prepare_point_voxel,
+            run=lambda inputs: build_point_voxel_map(
+                inputs.points,
+                inputs.voxels.coords,
+                inputs.voxels.active_rows,
+                batch_indices=inputs.batch_indices,
+                interpolation='linear',
+            ),
+            units=('points', 'n_out'),
+        ),
+        BenchmarkCase(
+            name='devoxelize_linear',
+            group='quantization',
+            params=params,
+            setup=_setup_point_voxel,
+            prepare=_prepare_point_voxel,
+            run=lambda inputs: devoxelize(
+                inputs.points,
+                inputs.voxels,
+                batch_indices=inputs.batch_indices,
+                interpolation='linear',
+            ),
+            compiled=_compiled_devoxelize('linear'),
+            backward=_backward_devoxelize('linear'),
+            units=('points', 'n_out', 'elements'),
+        ),
+        BenchmarkCase(
+            name='devoxelize_nearest',
+            group='quantization',
+            params=params,
+            setup=_setup_point_voxel,
+            prepare=_prepare_point_voxel,
+            run=lambda inputs: devoxelize(
+                inputs.points,
+                inputs.voxels,
+                batch_indices=inputs.batch_indices,
+                interpolation='nearest',
+            ),
+            compiled=_compiled_devoxelize('nearest'),
+            backward=_backward_devoxelize('nearest'),
+            units=('points', 'n_out', 'elements'),
+        ),
     )
 
 
@@ -168,6 +231,26 @@ def _prepare_fixed(fixture: FixedVoxelFixture) -> FixedVoxelInputs:
         fixture.points.feats,
         fixture.quantization,
         fixture.template,
+    )
+
+
+def _setup_point_voxel(params: Mapping[str, Any]) -> PointVoxelFixture:
+    points = _setup(params)
+    voxels = voxelize(
+        points.points,
+        points.feats,
+        voxel_size=1.0,
+        batch_indices=points.batch_indices,
+        reduction='mean',
+    )
+    return PointVoxelFixture(points, voxels)
+
+
+def _prepare_point_voxel(fixture: PointVoxelFixture) -> PointVoxelInputs:
+    return PointVoxelInputs(
+        fixture.points.points,
+        fixture.points.batch_indices,
+        fixture.voxels,
     )
 
 
@@ -231,5 +314,41 @@ def _backward_voxelize_fixed(reduction: VoxelReduction) -> Any:
             return mx.sum(out.feats)
 
         return mx.grad(loss), (fixture.points.feats,)
+
+    return factory
+
+
+def _compiled_devoxelize(interpolation: str) -> Any:
+    def factory(fixture: PointVoxelFixture) -> tuple[Any, tuple[Any, ...]]:
+        point_map = build_point_voxel_map(
+            fixture.points.points,
+            fixture.voxels.coords,
+            fixture.voxels.active_rows,
+            batch_indices=fixture.points.batch_indices,
+            interpolation=interpolation,
+        )
+
+        def fn(feats: mx.array) -> mx.array:
+            return interpolate_point_features(feats, point_map)
+
+        return fn, (fixture.voxels.feats,)
+
+    return factory
+
+
+def _backward_devoxelize(interpolation: str) -> Any:
+    def factory(fixture: PointVoxelFixture) -> tuple[Any, tuple[Any, ...]]:
+        point_map = build_point_voxel_map(
+            fixture.points.points,
+            fixture.voxels.coords,
+            fixture.voxels.active_rows,
+            batch_indices=fixture.points.batch_indices,
+            interpolation=interpolation,
+        )
+
+        def loss(feats: mx.array) -> mx.array:
+            return mx.sum(interpolate_point_features(feats, point_map))
+
+        return mx.grad(loss), (fixture.voxels.feats,)
 
     return factory

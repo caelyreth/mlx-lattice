@@ -42,6 +42,20 @@ struct VoxelFeatureInputs {
     const mx::array& active_rows;
 };
 
+struct PointVoxelMapInputs {
+    const mx::array& points;
+    const mx::array& batch_indices;
+    const mx::array& point_active_rows;
+    const mx::array& voxel_coords;
+    const mx::array& voxel_active_rows;
+};
+
+struct PointFeatureInputs {
+    const mx::array& values;
+    const mx::array& rows;
+    const mx::array& weights;
+};
+
 // FNV-1a hash matching Metal coord_hash_i32 for cross-platform consistency.
 // See native/features/coordinates/metal/common.metal:53-60.
 struct CoordHash {
@@ -54,6 +68,9 @@ struct CoordHash {
         return static_cast<size_t>(hash & 0x7fffffffu);
     }
 };
+
+std::unordered_map<Coord, int32_t, CoordHash>
+first_row_map(const std::vector<Coord>& coords);
 
 std::vector<Coord> read_coords(const mx::array& coords) {
     std::vector<Coord> out;

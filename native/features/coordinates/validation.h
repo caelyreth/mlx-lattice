@@ -13,6 +13,8 @@ void validate_inverse_rows(const mx::array& inverse_rows, int rows);
 void validate_voxel_counts(const mx::array& voxel_counts, int rows);
 void validate_row_indices(const mx::array& rows, int count, const char* name);
 void validate_feature_matrix(const mx::array& feats);
+void validate_interpolation_rows(const mx::array& rows, int point_rows);
+void validate_interpolation_weights(const mx::array& weights, int point_rows);
 void validate_positive(Triple values, const char* name);
 void validate_positive(FloatTriple values, const char* name);
 void validate_nonnegative(Triple values, const char* name);

@@ -86,6 +86,23 @@ void validate_feature_matrix(const mx::array& feats) {
     }
 }
 
+void validate_interpolation_rows(const mx::array& rows, int point_rows) {
+    if (rows.shape() != mx::Shape{point_rows, 8} || rows.dtype() != mx::int32) {
+        throw std::invalid_argument(
+            "interpolation rows must have shape (N, 8) and int32 dtype."
+        );
+    }
+}
+
+void validate_interpolation_weights(const mx::array& weights, int point_rows) {
+    if (weights.shape() != mx::Shape{point_rows, 8} ||
+        weights.dtype() != mx::float32) {
+        throw std::invalid_argument(
+            "interpolation weights must have shape (N, 8) and float32 dtype."
+        );
+    }
+}
+
 void validate_positive(Triple values, const char* name) {
     for (auto value : values) {
         if (value <= 0) {

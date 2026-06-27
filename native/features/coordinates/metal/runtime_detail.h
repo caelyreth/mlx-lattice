@@ -35,6 +35,15 @@ int voxel_reduce_op_id(VoxelReduceOp op) {
     }
 }
 
+int point_voxel_interpolation_op_id(PointVoxelInterpolationOp op) {
+    switch (op) {
+    case PointVoxelInterpolationOp::Nearest:
+        return 0;
+    case PointVoxelInterpolationOp::Linear:
+        return 1;
+    }
+}
+
 bool is_identity_forward_relation(Triple stride, Triple padding) {
     return stride == Triple{1, 1, 1} && padding == Triple{0, 0, 0};
 }

@@ -39,6 +39,22 @@ mx::array make_voxelize_features(
     VoxelReduceOp reduce
 );
 
+NativePointVoxelMap make_point_voxel_map(
+    const mx::array& points,
+    const mx::array& batch_indices,
+    const mx::array& point_active_rows,
+    const mx::array& voxel_coords,
+    const mx::array& voxel_active_rows,
+    QuantizationSpec spec,
+    PointVoxelInterpolationOp interpolation
+);
+
+mx::array make_interpolate_point_features(
+    const mx::array& voxel_feats,
+    const mx::array& rows,
+    const mx::array& weights
+);
+
 NativeKernelRelation make_kernel_relation(
     const mx::array& coords,
     const mx::array& active_rows,

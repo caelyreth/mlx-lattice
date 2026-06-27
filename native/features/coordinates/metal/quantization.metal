@@ -288,3 +288,174 @@ voxel_reduce_scale(int reduce, device const int* voxel_counts, int voxel_row) {
     float scale = voxel_reduce_scale(reduce, voxel_counts, voxel_row);
     out[elem] = cotangent[voxel_row * channels + channel] * scale;
 }
+
+inline float point_voxel_axis_position(
+    device const float* points,
+    int point_row,
+    int axis,
+    float voxel_size,
+    float origin
+) {
+    return (points[point_row * 3 + axis] - origin) / voxel_size;
+}
+
+[[kernel]] void build_point_voxel_map_f32_i32(
+    device const float* points [[buffer(0)]],
+    device const int* batch_indices [[buffer(1)]],
+    device const int* point_active_rows [[buffer(2)]],
+    device const int* voxel_coords [[buffer(3)]],
+    device const int* voxel_active_rows [[buffer(4)]],
+    device const int* table_rows [[buffer(5)]],
+    device int* rows [[buffer(6)]],
+    device float* weights [[buffer(7)]],
+    constant const int& interpolation [[buffer(8)]],
+    constant const int& point_rows [[buffer(9)]],
+    constant const int& voxel_rows [[buffer(10)]],
+    constant const int& table_capacity [[buffer(11)]],
+    constant const float& voxel_size_x [[buffer(12)]],
+    constant const float& voxel_size_y [[buffer(13)]],
+    constant const float& voxel_size_z [[buffer(14)]],
+    constant const float& origin_x [[buffer(15)]],
+    constant const float& origin_y [[buffer(16)]],
+    constant const float& origin_z [[buffer(17)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    if (elem >= uint(point_rows)) {
+        return;
+    }
+    int point_row = int(elem);
+    int base = point_row * 8;
+    for (int corner = 0; corner < 8; ++corner) {
+        rows[base + corner] = -1;
+        weights[base + corner] = 0.0f;
+    }
+    if (point_row >= min(point_active_rows[0], point_rows)) {
+        return;
+    }
+    int active_voxel_rows = min(voxel_active_rows[0], voxel_rows);
+    if (active_voxel_rows <= 0) {
+        return;
+    }
+
+    float px =
+        point_voxel_axis_position(points, point_row, 0, voxel_size_x, origin_x);
+    float py =
+        point_voxel_axis_position(points, point_row, 1, voxel_size_y, origin_y);
+    float pz =
+        point_voxel_axis_position(points, point_row, 2, voxel_size_z, origin_z);
+
+    if (interpolation == 0) {
+        int query[4] = {
+            batch_indices[point_row],
+            int(floor(px + 0.5f)),
+            int(floor(py + 0.5f)),
+            int(floor(pz + 0.5f)),
+        };
+        int voxel_row = lookup_coord_row_hash(
+            voxel_coords, table_rows, table_capacity, query
+        );
+        if (voxel_row >= 0 && voxel_row < active_voxel_rows) {
+            rows[base] = voxel_row;
+            weights[base] = 1.0f;
+        }
+        return;
+    }
+
+    int lower_x = int(floor(px));
+    int lower_y = int(floor(py));
+    int lower_z = int(floor(pz));
+    float frac_x = px - float(lower_x);
+    float frac_y = py - float(lower_y);
+    float frac_z = pz - float(lower_z);
+    for (int corner = 0; corner < 8; ++corner) {
+        int dx = corner & 1;
+        int dy = (corner >> 1) & 1;
+        int dz = (corner >> 2) & 1;
+        int query[4] = {
+            batch_indices[point_row],
+            lower_x + dx,
+            lower_y + dy,
+            lower_z + dz,
+        };
+        int voxel_row = lookup_coord_row_hash(
+            voxel_coords, table_rows, table_capacity, query
+        );
+        if (voxel_row < 0 || voxel_row >= active_voxel_rows) {
+            continue;
+        }
+        float wx = dx == 0 ? 1.0f - frac_x : frac_x;
+        float wy = dy == 0 ? 1.0f - frac_y : frac_y;
+        float wz = dz == 0 ? 1.0f - frac_z : frac_z;
+        rows[base + corner] = voxel_row;
+        weights[base + corner] = wx * wy * wz;
+    }
+}
+
+[[kernel]] void interpolate_point_features_f32_i32(
+    device const float* voxel_feats [[buffer(0)]],
+    device const int* rows [[buffer(1)]],
+    device const float* weights [[buffer(2)]],
+    device float* out [[buffer(3)]],
+    constant const int& point_rows [[buffer(4)]],
+    constant const int& voxel_rows [[buffer(5)]],
+    constant const int& channels [[buffer(6)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int total = point_rows * channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+    int point_row = int(elem) / channels;
+    int channel = int(elem) - point_row * channels;
+    float value = 0.0f;
+    int base = point_row * 8;
+    for (int corner = 0; corner < 8; ++corner) {
+        int voxel_row = rows[base + corner];
+        if (voxel_row < 0 || voxel_row >= voxel_rows) {
+            continue;
+        }
+        value += voxel_feats[voxel_row * channels + channel] *
+                 weights[base + corner];
+    }
+    out[elem] = value;
+}
+
+[[kernel]] void clear_point_feature_grad_f32(
+    device float* out [[buffer(0)]],
+    constant const int& elements [[buffer(1)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    if (elem < uint(elements)) {
+        out[elem] = 0.0f;
+    }
+}
+
+[[kernel]] void interpolate_point_feature_grad_f32_i32(
+    device const float* point_grad [[buffer(0)]],
+    device const int* rows [[buffer(1)]],
+    device const float* weights [[buffer(2)]],
+    device atomic_float* out [[buffer(3)]],
+    constant const int& point_rows [[buffer(4)]],
+    constant const int& voxel_rows [[buffer(5)]],
+    constant const int& channels [[buffer(6)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    int total = point_rows * channels;
+    if (elem >= uint(total)) {
+        return;
+    }
+    int point_row = int(elem) / channels;
+    int channel = int(elem) - point_row * channels;
+    int base = point_row * 8;
+    for (int corner = 0; corner < 8; ++corner) {
+        int voxel_row = rows[base + corner];
+        if (voxel_row < 0 || voxel_row >= voxel_rows) {
+            continue;
+        }
+        atomic_fetch_add_explicit(
+            &out[voxel_row * channels + channel],
+            point_grad[elem] * weights[base + corner],
+            memory_order_relaxed
+        );
+    }
+}

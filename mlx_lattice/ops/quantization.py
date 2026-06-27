@@ -6,9 +6,13 @@ from typing import overload
 import mlx.core as mx
 
 from mlx_lattice.core.coords.quantization import (
+    PointVoxelInterpolation,
+    PointVoxelMap,
     SparseQuantization,
     VoxelReduction,
     _validate_reduction,
+    build_point_voxel_map,
+    interpolate_point_features,
     sparse_quantize,
 )
 from mlx_lattice.core.coords.quantization import (
@@ -17,7 +21,13 @@ from mlx_lattice.core.coords.quantization import (
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import triple
 
-__all__ = ['voxelize', 'voxelize_with_quantization']
+__all__ = [
+    'build_point_voxel_map',
+    'devoxelize',
+    'interpolate_point_features',
+    'voxelize',
+    'voxelize_with_quantization',
+]
 
 
 @overload
@@ -137,3 +147,30 @@ def voxelize_with_quantization(
         stride=triple(stride, name='stride'),
         active_rows=quantization.active_rows,
     )
+
+
+def devoxelize(
+    points: mx.array,
+    voxels: SparseTensor,
+    voxel_size: float | Sequence[float] = 1.0,
+    *,
+    batch_indices: mx.array | None = None,
+    point_active_rows: mx.array | None = None,
+    origin: float | Sequence[float] = 0.0,
+    interpolation: PointVoxelInterpolation = 'linear',
+    point_voxel_map: PointVoxelMap | None = None,
+) -> mx.array:
+    """Sample sparse voxel features back onto dense point rows."""
+    point_map = point_voxel_map
+    if point_map is None:
+        point_map = build_point_voxel_map(
+            points,
+            voxels.coords,
+            voxels.active_rows,
+            voxel_size,
+            batch_indices=batch_indices,
+            point_active_rows=point_active_rows,
+            origin=origin,
+            interpolation=interpolation,
+        )
+    return interpolate_point_features(voxels.feats, point_map)

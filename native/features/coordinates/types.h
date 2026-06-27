@@ -56,6 +56,11 @@ enum class VoxelReduceOp : std::uint8_t {
     Mean,
 };
 
+enum class PointVoxelInterpolationOp : std::uint8_t {
+    Nearest,
+    Linear,
+};
+
 enum NeighborRelationOutputSlot : std::size_t {
     NeighborQueryRows = 0,
     NeighborSourceRows,
@@ -127,6 +132,11 @@ struct NativeSparseQuantization {
     mx::array active_rows;
     mx::array inverse_rows;
     mx::array counts;
+};
+
+struct NativePointVoxelMap {
+    mx::array rows;
+    mx::array weights;
 };
 
 struct NativeSparseOccupancy {
@@ -222,6 +232,19 @@ inline bool operator==(VoxelFeatureShape lhs, VoxelFeatureShape rhs) {
 }
 
 inline bool operator!=(VoxelFeatureShape lhs, VoxelFeatureShape rhs) {
+    return !(lhs == rhs);
+}
+
+struct PointVoxelMapShape {
+    int point_rows;
+    int voxel_rows;
+};
+
+inline bool operator==(PointVoxelMapShape lhs, PointVoxelMapShape rhs) {
+    return lhs.point_rows == rhs.point_rows && lhs.voxel_rows == rhs.voxel_rows;
+}
+
+inline bool operator!=(PointVoxelMapShape lhs, PointVoxelMapShape rhs) {
     return !(lhs == rhs);
 }
 

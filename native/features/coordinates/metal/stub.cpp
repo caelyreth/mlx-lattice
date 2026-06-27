@@ -138,6 +138,49 @@ void eval_voxelize_feature_grad(
     unavailable();
 }
 
+void eval_point_voxel_map(
+    QuantizationSpec spec,
+    PointVoxelInterpolationOp interpolation,
+    PointVoxelMapShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    (void)spec;
+    (void)interpolation;
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    unavailable();
+}
+
+void eval_interpolate_point_features(
+    VoxelFeatureShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    unavailable();
+}
+
+void eval_interpolate_point_feature_grad(
+    VoxelFeatureShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    unavailable();
+}
+
 void eval_generic_kernel_relation(
     CoordRelationOp op,
     int rows, // NOLINT(bugprone-easily-swappable-parameters)

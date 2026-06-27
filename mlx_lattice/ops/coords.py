@@ -14,7 +14,10 @@ from mlx_lattice.core.coords.ordering import (
     morton_sort_coords,
 )
 from mlx_lattice.core.coords.quantization import (
+    PointVoxelMap,
     SparseQuantization,
+    build_point_voxel_map,
+    interpolate_point_features,
     sparse_quantize,
 )
 from mlx_lattice.core.coords.set_ops import (
@@ -31,11 +34,14 @@ __all__ = [
     'CoordinateOrdering',
     'CoordinateSet',
     'OccupancyExpansion',
+    'PointVoxelMap',
     'SparseOccupancy',
     'SparseQuantization',
+    'build_point_voxel_map',
     'child_coords_from_indices',
     'contains_coords',
     'downsample_coords',
+    'interpolate_point_features',
     'intersection_coords',
     'inverse_map',
     'lookup_coords',

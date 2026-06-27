@@ -46,6 +46,18 @@ VoxelReduceOp voxel_reduce_from_name(const std::string& name) {
     throw std::invalid_argument("voxel reduction must be 'sum' or 'mean'.");
 }
 
+PointVoxelInterpolationOp interpolation_from_name(const std::string& name) {
+    if (name == "nearest") {
+        return PointVoxelInterpolationOp::Nearest;
+    }
+    if (name == "linear") {
+        return PointVoxelInterpolationOp::Linear;
+    }
+    throw std::invalid_argument(
+        "point-voxel interpolation must be 'nearest' or 'linear'."
+    );
+}
+
 nb::tuple relation_tuple(const NativeKernelRelation& relation) {
     return nb::make_tuple(
         relation.in_rows,
@@ -84,6 +96,10 @@ nb::tuple quantization_tuple(const NativeSparseQuantization& result) {
     return nb::make_tuple(
         result.coords, result.active_rows, result.inverse_rows, result.counts
     );
+}
+
+nb::tuple point_voxel_map_tuple(const NativePointVoxelMap& result) {
+    return nb::make_tuple(result.rows, result.weights);
 }
 
 } // namespace
@@ -280,6 +296,67 @@ void register_coords(nb::module_& module) {
             "active_rows: mlx.core.array, reduction: str) -> mlx.core.array"
         ),
         "Aggregate point features into sparse voxel rows."
+    );
+    module.def(
+        "build_point_voxel_map",
+        [](nb::handle points,
+           nb::handle batch_indices,
+           nb::handle point_active_rows,
+           nb::handle voxel_coords,
+           nb::handle voxel_active_rows,
+           const std::vector<float>& voxel_size,
+           const std::vector<float>& origin,
+           const std::string& interpolation) {
+            return point_voxel_map_tuple(build_point_voxel_map(
+                array_arg(points, "points"),
+                array_arg(batch_indices, "batch_indices"),
+                array_arg(point_active_rows, "point_active_rows"),
+                array_arg(voxel_coords, "voxel_coords"),
+                array_arg(voxel_active_rows, "voxel_active_rows"),
+                QuantizationSpec{
+                    float_triple_from_values(voxel_size, "voxel_size"),
+                    float_triple_from_values(origin, "origin"),
+                },
+                interpolation_from_name(interpolation)
+            ));
+        },
+        "points"_a,
+        "batch_indices"_a,
+        "point_active_rows"_a,
+        "voxel_coords"_a,
+        "voxel_active_rows"_a,
+        "voxel_size"_a,
+        "origin"_a,
+        "interpolation"_a,
+        nb::sig(
+            "def build_point_voxel_map(points: mlx.core.array, "
+            "batch_indices: mlx.core.array, point_active_rows: "
+            "mlx.core.array, voxel_coords: mlx.core.array, "
+            "voxel_active_rows: mlx.core.array, voxel_size: "
+            "collections.abc.Sequence[float], origin: "
+            "collections.abc.Sequence[float], interpolation: str) -> "
+            "tuple[mlx.core.array, mlx.core.array]"
+        ),
+        "Build point-to-voxel interpolation rows and weights."
+    );
+    module.def(
+        "interpolate_point_features",
+        [](nb::handle voxel_feats, nb::handle rows, nb::handle weights) {
+            return interpolate_point_features(
+                array_arg(voxel_feats, "voxel_feats"),
+                array_arg(rows, "rows"),
+                array_arg(weights, "weights")
+            );
+        },
+        "voxel_feats"_a,
+        "rows"_a,
+        "weights"_a,
+        nb::sig(
+            "def interpolate_point_features(voxel_feats: mlx.core.array, "
+            "rows: mlx.core.array, weights: mlx.core.array) -> "
+            "mlx.core.array"
+        ),
+        "Interpolate sparse voxel features back to point rows."
     );
     module.def(
         "build_kernel_relation",

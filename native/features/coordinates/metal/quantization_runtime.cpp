@@ -202,6 +202,156 @@ void eval_voxelize_feature_grad(
 #endif
 }
 
+void eval_point_voxel_map(
+    QuantizationSpec spec,
+    PointVoxelInterpolationOp interpolation,
+    PointVoxelMapShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    require_f32_input(inputs[0], "points");
+    require_i32_input(inputs[1], "batch indices");
+    require_i32_input(inputs[2], "point active rows");
+    require_i32_input(inputs[3], "voxel coordinates");
+    require_i32_input(inputs[4], "voxel active rows");
+
+#ifdef _METAL_
+    backend::allocate_all(outputs);
+
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto table_capacity = coord_hash_capacity(shape.voxel_rows);
+    auto table = make_int32_temp(table_capacity);
+    encoder.add_temporary(table);
+    clear_coord_hash(device, library, encoder, table, table_capacity);
+    insert_coord_hash(
+        device,
+        library,
+        encoder,
+        inputs[3],
+        table,
+        CoordHashShape{shape.voxel_rows, table_capacity}
+    );
+
+    auto kernel = device.get_kernel("build_point_voxel_map_f32_i32", library);
+    encoder.set_compute_pipeline_state(kernel);
+    bind_input_arrays(encoder, inputs);
+    encoder.set_input_array(table, 5);
+    encoder.set_output_array(outputs[0], 6);
+    encoder.set_output_array(outputs[1], 7);
+    encoder.set_bytes(point_voxel_interpolation_op_id(interpolation), 8);
+    encoder.set_bytes(shape.point_rows, 9);
+    encoder.set_bytes(shape.voxel_rows, 10);
+    encoder.set_bytes(table_capacity, 11);
+    encoder.set_bytes(spec.voxel_size[0], 12);
+    encoder.set_bytes(spec.voxel_size[1], 13);
+    encoder.set_bytes(spec.voxel_size[2], 14);
+    encoder.set_bytes(spec.origin[0], 15);
+    encoder.set_bytes(spec.origin[1], 16);
+    encoder.set_bytes(spec.origin[2], 17);
+    dispatch_1d(encoder, kernel, static_cast<size_t>(shape.point_rows));
+#else
+    (void)spec;
+    (void)interpolation;
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
+void eval_interpolate_point_features(
+    VoxelFeatureShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    require_f32_input(inputs[0], "voxel features");
+    require_i32_input(inputs[1], "interpolation rows");
+    require_f32_input(inputs[2], "interpolation weights");
+
+#ifdef _METAL_
+    backend::allocate_all(outputs);
+
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto kernel =
+        device.get_kernel("interpolate_point_features_f32_i32", library);
+
+    encoder.set_compute_pipeline_state(kernel);
+    bind_input_arrays(encoder, inputs);
+    encoder.set_output_array(outputs[0], 3);
+    encoder.set_bytes(shape.point_rows, 4);
+    encoder.set_bytes(shape.voxel_rows, 5);
+    encoder.set_bytes(shape.channels, 6);
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(shape.point_rows) *
+            static_cast<size_t>(shape.channels)
+    );
+#else
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
+void eval_interpolate_point_feature_grad(
+    VoxelFeatureShape shape,
+    const mx::Stream& stream,
+    const std::vector<mx::array>& inputs,
+    std::vector<mx::array>& outputs
+) {
+    require_f32_input(inputs[0], "point cotangent");
+    require_i32_input(inputs[1], "interpolation rows");
+    require_f32_input(inputs[2], "interpolation weights");
+
+#ifdef _METAL_
+    backend::allocate_all(outputs);
+
+    auto& device = mx::metal::device(stream.device);
+    auto library =
+        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
+    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto elements = shape.voxel_rows * shape.channels;
+    auto clear = device.get_kernel("clear_point_feature_grad_f32", library);
+    encoder.set_compute_pipeline_state(clear);
+    encoder.set_output_array(outputs[0], 0);
+    encoder.set_bytes(elements, 1);
+    dispatch_1d(encoder, clear, static_cast<size_t>(elements));
+
+    auto kernel =
+        device.get_kernel("interpolate_point_feature_grad_f32_i32", library);
+    encoder.set_compute_pipeline_state(kernel);
+    bind_input_arrays(encoder, inputs);
+    encoder.set_output_array(outputs[0], 3);
+    encoder.set_bytes(shape.point_rows, 4);
+    encoder.set_bytes(shape.voxel_rows, 5);
+    encoder.set_bytes(shape.channels, 6);
+    dispatch_1d(
+        encoder,
+        kernel,
+        static_cast<size_t>(shape.point_rows) *
+            static_cast<size_t>(shape.channels)
+    );
+#else
+    (void)shape;
+    (void)stream;
+    (void)inputs;
+    (void)outputs;
+    throw std::runtime_error("Metal support is not available.");
+#endif
+}
+
 // MARK: - relations
 
 } // namespace mlx_lattice::coords::metal
