@@ -9,6 +9,7 @@ target_sources(
     $<$<NOT:$<BOOL:${MLX_LATTICE_HAS_METAL}>>:metal/stub.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/tensor_ops/input_grad/runtime.cpp>
+    $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/tensor_ops/sorted_igemm/runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/tensor_ops/weight_grad/runtime.cpp>)
 target_include_directories(
   mlx_lattice_feature_convolution

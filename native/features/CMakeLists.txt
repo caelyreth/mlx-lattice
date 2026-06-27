@@ -19,7 +19,7 @@ if(MLX_LATTICE_HAS_METAL)
     SOURCES
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/forward.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/input_grad.metal
-      ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/sorted_igemm.metal
+      ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/direct/sorted_reference.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/specialized_forward.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/specialized_input_grad.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/specialized_weight_grad.metal
@@ -34,6 +34,7 @@ if(MLX_LATTICE_HAS_METAL)
       ${CMAKE_CURRENT_LIST_DIR}/pooling/metal/autodiff.metal
       ${CMAKE_CURRENT_LIST_DIR}/pooling/metal/forward.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/tensor_ops/input_grad/contract.metal
+      ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/tensor_ops/sorted_igemm/forward.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/tensor_ops/weight_grad/contract.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/tensor_ops/weight_grad/reduce.metal
     INCLUDE_DIRS ${PROJECT_SOURCE_DIR} ${MLX_INCLUDE_DIRS}

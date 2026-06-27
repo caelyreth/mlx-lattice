@@ -1,9 +1,6 @@
-#include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
 #include <metal_stdlib>
-#include <metal_tensor>
 
 using namespace metal;
-using namespace mpp::tensor_ops;
 
 // clang-format off
 #include "native/features/convolution/metal/common.metal"
