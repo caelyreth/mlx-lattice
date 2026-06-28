@@ -1,15 +1,10 @@
 #include "features/convolution/metal/tensor_ops/weight_grad/runtime.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 
-#include "foundation/array_utils.h"
 #include "platform/metal/capabilities.h"
 #include "platform/metal/runtime_utils.h"
-
-#ifdef _METAL_
-#endif
 
 namespace mlx_lattice::backend::metal::tensor_ops::conv::weight_grad {
 namespace {
@@ -20,16 +15,17 @@ constexpr int kMaxPartitions = 64;
 constexpr int kMinInputRows = 32768;
 
 #ifdef _METAL_
-mx::array make_float_temp(std::size_t elements) {
-    auto count = std::max<std::size_t>(elements, 1);
-    return mx::array(
-        mx::allocator::malloc(count * sizeof(float)),
-        mx::Shape{static_cast<int>(count)},
-        mx::float32
-    );
+bool is_float16(const mx::array& array) { return array.dtype() == mx::float16; }
+
+const char* contract_kernel_name(bool fp16) {
+    return fp16 ? "sparse_relation_conv_weight_grad_tensor_ops_f16_i32"
+                : "sparse_relation_conv_weight_grad_tensor_ops_f32_i32";
 }
 
-bool is_float16(const mx::array& array) { return array.dtype() == mx::float16; }
+const char* reduce_kernel_name(bool fp16) {
+    return fp16 ? "sparse_relation_conv_weight_grad_tensor_ops_reduce_f16"
+                : "sparse_relation_conv_weight_grad_tensor_ops_reduce_f32";
+}
 
 int partition_count(SparseConvShape shape) {
     auto partitions =
@@ -69,28 +65,16 @@ void encode(
                           static_cast<std::size_t>(shape.n_kernels) *
                           static_cast<std::size_t>(channel_tiles) * kChannels *
                           kChannels;
-    auto partials = make_float_temp(partial_values);
+    auto partials = make_temp<float>(partial_values);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
     encoder.add_temporary(partials);
 
-    auto contract = device.get_kernel(
-        is_float16(inputs[0])
-            ? "sparse_relation_conv_weight_grad_tensor_ops_f16_i32"
-            : "sparse_relation_conv_weight_grad_tensor_ops_f32_i32",
-        library
-    );
+    auto fp16 = is_float16(inputs[0]);
+    auto contract = lattice_kernel(stream, contract_kernel_name(fp16), library);
     encoder.set_compute_pipeline_state(contract);
-    encoder.set_input_array(inputs[0], 0);
-    encoder.set_input_array(inputs[1], 1);
-    encoder.set_input_array(inputs[2], 2);
-    encoder.set_input_array(inputs[3], 3);
-    encoder.set_input_array(inputs[5], 4);
-    encoder.set_input_array(inputs[7], 5);
-    encoder.set_input_array(inputs[8], 6);
+    bind_input_arrays(encoder, inputs, {0, 1, 2, 3, 5, 7, 8});
     encoder.set_output_array(partials, 7);
     set_bytes_range(
         encoder,
@@ -99,10 +83,10 @@ void encode(
         shape.out_capacity,
         shape.n_kernels,
         partitions,
-        static_cast<int>(inputs[0].strides(0)),
-        static_cast<int>(inputs[0].strides(1)),
-        static_cast<int>(inputs[1].strides(0)),
-        static_cast<int>(inputs[1].strides(1)),
+        stride_i32(inputs[0], 0),
+        stride_i32(inputs[0], 1),
+        stride_i32(inputs[1], 0),
+        stride_i32(inputs[1], 1),
         shape.in_channels,
         shape.out_channels
     );
@@ -117,12 +101,7 @@ void encode(
         MTL::Size(32, 1, 1)
     );
 
-    auto reduce = device.get_kernel(
-        is_float16(inputs[0])
-            ? "sparse_relation_conv_weight_grad_tensor_ops_reduce_f16"
-            : "sparse_relation_conv_weight_grad_tensor_ops_reduce_f32",
-        library
-    );
+    auto reduce = lattice_kernel(stream, reduce_kernel_name(fp16), library);
     encoder.set_compute_pipeline_state(reduce);
     encoder.set_input_array(partials, 0);
     encoder.set_output_array(out, 1);

@@ -12,10 +12,6 @@
 namespace mlx_lattice::backend::metal::conv {
 namespace {
 
-int stride_at(const mx::array& array, int dim) {
-    return static_cast<int>(array.strides(dim));
-}
-
 #ifdef _METAL_
 template <typename Encoder>
 void bind_common_shape(
@@ -45,11 +41,11 @@ void bind_weight_shape(
     set_bytes_range(
         encoder,
         first_index,
-        stride_at(weights, 0),
-        stride_at(weights, 1),
-        stride_at(weights, 2),
-        weights.ndim() == 5 ? stride_at(weights, 3) : 0,
-        weights.ndim() == 5 ? stride_at(weights, 4) : 0,
+        stride_i32(weights, 0),
+        stride_i32(weights, 1),
+        stride_i32(weights, 2),
+        weights.ndim() == 5 ? stride_i32(weights, 3) : 0,
+        weights.ndim() == 5 ? stride_i32(weights, 4) : 0,
         shape.weight_layout,
         shape.kernel_x,
         shape.kernel_y,
@@ -60,11 +56,12 @@ void bind_weight_shape(
 template <typename Encoder, typename Library>
 void clear_output(
     Encoder& encoder,
-    mx::metal::Device& device,
-    Library library,
+    const mx::Stream& stream,
+    Library& library,
     mx::array& out
 ) {
-    auto clear = device.get_kernel("sparse_relation_conv_clear_f32", library);
+    auto clear =
+        lattice_kernel(stream, "sparse_relation_conv_clear_f32", library);
     encoder.set_compute_pipeline_state(clear);
     encoder.set_output_array(out, 0);
     auto total = static_cast<int>(out.size());
@@ -85,13 +82,13 @@ bool is_dense_5d_c_weight(const mx::array& weights, SparseConvShape shape) {
     };
     return shape.weight_layout == 1 && supported_channels(shape.in_channels) &&
            supported_channels(shape.out_channels) && shape.n_kernels >= 16 &&
-           weights.ndim() == 5 && stride_at(weights, 4) == 1 &&
-           stride_at(weights, 3) == shape.in_channels &&
-           stride_at(weights, 2) == shape.kernel_z * shape.in_channels &&
-           stride_at(weights, 1) ==
+           weights.ndim() == 5 && stride_i32(weights, 4) == 1 &&
+           stride_i32(weights, 3) == shape.in_channels &&
+           stride_i32(weights, 2) == shape.kernel_z * shape.in_channels &&
+           stride_i32(weights, 1) ==
                shape.kernel_y * shape.kernel_z * shape.in_channels &&
-           stride_at(weights, 0) == shape.kernel_x * shape.kernel_y *
-                                        shape.kernel_z * shape.in_channels;
+           stride_i32(weights, 0) == shape.kernel_x * shape.kernel_y *
+                                         shape.kernel_z * shape.in_channels;
 }
 
 bool is_dense_5d_square_c_shape(SparseConvShape shape) {
@@ -267,10 +264,8 @@ void encode_weight_grad_classic(
     const std::vector<mx::array>& inputs,
     mx::array& out
 ) {
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
     auto use_block4 = shape.in_channels % 4 == 0 &&
@@ -284,9 +279,10 @@ void encode_weight_grad_classic(
                        (shape.in_capacity >= 4096 || edge_count >= 50000);
     auto use_gather = fp16 || shape.n_kernels >= 16;
     if (!use_gather && !use_block4 && !use_cout16 && !use_dense_c) {
-        clear_output(encoder, device, library, out);
+        clear_output(encoder, stream, library, out);
     }
-    auto kernel = device.get_kernel(
+    auto kernel = lattice_kernel(
+        stream,
         use_dense_c
             ? dense_weight_grad_kernel_name(shape, fp16)
             : (use_cout16
@@ -309,9 +305,7 @@ void encode_weight_grad_classic(
         library
     );
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < int(inputs.size()); ++index) {
-        encoder.set_input_array(inputs[index], index);
-    }
+    bind_input_arrays(encoder, inputs);
     encoder.set_output_array(out, 9);
     set_bytes_range(
         encoder,
@@ -321,10 +315,10 @@ void encode_weight_grad_classic(
         shape.n_kernels,
         shape.in_channels,
         shape.out_channels,
-        stride_at(inputs[0], 0),
-        stride_at(inputs[0], 1),
-        stride_at(inputs[1], 0),
-        stride_at(inputs[1], 1),
+        stride_i32(inputs[0], 0),
+        stride_i32(inputs[0], 1),
+        stride_i32(inputs[1], 0),
+        stride_i32(inputs[1], 1),
         shape.weight_layout,
         shape.kernel_x,
         shape.kernel_y,
@@ -379,20 +373,19 @@ void encode_sorted_direct(
         reorder_rows.dtype() != mx::int32 || tile_masks.dtype() != mx::int32 ||
         shape.weight_layout != 0 || !supported_channels ||
         shape.n_kernels != 27 || weights.ndim() != 3 ||
-        stride_at(feats, 1) != 1 || stride_at(weights, 2) != 1 ||
-        stride_at(weights, 1) != shape.out_channels ||
-        stride_at(weights, 0) != shape.in_channels * shape.out_channels) {
+        stride_i32(feats, 1) != 1 || stride_i32(weights, 2) != 1 ||
+        stride_i32(weights, 1) != shape.out_channels ||
+        stride_i32(weights, 0) != shape.in_channels * shape.out_channels) {
         throw std::invalid_argument(
             "sorted direct conv supports only contiguous fp16 mapped "
             "weights with K=27 and Cin=Cout in {32, 64}."
         );
     }
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel(
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
+    auto kernel = lattice_kernel(
+        stream,
         shape.in_channels == 32 ? "row_stationary_direct_packedw_c32_m64"
                                 : "row_stationary_direct_packedw_c64_m64",
         library
@@ -424,10 +417,8 @@ void eval(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
     auto use_cout16 = shape.out_channels == 16 &&
@@ -438,12 +429,12 @@ void eval(
     auto use_vec4 = !fp16 && shape.out_channels % 4 == 0;
     auto use_gather = fp16 || use_vec4 || shape.n_kernels == 1;
     if (!use_gather) {
-        clear_output(encoder, device, library, out);
+        clear_output(encoder, stream, library, out);
     }
     const char* kernel_name = "sparse_relation_conv_atomic_f32_i32";
     if (use_dense_c) {
         if (fp16 && shape.in_channels == 64 && shape.out_channels == 64 &&
-            shape.out_capacity >= 50000 && stride_at(inputs[0], 1) == 1) {
+            shape.out_capacity >= 50000 && stride_i32(inputs[0], 1) == 1) {
             kernel_name =
                 "sparse_relation_conv_f16_i32_cout16_dense_contiguous_cin64_"
                 "cout64";
@@ -463,15 +454,13 @@ void eval(
     } else if (use_gather) {
         kernel_name = "sparse_relation_conv_f32_i32";
     }
-    auto kernel = device.get_kernel(kernel_name, library);
+    auto kernel = lattice_kernel(stream, kernel_name, library);
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < 7; ++index) {
-        encoder.set_input_array(inputs[index], index);
-    }
+    bind_input_arrays(encoder, inputs, 0, 7);
     encoder.set_output_array(out, 7);
     bind_common_shape(encoder, inputs, shape, 8);
     set_bytes_range(
-        encoder, 12, stride_at(inputs[0], 0), stride_at(inputs[0], 1)
+        encoder, 12, stride_i32(inputs[0], 0), stride_i32(inputs[0], 1)
     );
     bind_weight_shape(encoder, inputs[1], shape, 14);
     auto work_items =
@@ -565,10 +554,8 @@ void eval_input_grad(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
 
     auto fp16 = is_float16(inputs[0]);
     auto use_dense_c = shape.in_capacity >= 4096 &&
@@ -585,7 +572,8 @@ void eval_input_grad(
     }
     auto use_cin16 = shape.in_channels == 16 && shape.in_capacity >= 4096;
     auto use_vec4 = !fp16 && shape.in_channels % 4 == 0;
-    auto kernel = device.get_kernel(
+    auto kernel = lattice_kernel(
+        stream,
         use_grouped_dense_c ? dense_input_grad_grouped_kernel_name(shape, fp16)
         : use_dense_c
             ? dense_input_grad_kernel_name(shape, fp16)
@@ -603,9 +591,7 @@ void eval_input_grad(
         library
     );
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < int(inputs.size()); ++index) {
-        encoder.set_input_array(inputs[index], index);
-    }
+    bind_input_arrays(encoder, inputs);
     encoder.set_output_array(out, 9);
     set_bytes_range(
         encoder,
@@ -615,8 +601,8 @@ void eval_input_grad(
         shape.in_capacity,
         shape.in_channels,
         shape.out_channels,
-        stride_at(inputs[0], 0),
-        stride_at(inputs[0], 1)
+        stride_i32(inputs[0], 0),
+        stride_i32(inputs[0], 1)
     );
     bind_weight_shape(encoder, inputs[1], shape, 17);
     auto work_items =

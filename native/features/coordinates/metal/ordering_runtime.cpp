@@ -13,11 +13,10 @@ void eval_morton_codes(
     auto& out = outputs[0];
     backend::allocate(out);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("morton_codes_i32", library);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
+    auto kernel =
+        backend::metal::lattice_kernel(stream, "morton_codes_i32", library);
     encoder.set_compute_pipeline_state(kernel);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_output_array(out, 1);

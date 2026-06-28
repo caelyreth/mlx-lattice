@@ -15,19 +15,19 @@ void eval_sparse_quantize(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto table_capacity = coord_hash_capacity(rows);
     auto table = make_int32_temp(table_capacity);
     auto quantized_coords = make_int32_temp(rows * 4);
     auto selected = make_int32_temp(rows);
     auto compact_buffers = make_stable_compact_buffers(rows);
     encoder.add_temporaries({table, quantized_coords, selected});
-    clear_coord_hash(device, library, encoder, table, table_capacity);
+    clear_coord_hash(stream, library, encoder, table, table_capacity);
 
-    auto clear = device.get_kernel("clear_sparse_quantization_i32", library);
+    auto clear = backend::metal::lattice_kernel(
+        stream, "clear_sparse_quantization_i32", library
+    );
     encoder.set_compute_pipeline_state(clear);
     encoder.set_output_array(outputs[0], 0);
     encoder.set_output_array(outputs[1], 1);
@@ -36,7 +36,8 @@ void eval_sparse_quantize(
     encoder.set_bytes(rows, 4);
     dispatch_1d(encoder, clear, static_cast<size_t>(rows) * 4);
 
-    auto quantize = device.get_kernel("quantize_points_i32", library);
+    auto quantize =
+        backend::metal::lattice_kernel(stream, "quantize_points_i32", library);
     encoder.set_compute_pipeline_state(quantize);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
@@ -51,7 +52,9 @@ void eval_sparse_quantize(
     encoder.set_bytes(spec.origin[2], 10);
     dispatch_1d(encoder, quantize, static_cast<size_t>(rows));
 
-    auto build = device.get_kernel("build_quantized_point_hash_i32", library);
+    auto build = backend::metal::lattice_kernel(
+        stream, "build_quantized_point_hash_i32", library
+    );
     encoder.set_compute_pipeline_state(build);
     encoder.set_input_array(quantized_coords, 0);
     encoder.set_input_array(inputs[2], 1);
@@ -60,7 +63,9 @@ void eval_sparse_quantize(
     encoder.set_bytes(table_capacity, 4);
     dispatch_1d(encoder, build, static_cast<size_t>(rows));
 
-    auto plan = device.get_kernel("plan_quantized_points_i32", library);
+    auto plan = backend::metal::lattice_kernel(
+        stream, "plan_quantized_points_i32", library
+    );
     encoder.set_compute_pipeline_state(plan);
     encoder.set_input_array(quantized_coords, 0);
     encoder.set_input_array(inputs[2], 1);
@@ -71,10 +76,12 @@ void eval_sparse_quantize(
     dispatch_1d(encoder, plan, static_cast<size_t>(rows));
 
     encode_stable_compact_offsets(
-        device, library, encoder, selected, outputs[1], compact_buffers, rows
+        stream, library, encoder, selected, outputs[1], compact_buffers, rows
     );
 
-    auto fill = device.get_kernel("fill_quantized_points_i32", library);
+    auto fill = backend::metal::lattice_kernel(
+        stream, "fill_quantized_points_i32", library
+    );
     encoder.set_compute_pipeline_state(fill);
     encoder.set_input_array(quantized_coords, 0);
     encoder.set_input_array(inputs[2], 1);
@@ -85,7 +92,9 @@ void eval_sparse_quantize(
     encoder.set_bytes(rows, 6);
     dispatch_1d(encoder, fill, static_cast<size_t>(rows));
 
-    auto map = device.get_kernel("map_quantized_points_i32", library);
+    auto map = backend::metal::lattice_kernel(
+        stream, "map_quantized_points_i32", library
+    );
     encoder.set_compute_pipeline_state(map);
     encoder.set_input_array(quantized_coords, 0);
     encoder.set_input_array(inputs[2], 1);
@@ -122,19 +131,20 @@ void eval_voxelize_features(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto elements = shape.voxel_rows * shape.channels;
-    auto clear = device.get_kernel("clear_voxelized_features_f32", library);
+    auto clear = backend::metal::lattice_kernel(
+        stream, "clear_voxelized_features_f32", library
+    );
     encoder.set_compute_pipeline_state(clear);
     encoder.set_output_array(outputs[0], 0);
     encoder.set_bytes(elements, 1);
     dispatch_1d(encoder, clear, static_cast<size_t>(elements));
 
-    auto scatter =
-        device.get_kernel("scatter_voxelized_features_f32_i32", library);
+    auto scatter = backend::metal::lattice_kernel(
+        stream, "scatter_voxelized_features_f32_i32", library
+    );
     encoder.set_compute_pipeline_state(scatter);
     bind_input_arrays(encoder, inputs);
     encoder.set_output_array(outputs[0], 4);
@@ -173,11 +183,11 @@ void eval_voxelize_feature_grad(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("voxelize_feature_grad_f32_i32", library);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "voxelize_feature_grad_f32_i32", library
+    );
 
     encoder.set_compute_pipeline_state(kernel);
     bind_input_arrays(encoder, inputs);
@@ -219,16 +229,14 @@ void eval_point_voxel_map(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto table_capacity = coord_hash_capacity(shape.voxel_rows);
     auto table = make_int32_temp(table_capacity);
     encoder.add_temporary(table);
-    clear_coord_hash(device, library, encoder, table, table_capacity);
+    clear_coord_hash(stream, library, encoder, table, table_capacity);
     insert_coord_hash(
-        device,
+        stream,
         library,
         encoder,
         inputs[3],
@@ -236,7 +244,9 @@ void eval_point_voxel_map(
         CoordHashShape{shape.voxel_rows, table_capacity}
     );
 
-    auto kernel = device.get_kernel("build_point_voxel_map_f32_i32", library);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "build_point_voxel_map_f32_i32", library
+    );
     encoder.set_compute_pipeline_state(kernel);
     bind_input_arrays(encoder, inputs);
     encoder.set_input_array(table, 5);
@@ -277,12 +287,11 @@ void eval_interpolate_point_features(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel =
-        device.get_kernel("interpolate_point_features_f32_i32", library);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "interpolate_point_features_f32_i32", library
+    );
 
     encoder.set_compute_pipeline_state(kernel);
     bind_input_arrays(encoder, inputs);
@@ -318,19 +327,20 @@ void eval_interpolate_point_feature_grad(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto elements = shape.voxel_rows * shape.channels;
-    auto clear = device.get_kernel("clear_point_feature_grad_f32", library);
+    auto clear = backend::metal::lattice_kernel(
+        stream, "clear_point_feature_grad_f32", library
+    );
     encoder.set_compute_pipeline_state(clear);
     encoder.set_output_array(outputs[0], 0);
     encoder.set_bytes(elements, 1);
     dispatch_1d(encoder, clear, static_cast<size_t>(elements));
 
-    auto kernel =
-        device.get_kernel("interpolate_point_feature_grad_f32_i32", library);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "interpolate_point_feature_grad_f32_i32", library
+    );
     encoder.set_compute_pipeline_state(kernel);
     bind_input_arrays(encoder, inputs);
     encoder.set_output_array(outputs[0], 3);

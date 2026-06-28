@@ -11,13 +11,7 @@
 #endif
 
 namespace mlx_lattice::backend::metal::tensor_ops::conv::sorted_igemm {
-namespace {
-
-int stride_at(const mx::array& array, int dim) {
-    return static_cast<int>(array.strides(dim));
-}
-
-} // namespace
+namespace {} // namespace
 
 bool supports(SparseConvShape shape, const std::vector<mx::array>& inputs) {
     auto supported_channels =
@@ -28,10 +22,10 @@ bool supports(SparseConvShape shape, const std::vector<mx::array>& inputs) {
            inputs[3].dtype() == mx::int32 && inputs[4].dtype() == mx::int32 &&
            inputs[5].dtype() == mx::int32 && shape.weight_layout == 0 &&
            supported_channels && shape.n_kernels == 27 &&
-           inputs[1].ndim() == 3 && stride_at(inputs[0], 1) == 1 &&
-           stride_at(inputs[1], 2) == 1 &&
-           stride_at(inputs[1], 1) == shape.out_channels &&
-           stride_at(inputs[1], 0) == shape.in_channels * shape.out_channels;
+           inputs[1].ndim() == 3 && stride_i32(inputs[0], 1) == 1 &&
+           stride_i32(inputs[1], 2) == 1 &&
+           stride_i32(inputs[1], 1) == shape.out_channels &&
+           stride_i32(inputs[1], 0) == shape.in_channels * shape.out_channels;
 }
 
 bool is_preferred(
@@ -57,11 +51,10 @@ void encode(
         );
     }
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel(
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
+    auto kernel = lattice_kernel(
+        stream,
         shape.in_channels == 32
             ? "row_stationary_tensor_coop_devicew_rowfill4x2_kvmap_f16acc_"
               "sorted_c32_m64"
@@ -70,11 +63,7 @@ void encode(
         library
     );
     encoder.set_compute_pipeline_state(kernel);
-    encoder.set_input_array(inputs[0], 0);
-    encoder.set_input_array(inputs[1], 1);
-    encoder.set_input_array(inputs[3], 2);
-    encoder.set_input_array(inputs[4], 3);
-    encoder.set_input_array(inputs[5], 4);
+    bind_input_arrays(encoder, inputs, {0, 1, 3, 4, 5});
     encoder.set_output_array(out, 5);
     set_bytes_range(encoder, 6, shape.out_capacity, shape.store_sorted);
     auto groups = static_cast<size_t>((shape.out_capacity + 63) / 64);

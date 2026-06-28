@@ -1,5 +1,7 @@
 #include <metal_stdlib>
 
+#include "native/features/convolution/metal/quantized_common.metal"
+
 using namespace metal;
 
 template <typename T, int bits>
@@ -80,7 +82,7 @@ inline void sparse_quantized_conv_impl(
             }
             int first_ci = group * group_size;
             int last_ci = min(first_ci + group_size, in_channels);
-            constexpr int values_per_word = 32 / bits;
+            constexpr int values_per_word = quantized_values_per_word<bits>();
             float feature_sum = 0.0f;
             float4 first_quantized_acc = float4(0.0f);
             float4 second_quantized_acc = float4(0.0f);
@@ -111,7 +113,7 @@ inline void sparse_quantized_conv_impl(
                             weights[packed_base + vector_width + lane];
                     }
                 }
-                constexpr uint mask = (1u << bits) - 1u;
+                constexpr uint mask = quantized_mask<bits>();
                 int packed_values = min(values_per_word, last_ci - first);
                 for (int value = 0; value < packed_values; ++value) {
                     int ci = first + value;
@@ -140,53 +142,223 @@ inline void sparse_quantized_conv_impl(
     }
 }
 
-#define instantiate_quantized_conv(name, type, bits_value)                     \
-    [[kernel]] void name(                                                      \
-        device const type* feats [[buffer(0)]],                                \
-        device const uint* weights [[buffer(1)]],                              \
-        device const type* scales [[buffer(2)]],                               \
-        device const type* biases [[buffer(3)]],                               \
-        device const int* in_rows [[buffer(4)]],                               \
-        device const int* out_rows [[buffer(5)]],                              \
-        device const int* kernel_ids [[buffer(6)]],                            \
-        device const int* counts [[buffer(7)]],                                \
-        device const int* row_offsets [[buffer(8)]],                           \
-        device type* out [[buffer(9)]],                                        \
-        constant const int& edge_capacity [[buffer(10)]],                      \
-        constant const int& out_capacity [[buffer(11)]],                       \
-        constant const int& in_channels [[buffer(12)]],                        \
-        constant const int& out_channels [[buffer(13)]],                       \
-        constant const int& storage_in_channels [[buffer(14)]],                \
-        constant const int& group_size [[buffer(15)]],                         \
-        constant const int& feat_s0 [[buffer(16)]],                            \
-        constant const int& feat_s1 [[buffer(17)]],                            \
-        uint elem [[thread_position_in_grid]]                                  \
-    ) {                                                                        \
-        sparse_quantized_conv_impl<type, bits_value>(                          \
-            feats,                                                             \
-            weights,                                                           \
-            scales,                                                            \
-            biases,                                                            \
-            in_rows,                                                           \
-            kernel_ids,                                                        \
-            counts,                                                            \
-            row_offsets,                                                       \
-            out,                                                               \
-            edge_capacity,                                                     \
-            out_capacity,                                                      \
-            in_channels,                                                       \
-            out_channels,                                                      \
-            storage_in_channels,                                               \
-            group_size,                                                        \
-            feat_s0,                                                           \
-            feat_s1,                                                           \
-            elem                                                               \
-        );                                                                     \
-        (void)out_rows;                                                        \
-    }
+template <typename T, int bits>
+inline void sparse_quantized_conv_kernel(
+    device const T* feats,
+    device const uint* weights,
+    device const T* scales,
+    device const T* biases,
+    device const int* in_rows,
+    device const int* out_rows,
+    device const int* kernel_ids,
+    device const int* counts,
+    device const int* row_offsets,
+    device T* out,
+    constant const int& edge_capacity,
+    constant const int& out_capacity,
+    constant const int& in_channels,
+    constant const int& out_channels,
+    constant const int& storage_in_channels,
+    constant const int& group_size,
+    constant const int& feat_s0,
+    constant const int& feat_s1,
+    uint elem
+) {
+    sparse_quantized_conv_impl<T, bits>(
+        feats,
+        weights,
+        scales,
+        biases,
+        in_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        storage_in_channels,
+        group_size,
+        feat_s0,
+        feat_s1,
+        elem
+    );
+    (void)out_rows;
+}
 
-instantiate_quantized_conv(sparse_quantized_conv_f16_i32_b4, half, 4) instantiate_quantized_conv(
-    sparse_quantized_conv_f16_i32_b8,
-    half,
-    8
-) instantiate_quantized_conv(sparse_quantized_conv_f32_i32_b4, float, 4) instantiate_quantized_conv(sparse_quantized_conv_f32_i32_b8, float, 8)
+[[kernel]] void sparse_quantized_conv_f16_i32_b4(
+    device const half* feats [[buffer(0)]],
+    device const uint* weights [[buffer(1)]],
+    device const half* scales [[buffer(2)]],
+    device const half* biases [[buffer(3)]],
+    device const int* in_rows [[buffer(4)]],
+    device const int* out_rows [[buffer(5)]],
+    device const int* kernel_ids [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device const int* row_offsets [[buffer(8)]],
+    device half* out [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_channels [[buffer(12)]],
+    constant const int& out_channels [[buffer(13)]],
+    constant const int& storage_in_channels [[buffer(14)]],
+    constant const int& group_size [[buffer(15)]],
+    constant const int& feat_s0 [[buffer(16)]],
+    constant const int& feat_s1 [[buffer(17)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    sparse_quantized_conv_kernel<half, 4>(
+        feats,
+        weights,
+        scales,
+        biases,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        storage_in_channels,
+        group_size,
+        feat_s0,
+        feat_s1,
+        elem
+    );
+}
+
+[[kernel]] void sparse_quantized_conv_f16_i32_b8(
+    device const half* feats [[buffer(0)]],
+    device const uint* weights [[buffer(1)]],
+    device const half* scales [[buffer(2)]],
+    device const half* biases [[buffer(3)]],
+    device const int* in_rows [[buffer(4)]],
+    device const int* out_rows [[buffer(5)]],
+    device const int* kernel_ids [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device const int* row_offsets [[buffer(8)]],
+    device half* out [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_channels [[buffer(12)]],
+    constant const int& out_channels [[buffer(13)]],
+    constant const int& storage_in_channels [[buffer(14)]],
+    constant const int& group_size [[buffer(15)]],
+    constant const int& feat_s0 [[buffer(16)]],
+    constant const int& feat_s1 [[buffer(17)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    sparse_quantized_conv_kernel<half, 8>(
+        feats,
+        weights,
+        scales,
+        biases,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        storage_in_channels,
+        group_size,
+        feat_s0,
+        feat_s1,
+        elem
+    );
+}
+
+[[kernel]] void sparse_quantized_conv_f32_i32_b4(
+    device const float* feats [[buffer(0)]],
+    device const uint* weights [[buffer(1)]],
+    device const float* scales [[buffer(2)]],
+    device const float* biases [[buffer(3)]],
+    device const int* in_rows [[buffer(4)]],
+    device const int* out_rows [[buffer(5)]],
+    device const int* kernel_ids [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device const int* row_offsets [[buffer(8)]],
+    device float* out [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_channels [[buffer(12)]],
+    constant const int& out_channels [[buffer(13)]],
+    constant const int& storage_in_channels [[buffer(14)]],
+    constant const int& group_size [[buffer(15)]],
+    constant const int& feat_s0 [[buffer(16)]],
+    constant const int& feat_s1 [[buffer(17)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    sparse_quantized_conv_kernel<float, 4>(
+        feats,
+        weights,
+        scales,
+        biases,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        storage_in_channels,
+        group_size,
+        feat_s0,
+        feat_s1,
+        elem
+    );
+}
+
+[[kernel]] void sparse_quantized_conv_f32_i32_b8(
+    device const float* feats [[buffer(0)]],
+    device const uint* weights [[buffer(1)]],
+    device const float* scales [[buffer(2)]],
+    device const float* biases [[buffer(3)]],
+    device const int* in_rows [[buffer(4)]],
+    device const int* out_rows [[buffer(5)]],
+    device const int* kernel_ids [[buffer(6)]],
+    device const int* counts [[buffer(7)]],
+    device const int* row_offsets [[buffer(8)]],
+    device float* out [[buffer(9)]],
+    constant const int& edge_capacity [[buffer(10)]],
+    constant const int& out_capacity [[buffer(11)]],
+    constant const int& in_channels [[buffer(12)]],
+    constant const int& out_channels [[buffer(13)]],
+    constant const int& storage_in_channels [[buffer(14)]],
+    constant const int& group_size [[buffer(15)]],
+    constant const int& feat_s0 [[buffer(16)]],
+    constant const int& feat_s1 [[buffer(17)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    sparse_quantized_conv_kernel<float, 8>(
+        feats,
+        weights,
+        scales,
+        biases,
+        in_rows,
+        out_rows,
+        kernel_ids,
+        counts,
+        row_offsets,
+        out,
+        edge_capacity,
+        out_capacity,
+        in_channels,
+        out_channels,
+        storage_in_channels,
+        group_size,
+        feat_s0,
+        feat_s1,
+        elem
+    );
+}

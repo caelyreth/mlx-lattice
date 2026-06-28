@@ -2,6 +2,8 @@
 #include <metal_stdlib>
 #include <metal_tensor>
 
+#include "native/features/convolution/metal/quantized_common.metal"
+
 using namespace metal;
 using namespace mpp::tensor_ops;
 
@@ -102,106 +104,330 @@ inline void sparse_quantized_tensor_impl(
     }
 }
 
-#define instantiate_quantized_tensor(name, bits_value, in_value, out_value)    \
-    [[kernel, max_total_threads_per_threadgroup(128)]] void name(              \
-        device const half* feats [[buffer(0)]],                                \
-        device half* dequantized_weights [[buffer(1)]],                        \
-        device const int* sorted_kv_out_in_map [[buffer(2)]],                  \
-        device const int* tile_masks [[buffer(3)]],                            \
-        device const int* reorder_rows [[buffer(4)]],                          \
-        device half* out [[buffer(5)]],                                        \
-        constant const int& rows [[buffer(6)]],                                \
-        uint2 group_id [[threadgroup_position_in_grid]],                       \
-        uint tid [[thread_index_in_threadgroup]]                               \
-    ) {                                                                        \
-        threadgroup half lhs[64 * in_value];                                   \
-        sparse_quantized_tensor_impl<bits_value, in_value, out_value>(         \
-            feats,                                                             \
-            dequantized_weights,                                               \
-            sorted_kv_out_in_map,                                              \
-            tile_masks,                                                        \
-            reorder_rows,                                                      \
-            out,                                                               \
-            lhs,                                                               \
-            rows,                                                              \
-            group_id,                                                          \
-            tid                                                                \
-        );                                                                     \
-    }
+template <int bits, int in_channels, int out_channels>
+inline void sparse_quantized_tensor_kernel(
+    device const half* feats,
+    device half* dequantized_weights,
+    device const int* sorted_kv_out_in_map,
+    device const int* tile_masks,
+    device const int* reorder_rows,
+    device half* out,
+    threadgroup half* lhs,
+    constant const int& rows,
+    uint2 group_id,
+    uint tid
+) {
+    sparse_quantized_tensor_impl<bits, in_channels, out_channels>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
 
-instantiate_quantized_tensor(sparse_quantized_tensor_f16_b4_cin32_cout32, 4, 32, 32) instantiate_quantized_tensor(
-    sparse_quantized_tensor_f16_b8_cin32_cout32,
-    8,
-    32,
-    32
-) instantiate_quantized_tensor(sparse_quantized_tensor_f16_b4_cin32_cout64, 4, 32, 64)
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b4_cin32_cout32(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 32];
+    sparse_quantized_tensor_kernel<4, 32, 32>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
 
-    template <int bits>
-    inline void sparse_quantized_dequantize_impl(
-        device const uint* weights,
-        device const half* scales,
-        device const half* biases,
-        device half* out,
-        constant const int& kernel_count,
-        constant const int& in_channels,
-        constant const int& out_channels,
-        constant const int& group_size,
-        uint elem
-    ) {
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b8_cin32_cout32(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 32];
+    sparse_quantized_tensor_kernel<8, 32, 32>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b4_cin32_cout64(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 32];
+    sparse_quantized_tensor_kernel<4, 32, 64>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b8_cin32_cout64(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 32];
+    sparse_quantized_tensor_kernel<8, 32, 64>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b4_cin64_cout32(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 64];
+    sparse_quantized_tensor_kernel<4, 64, 32>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b8_cin64_cout32(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 64];
+    sparse_quantized_tensor_kernel<8, 64, 32>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b4_cin64_cout64(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 64];
+    sparse_quantized_tensor_kernel<4, 64, 64>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+[[kernel, max_total_threads_per_threadgroup(128)]]
+void sparse_quantized_tensor_f16_b8_cin64_cout64(
+    device const half* feats [[buffer(0)]],
+    device half* dequantized_weights [[buffer(1)]],
+    device const int* sorted_kv_out_in_map [[buffer(2)]],
+    device const int* tile_masks [[buffer(3)]],
+    device const int* reorder_rows [[buffer(4)]],
+    device half* out [[buffer(5)]],
+    constant const int& rows [[buffer(6)]],
+    uint2 group_id [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {
+    threadgroup half lhs[64 * 64];
+    sparse_quantized_tensor_kernel<8, 64, 64>(
+        feats,
+        dequantized_weights,
+        sorted_kv_out_in_map,
+        tile_masks,
+        reorder_rows,
+        out,
+        lhs,
+        rows,
+        group_id,
+        tid
+    );
+}
+
+template <int bits>
+inline void sparse_quantized_dequantize_impl(
+    device const uint* weights,
+    device const half* scales,
+    device const half* biases,
+    device half* out,
+    constant const int& kernel_count,
+    constant const int& in_channels,
+    constant const int& out_channels,
+    constant const int& group_size,
+    uint elem
+) {
     int total = kernel_count * in_channels * out_channels;
     if (elem >= uint(total)) {
         return;
     }
-    constexpr int values_per_word = 32 / bits;
-    constexpr uint quant_mask = (1u << bits) - 1u;
     int kernel_stride = in_channels * out_channels;
     int kernel_id = int(elem) / kernel_stride;
     int within_kernel = int(elem) - kernel_id * kernel_stride;
     int ci = within_kernel / out_channels;
     int co = within_kernel - ci * out_channels;
     int packed_words = in_channels * bits / 32;
-    int word = ci / values_per_word;
-    int shift = (ci - word * values_per_word) * bits;
-    uint packed =
-        weights[(kernel_id * packed_words + word) * out_channels + co];
-    uint quantized = (packed >> shift) & quant_mask;
     int groups = in_channels / group_size;
-    int group = ci / group_size;
-    int quant_index = (kernel_id * groups + group) * out_channels + co;
-    out[elem] = half(
-        float(quantized) * float(scales[quant_index]) +
-        float(biases[quant_index])
+    out[elem] = load_dequantized<bits>(
+        weights,
+        scales,
+        biases,
+        kernel_id,
+        ci,
+        co,
+        packed_words,
+        group_size,
+        groups,
+        out_channels
     );
 }
 
-#define instantiate_dequantize(name, bits_value)                               \
-    [[kernel]] void name(                                                      \
-        device const uint* weights [[buffer(0)]],                              \
-        device const half* scales [[buffer(1)]],                               \
-        device const half* biases [[buffer(2)]],                               \
-        device half* out [[buffer(3)]],                                        \
-        constant const int& kernel_count [[buffer(4)]],                        \
-        constant const int& in_channels [[buffer(5)]],                         \
-        constant const int& out_channels [[buffer(6)]],                        \
-        constant const int& group_size [[buffer(7)]],                          \
-        uint elem [[thread_position_in_grid]]                                  \
-    ) {                                                                        \
-        sparse_quantized_dequantize_impl<bits_value>(                          \
-            weights,                                                           \
-            scales,                                                            \
-            biases,                                                            \
-            out,                                                               \
-            kernel_count,                                                      \
-            in_channels,                                                       \
-            out_channels,                                                      \
-            group_size,                                                        \
-            elem                                                               \
-        );                                                                     \
-    }
+[[kernel]] void sparse_quantized_dequantize_f16_b4(
+    device const uint* weights [[buffer(0)]],
+    device const half* scales [[buffer(1)]],
+    device const half* biases [[buffer(2)]],
+    device half* out [[buffer(3)]],
+    constant const int& kernel_count [[buffer(4)]],
+    constant const int& in_channels [[buffer(5)]],
+    constant const int& out_channels [[buffer(6)]],
+    constant const int& group_size [[buffer(7)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    sparse_quantized_dequantize_impl<4>(
+        weights,
+        scales,
+        biases,
+        out,
+        kernel_count,
+        in_channels,
+        out_channels,
+        group_size,
+        elem
+    );
+}
 
-instantiate_dequantize(sparse_quantized_dequantize_f16_b4, 4) instantiate_dequantize(sparse_quantized_dequantize_f16_b8, 8) instantiate_quantized_tensor(sparse_quantized_tensor_f16_b8_cin32_cout64, 8, 32, 64) instantiate_quantized_tensor(
-    sparse_quantized_tensor_f16_b4_cin64_cout32,
-    4,
-    64,
-    32
-) instantiate_quantized_tensor(sparse_quantized_tensor_f16_b8_cin64_cout32, 8, 64, 32) instantiate_quantized_tensor(sparse_quantized_tensor_f16_b4_cin64_cout64, 4, 64, 64) instantiate_quantized_tensor(sparse_quantized_tensor_f16_b8_cin64_cout64, 8, 64, 64)
+[[kernel]] void sparse_quantized_dequantize_f16_b8(
+    device const uint* weights [[buffer(0)]],
+    device const half* scales [[buffer(1)]],
+    device const half* biases [[buffer(2)]],
+    device half* out [[buffer(3)]],
+    constant const int& kernel_count [[buffer(4)]],
+    constant const int& in_channels [[buffer(5)]],
+    constant const int& out_channels [[buffer(6)]],
+    constant const int& group_size [[buffer(7)]],
+    uint elem [[thread_position_in_grid]]
+) {
+    sparse_quantized_dequantize_impl<8>(
+        weights,
+        scales,
+        biases,
+        out,
+        kernel_count,
+        in_channels,
+        out_channels,
+        group_size,
+        elem
+    );
+}

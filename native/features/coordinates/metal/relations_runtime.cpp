@@ -17,25 +17,24 @@ void eval_generic_kernel_relation(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
 
     if (op == CoordRelationOp::Forward &&
         outputs.size() > RelationBaseOutputCount) {
         auto table_capacity =
             static_cast<int>(outputs[RelationBaseOutputCount].shape(0));
         clear_coord_hash(
-            device,
+            stream,
             library,
             encoder,
             outputs[RelationBaseOutputCount],
             table_capacity
         );
 
-        auto insert =
-            device.get_kernel("coord_hash_insert_active_rows_i32", library);
+        auto insert = backend::metal::lattice_kernel(
+            stream, "coord_hash_insert_active_rows_i32", library
+        );
         encoder.set_compute_pipeline_state(insert);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[2], 1);
@@ -49,11 +48,11 @@ void eval_generic_kernel_relation(
             auto selected = make_int32_temp(rows);
             encoder.add_temporaries({out_table, selected});
             clear_coord_hash(
-                device, library, encoder, out_table, table_capacity
+                stream, library, encoder, out_table, table_capacity
             );
 
-            auto build_outputs = device.get_kernel(
-                "build_strided_relation_output_hash_i32", library
+            auto build_outputs = backend::metal::lattice_kernel(
+                stream, "build_strided_relation_output_hash_i32", library
             );
             encoder.set_compute_pipeline_state(build_outputs);
             encoder.set_input_array(inputs[0], 0);
@@ -64,8 +63,8 @@ void eval_generic_kernel_relation(
             bind_triple_bytes(encoder, stride, 5);
             dispatch_1d(encoder, build_outputs, static_cast<size_t>(rows));
 
-            auto plan_outputs = device.get_kernel(
-                "plan_strided_relation_output_coords_i32", library
+            auto plan_outputs = backend::metal::lattice_kernel(
+                stream, "plan_strided_relation_output_coords_i32", library
             );
             encoder.set_compute_pipeline_state(plan_outputs);
             encoder.set_input_array(inputs[0], 0);
@@ -80,7 +79,7 @@ void eval_generic_kernel_relation(
             if (rows >= kParallelCompactThreshold) {
                 auto buffers = make_stable_compact_buffers(rows);
                 encode_relation_compact_offsets(
-                    device,
+                    stream,
                     library,
                     encoder,
                     selected,
@@ -88,8 +87,8 @@ void eval_generic_kernel_relation(
                     buffers,
                     rows
                 );
-                auto compact_outputs = device.get_kernel(
-                    "scatter_downsample_coord_set_i32", library
+                auto compact_outputs = backend::metal::lattice_kernel(
+                    stream, "scatter_downsample_coord_set_i32", library
                 );
                 encoder.set_compute_pipeline_state(compact_outputs);
                 encoder.set_input_array(inputs[0], 0);
@@ -103,8 +102,10 @@ void eval_generic_kernel_relation(
                     encoder, compact_outputs, static_cast<size_t>(rows)
                 );
             } else {
-                auto compact_outputs = device.get_kernel(
-                    "compact_strided_relation_output_coords_i32", library
+                auto compact_outputs = backend::metal::lattice_kernel(
+                    stream,
+                    "compact_strided_relation_output_coords_i32",
+                    library
                 );
                 encoder.set_compute_pipeline_state(compact_outputs);
                 encoder.set_input_array(inputs[0], 0);
@@ -123,8 +124,8 @@ void eval_generic_kernel_relation(
                 {slot_in_rows, slot_out_rows, slot_kernel_ids}
             );
 
-            auto slots = device.get_kernel(
-                "build_strided_forward_relation_slots_i32", library
+            auto slots = backend::metal::lattice_kernel(
+                stream, "build_strided_forward_relation_slots_i32", library
             );
             encoder.set_compute_pipeline_state(slots);
             encoder.set_input_array(inputs[0], 0);
@@ -151,7 +152,7 @@ void eval_generic_kernel_relation(
                 )
             );
             compact_forward_relation_slots(
-                device,
+                stream,
                 library,
                 encoder,
                 ForwardRelationSlotArrays{
@@ -171,8 +172,8 @@ void eval_generic_kernel_relation(
             {row_degrees, buffers.local_offsets, buffers.block_offsets}
         );
 
-        auto count = device.get_kernel(
-            "count_identity_forward_relation_degrees_i32", library
+        auto count = backend::metal::lattice_kernel(
+            stream, "count_identity_forward_relation_degrees_i32", library
         );
         encoder.set_compute_pipeline_state(count);
         encoder.set_input_array(inputs[0], 0);
@@ -187,8 +188,9 @@ void eval_generic_kernel_relation(
         encoder.set_bytes(table_capacity, 9);
         dispatch_1d(encoder, count, static_cast<size_t>(rows));
 
-        auto scan =
-            device.get_kernel("scan_relation_row_degrees_blocks_i32", library);
+        auto scan = backend::metal::lattice_kernel(
+            stream, "scan_relation_row_degrees_blocks_i32", library
+        );
         encoder.set_compute_pipeline_state(scan);
         encoder.set_input_array(row_degrees, 0);
         encoder.set_output_array(buffers.local_offsets, 1);
@@ -199,16 +201,17 @@ void eval_generic_kernel_relation(
             MTL::Size(kStableCompactBlockSize, 1, 1)
         );
 
-        auto prefix =
-            device.get_kernel("prefix_coord_set_selected_blocks_i32", library);
+        auto prefix = backend::metal::lattice_kernel(
+            stream, "prefix_coord_set_selected_blocks_i32", library
+        );
         encoder.set_compute_pipeline_state(prefix);
         encoder.set_output_array(buffers.block_offsets, 0);
         encoder.set_output_array(outputs[RelationCounts], 1);
         encoder.set_bytes(buffers.blocks, 2);
         dispatch_single(encoder);
 
-        auto finalize = device.get_kernel(
-            "finalize_forward_relation_row_offsets_i32", library
+        auto finalize = backend::metal::lattice_kernel(
+            stream, "finalize_forward_relation_row_offsets_i32", library
         );
         encoder.set_compute_pipeline_state(finalize);
         encoder.set_input_array(buffers.local_offsets, 0);
@@ -218,8 +221,8 @@ void eval_generic_kernel_relation(
         encoder.set_bytes(rows, 4);
         dispatch_1d(encoder, finalize, static_cast<size_t>(rows) + size_t{1});
 
-        auto fill = device.get_kernel(
-            "fill_identity_forward_relation_compact_i32", library
+        auto fill = backend::metal::lattice_kernel(
+            stream, "fill_identity_forward_relation_compact_i32", library
         );
         encoder.set_compute_pipeline_state(fill);
         encoder.set_input_array(inputs[0], 0);
@@ -238,8 +241,9 @@ void eval_generic_kernel_relation(
     }
 
     if (op == CoordRelationOp::Transposed && direct) {
-        auto kernel =
-            device.get_kernel("build_transposed_direct_relation_i32", library);
+        auto kernel = backend::metal::lattice_kernel(
+            stream, "build_transposed_direct_relation_i32", library
+        );
         encoder.set_compute_pipeline_state(kernel);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
@@ -258,8 +262,9 @@ void eval_generic_kernel_relation(
             "Metal forward relations require hash scratch storage."
         );
     }
-    auto kernel =
-        device.get_kernel("build_transposed_kernel_relation_i32", library);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "build_transposed_kernel_relation_i32", library
+    );
 
     encoder.set_compute_pipeline_state(kernel);
     encoder.set_input_array(inputs[0], 0);
@@ -307,22 +312,21 @@ void eval_target_kernel_relation(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto table_capacity =
         static_cast<int>(outputs[RelationBaseOutputCount].shape(0));
     clear_coord_hash(
-        device,
+        stream,
         library,
         encoder,
         outputs[RelationBaseOutputCount],
         table_capacity
     );
 
-    auto insert =
-        device.get_kernel("coord_hash_insert_active_rows_i32", library);
+    auto insert = backend::metal::lattice_kernel(
+        stream, "coord_hash_insert_active_rows_i32", library
+    );
     encoder.set_compute_pipeline_state(insert);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[2], 1);
@@ -336,8 +340,9 @@ void eval_target_kernel_relation(
     auto slot_kernel_ids = make_int32_temp(target_rows * kernel_count);
     encoder.add_temporaries({slot_in_rows, slot_out_rows, slot_kernel_ids});
 
-    auto slots =
-        device.get_kernel("build_target_forward_relation_slots_i32", library);
+    auto slots = backend::metal::lattice_kernel(
+        stream, "build_target_forward_relation_slots_i32", library
+    );
     encoder.set_compute_pipeline_state(slots);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
@@ -364,7 +369,7 @@ void eval_target_kernel_relation(
         )
     );
     compact_forward_relation_slots(
-        device,
+        stream,
         library,
         encoder,
         ForwardRelationSlotArrays{
@@ -403,12 +408,11 @@ void eval_generative_kernel_relation(
 
     auto thread_count = std::max(rows * kernel_count, 1);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel =
-        device.get_kernel("build_generative_kernel_relation_i32", library);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "build_generative_kernel_relation_i32", library
+    );
     auto group = std::min(
         static_cast<size_t>(thread_count),
         kernel->maxTotalThreadsPerThreadgroup()
@@ -447,12 +451,10 @@ void eval_relation_grouped_view(
 
 #ifdef _METAL_
     backend::allocate_all(outputs);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     encode_relation_grouped_view(
-        device, library, encoder, inputs, outputs, shape
+        stream, library, encoder, inputs, outputs, shape
     );
 #else
     (void)shape;
@@ -473,12 +475,10 @@ void eval_relation_direct_view(
 
 #ifdef _METAL_
     backend::allocate_all(outputs);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     encode_relation_direct_view(
-        device, library, encoder, inputs, outputs, shape
+        stream, library, encoder, inputs, outputs, shape
     );
 #else
     (void)shape;
@@ -507,17 +507,15 @@ void eval_relation_implicit_gemm_view(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
 
     auto table_capacity = coord_hash_capacity(shape.source_rows);
     auto table = make_int32_temp(table_capacity);
     encoder.add_temporary(table);
-    clear_coord_hash(device, library, encoder, table, table_capacity);
+    clear_coord_hash(stream, library, encoder, table, table_capacity);
     insert_coord_hash(
-        device,
+        stream,
         library,
         encoder,
         inputs[0],
@@ -526,8 +524,9 @@ void eval_relation_implicit_gemm_view(
     );
 
     auto total_slots = shape.output_rows * shape.kernel_count;
-    auto clear =
-        device.get_kernel("clear_relation_implicit_gemm_view_i32", library);
+    auto clear = backend::metal::lattice_kernel(
+        stream, "clear_relation_implicit_gemm_view_i32", library
+    );
     encoder.set_compute_pipeline_state(clear);
     encoder.set_output_array(outputs[RelationImplicitGemmOutInMap], 0);
     encoder.set_output_array(outputs[RelationImplicitGemmRowMasks], 1);
@@ -540,8 +539,9 @@ void eval_relation_implicit_gemm_view(
         static_cast<size_t>(std::max(total_slots, total_mask_words))
     );
 
-    auto build =
-        device.get_kernel("build_relation_implicit_gemm_view_i32", library);
+    auto build = backend::metal::lattice_kernel(
+        stream, "build_relation_implicit_gemm_view_i32", library
+    );
     encoder.set_compute_pipeline_state(build);
     bind_input_arrays(encoder, inputs, 0);
     encoder.set_input_array(table, 5);

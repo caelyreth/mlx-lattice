@@ -1,16 +1,10 @@
 #include "features/convolution/metal/tensor_ops/quantized_forward/runtime.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 
-#include "foundation/array_utils.h"
 #include "platform/metal/capabilities.h"
 #include "platform/metal/runtime_utils.h"
-
-#ifdef _METAL_
-#include "mlx/backend/metal/device.h"
-#endif
 
 namespace mlx_lattice::backend::metal::conv::quantized::tensor_ops {
 namespace {
@@ -19,15 +13,6 @@ constexpr int kTileRows = 64;
 constexpr int kTileChannels = 32;
 
 #ifdef _METAL_
-mx::array make_half_temp(std::size_t elements) {
-    auto count = std::max<std::size_t>(elements, 1);
-    return mx::array(
-        mx::allocator::malloc(count * sizeof(mx::float16_t)),
-        mx::Shape{static_cast<int>(count)},
-        mx::float16
-    );
-}
-
 const char* kernel_name(QuantizedSparseConvShape shape) {
     if (shape.in_channels == 32 && shape.out_channels == 32) {
         return shape.bits == 4 ? "sparse_quantized_tensor_f16_b4_cin32_cout32"
@@ -83,24 +68,21 @@ void encode(
             "with C_in and C_out in {32, 64} and per-channel-group weights."
         );
     }
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto dequantized_weights = make_half_temp(
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
+    auto dequantized_weights = make_temp<mx::float16_t>(
         static_cast<std::size_t>(shape.n_kernels) * shape.in_channels *
         shape.out_channels
     );
     encoder.add_temporary(dequantized_weights);
-    auto dequantize = device.get_kernel(
+    auto dequantize = lattice_kernel(
+        stream,
         shape.bits == 4 ? "sparse_quantized_dequantize_f16_b4"
                         : "sparse_quantized_dequantize_f16_b8",
         library
     );
     encoder.set_compute_pipeline_state(dequantize);
-    encoder.set_input_array(inputs[1], 0);
-    encoder.set_input_array(inputs[2], 1);
-    encoder.set_input_array(inputs[3], 2);
+    bind_input_arrays(encoder, inputs, {1, 2, 3});
     encoder.set_output_array(dequantized_weights, 3);
     set_bytes_range(
         encoder,
@@ -117,13 +99,11 @@ void encode(
             shape.out_channels
     );
 
-    auto tensor_contract = device.get_kernel(kernel_name(shape), library);
+    auto tensor_contract = lattice_kernel(stream, kernel_name(shape), library);
     encoder.set_compute_pipeline_state(tensor_contract);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(dequantized_weights, 1);
-    encoder.set_input_array(inputs[9], 2);
-    encoder.set_input_array(inputs[11], 3);
-    encoder.set_input_array(inputs[10], 4);
+    bind_input_arrays(encoder, inputs, {9, 11, 10}, 2);
     encoder.set_output_array(out, 5);
     set_bytes_range(encoder, 6, shape.out_capacity);
     encoder.dispatch_threadgroups(

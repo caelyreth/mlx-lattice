@@ -1,16 +1,10 @@
 #include "features/convolution/metal/sorted_igemm/quantized_runtime.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 
-#include "foundation/array_utils.h"
 #include "platform/metal/capabilities.h"
 #include "platform/metal/runtime_utils.h"
-
-#ifdef _METAL_
-#include "mlx/backend/metal/device.h"
-#endif
 
 namespace mlx_lattice::backend::metal::conv::quantized::sorted_igemm {
 namespace {
@@ -19,15 +13,6 @@ constexpr int kTileRows = 64;
 constexpr int kTileChannels = 32;
 
 #ifdef _METAL_
-mx::array make_half_temp(std::size_t elements) {
-    auto count = std::max<std::size_t>(elements, 1);
-    return mx::array(
-        mx::allocator::malloc(count * sizeof(mx::float16_t)),
-        mx::Shape{static_cast<int>(count)},
-        mx::float16
-    );
-}
-
 const char* kernel_name(QuantizedSparseConvShape shape) {
     if (shape.in_channels == 32 && shape.out_channels == 32) {
         return shape.bits == 4 ? "sparse_quantized_igemm_f16_b4_cin32_cout32"
@@ -83,24 +68,17 @@ void encode(
             "with C_in and C_out in {32, 64}."
         );
     }
-    auto sorted = make_half_temp(
+    auto sorted = make_temp<mx::float16_t>(
         static_cast<std::size_t>(shape.out_capacity) * shape.out_channels
     );
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
 
     encoder.add_temporary(sorted);
 
-    auto contract = device.get_kernel(kernel_name(shape), library);
+    auto contract = lattice_kernel(stream, kernel_name(shape), library);
     encoder.set_compute_pipeline_state(contract);
-    encoder.set_input_array(inputs[0], 0);
-    encoder.set_input_array(inputs[1], 1);
-    encoder.set_input_array(inputs[2], 2);
-    encoder.set_input_array(inputs[3], 3);
-    encoder.set_input_array(inputs[9], 4);
-    encoder.set_input_array(inputs[11], 5);
+    bind_input_arrays(encoder, inputs, {0, 1, 2, 3, 9, 11});
     encoder.set_output_array(sorted, 6);
     set_bytes_range(encoder, 7, shape.out_capacity, shape.group_size);
     encoder.dispatch_threadgroups(
@@ -115,7 +93,7 @@ void encode(
     );
 
     auto reorder =
-        device.get_kernel("sparse_quantized_igemm_reorder_f16", library);
+        lattice_kernel(stream, "sparse_quantized_igemm_reorder_f16", library);
     encoder.set_compute_pipeline_state(reorder);
     encoder.set_input_array(sorted, 0);
     encoder.set_input_array(inputs[10], 1);

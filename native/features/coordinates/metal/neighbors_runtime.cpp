@@ -20,11 +20,11 @@ void eval_neighbor_relation(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto clear = device.get_kernel("build_neighbor_relation_i32", library);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
+    auto clear = backend::metal::lattice_kernel(
+        stream, "build_neighbor_relation_i32", library
+    );
     constexpr int kKnnHashThreshold = 512;
     auto use_knn_hash = op == NeighborRelationOp::Knn &&
                         shape.max_neighbors <= 16 &&
@@ -54,10 +54,11 @@ void eval_neighbor_relation(
         auto table_capacity = coord_hash_capacity(shape.source_rows);
         auto table = make_int32_temp(table_capacity);
         encoder.add_temporary(table);
-        clear_coord_hash(device, library, encoder, table, table_capacity);
+        clear_coord_hash(stream, library, encoder, table, table_capacity);
 
-        auto insert =
-            device.get_kernel("coord_hash_insert_active_rows_i32", library);
+        auto insert = backend::metal::lattice_kernel(
+            stream, "coord_hash_insert_active_rows_i32", library
+        );
         encoder.set_compute_pipeline_state(insert);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[2], 1);
@@ -72,7 +73,9 @@ void eval_neighbor_relation(
                 std::ceil(std::cbrt(static_cast<double>(shape.max_neighbors)))
             ) * 2
         );
-        auto count = device.get_kernel("count_knn_relation_hash_i32", library);
+        auto count = backend::metal::lattice_kernel(
+            stream, "count_knn_relation_hash_i32", library
+        );
         encoder.set_compute_pipeline_state(count);
         bind_input_arrays(encoder, inputs);
         encoder.set_input_array(table, 4);
@@ -85,15 +88,16 @@ void eval_neighbor_relation(
         dispatch_1d(encoder, count, static_cast<size_t>(shape.query_rows));
 
         encode_neighbor_row_offsets(
-            device,
+            stream,
             library,
             encoder,
             {outputs[NeighborRowOffsets], outputs[NeighborCounts]},
             shape.query_rows
         );
 
-        auto fill =
-            device.get_kernel("fill_knn_relation_compact_hash_i32", library);
+        auto fill = backend::metal::lattice_kernel(
+            stream, "fill_knn_relation_compact_hash_i32", library
+        );
         encoder.set_compute_pipeline_state(fill);
         bind_input_arrays(encoder, inputs);
         encoder.set_input_array(table, 4);
@@ -113,7 +117,9 @@ void eval_neighbor_relation(
 
     if (op == NeighborRelationOp::Knn && shape.max_neighbors <= 16 &&
         !use_knn_hash) {
-        auto fill = device.get_kernel("fill_knn_relation_topk_i32", library);
+        auto fill = backend::metal::lattice_kernel(
+            stream, "fill_knn_relation_topk_i32", library
+        );
         encoder.set_compute_pipeline_state(fill);
         bind_input_arrays(encoder, inputs);
         encoder.set_output_array(outputs[NeighborQueryRows], 4);
@@ -131,10 +137,11 @@ void eval_neighbor_relation(
         auto table_capacity = coord_hash_capacity(shape.source_rows);
         auto table = make_int32_temp(table_capacity);
         encoder.add_temporary(table);
-        clear_coord_hash(device, library, encoder, table, table_capacity);
+        clear_coord_hash(stream, library, encoder, table, table_capacity);
 
-        auto insert =
-            device.get_kernel("coord_hash_insert_active_rows_i32", library);
+        auto insert = backend::metal::lattice_kernel(
+            stream, "coord_hash_insert_active_rows_i32", library
+        );
         encoder.set_compute_pipeline_state(insert);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[2], 1);
@@ -145,8 +152,9 @@ void eval_neighbor_relation(
 
         auto ceil_radius =
             static_cast<int>(std::ceil(std::sqrt(radius_squared)));
-        auto count =
-            device.get_kernel("count_radius_relation_hash_i32", library);
+        auto count = backend::metal::lattice_kernel(
+            stream, "count_radius_relation_hash_i32", library
+        );
         encoder.set_compute_pipeline_state(count);
         bind_input_arrays(encoder, inputs);
         encoder.set_input_array(table, 4);
@@ -160,15 +168,16 @@ void eval_neighbor_relation(
         dispatch_1d(encoder, count, static_cast<size_t>(shape.query_rows));
 
         encode_neighbor_row_offsets(
-            device,
+            stream,
             library,
             encoder,
             {outputs[NeighborRowOffsets], outputs[NeighborCounts]},
             shape.query_rows
         );
 
-        auto fill =
-            device.get_kernel("fill_radius_relation_compact_hash_i32", library);
+        auto fill = backend::metal::lattice_kernel(
+            stream, "fill_radius_relation_compact_hash_i32", library
+        );
         encoder.set_compute_pipeline_state(fill);
         bind_input_arrays(encoder, inputs);
         encoder.set_input_array(table, 4);
@@ -186,7 +195,9 @@ void eval_neighbor_relation(
         dispatch_1d(encoder, fill, static_cast<size_t>(shape.query_rows));
         return;
     } else {
-        auto fill = device.get_kernel("fill_neighbor_relation_i32", library);
+        auto fill = backend::metal::lattice_kernel(
+            stream, "fill_neighbor_relation_i32", library
+        );
         encoder.set_compute_pipeline_state(fill);
         bind_input_arrays(encoder, inputs);
         encoder.set_output_array(outputs[NeighborQueryRows], 4);
@@ -201,7 +212,9 @@ void eval_neighbor_relation(
         dispatch_1d(encoder, fill, static_cast<size_t>(shape.query_rows));
     }
 
-    auto compact = device.get_kernel("compact_neighbor_relation_i32", library);
+    auto compact = backend::metal::lattice_kernel(
+        stream, "compact_neighbor_relation_i32", library
+    );
     encoder.set_compute_pipeline_state(compact);
     encoder.set_output_array(outputs[NeighborQueryRows], 0);
     encoder.set_output_array(outputs[NeighborSourceRows], 1);

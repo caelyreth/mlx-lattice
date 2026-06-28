@@ -22,19 +22,18 @@ void eval_set_coords(
     backend::allocate(out_coords);
     backend::allocate(count);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
 
     if (op == CoordSetOp::Downsample) {
         auto table_capacity = coord_hash_capacity(shape.lhs_rows);
         auto table = make_int32_temp(table_capacity);
         auto selected = make_int32_temp(shape.lhs_rows);
         encoder.add_temporaries({table, selected});
-        clear_coord_hash(device, library, encoder, table, table_capacity);
-        auto build =
-            device.get_kernel("build_downsample_coord_hash_i32", library);
+        clear_coord_hash(stream, library, encoder, table, table_capacity);
+        auto build = backend::metal::lattice_kernel(
+            stream, "build_downsample_coord_hash_i32", library
+        );
         encoder.set_compute_pipeline_state(build);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_output_array(table, 1);
@@ -43,7 +42,9 @@ void eval_set_coords(
         bind_triple_bytes(encoder, stride, 4);
         dispatch_1d(encoder, build, static_cast<size_t>(shape.lhs_rows));
 
-        auto plan = device.get_kernel("plan_downsample_coord_set_i32", library);
+        auto plan = backend::metal::lattice_kernel(
+            stream, "plan_downsample_coord_set_i32", library
+        );
         encoder.set_compute_pipeline_state(plan);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(table, 1);
@@ -53,7 +54,8 @@ void eval_set_coords(
         bind_triple_bytes(encoder, stride, 5);
         dispatch_1d(encoder, plan, static_cast<size_t>(shape.lhs_rows));
 
-        auto compact = device.get_kernel(
+        auto compact = backend::metal::lattice_kernel(
+            stream,
             shape.lhs_rows >= kParallelCompactThreshold
                 ? "scatter_downsample_coord_set_i32"
                 : "compact_downsample_coord_set_i32",
@@ -62,7 +64,7 @@ void eval_set_coords(
         if (shape.lhs_rows >= kParallelCompactThreshold) {
             auto buffers = make_stable_compact_buffers(shape.lhs_rows);
             encode_stable_compact_offsets(
-                device,
+                stream,
                 library,
                 encoder,
                 selected,
@@ -98,13 +100,13 @@ void eval_set_coords(
         auto selected = make_int32_temp(total_rows);
         encoder.add_temporaries({lhs_table, rhs_table, selected});
         clear_coord_hash(
-            device, library, encoder, lhs_table, lhs_table_capacity
+            stream, library, encoder, lhs_table, lhs_table_capacity
         );
         clear_coord_hash(
-            device, library, encoder, rhs_table, rhs_table_capacity
+            stream, library, encoder, rhs_table, rhs_table_capacity
         );
         insert_coord_hash(
-            device,
+            stream,
             library,
             encoder,
             inputs[0],
@@ -112,7 +114,7 @@ void eval_set_coords(
             CoordHashShape{shape.lhs_rows, lhs_table_capacity}
         );
         insert_coord_hash(
-            device,
+            stream,
             library,
             encoder,
             inputs[1],
@@ -120,7 +122,9 @@ void eval_set_coords(
             CoordHashShape{shape.rhs_rows, rhs_table_capacity}
         );
 
-        auto plan = device.get_kernel("plan_union_coord_set_i32", library);
+        auto plan = backend::metal::lattice_kernel(
+            stream, "plan_union_coord_set_i32", library
+        );
         encoder.set_compute_pipeline_state(plan);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
@@ -133,7 +137,8 @@ void eval_set_coords(
         encoder.set_bytes(rhs_table_capacity, 8);
         dispatch_1d(encoder, plan, static_cast<size_t>(total_rows));
 
-        auto compact = device.get_kernel(
+        auto compact = backend::metal::lattice_kernel(
+            stream,
             total_rows >= kParallelCompactThreshold
                 ? "scatter_union_coord_set_i32"
                 : "compact_union_coord_set_i32",
@@ -142,7 +147,7 @@ void eval_set_coords(
         if (total_rows >= kParallelCompactThreshold) {
             auto buffers = make_stable_compact_buffers(total_rows);
             encode_stable_compact_offsets(
-                device, library, encoder, selected, count, buffers, total_rows
+                stream, library, encoder, selected, count, buffers, total_rows
             );
             encoder.set_compute_pipeline_state(compact);
             encoder.set_input_array(inputs[0], 0);
@@ -173,13 +178,13 @@ void eval_set_coords(
         auto selected = make_int32_temp(shape.lhs_rows);
         encoder.add_temporaries({rhs_table, lhs_table, selected});
         clear_coord_hash(
-            device, library, encoder, rhs_table, rhs_table_capacity
+            stream, library, encoder, rhs_table, rhs_table_capacity
         );
         clear_coord_hash(
-            device, library, encoder, lhs_table, lhs_table_capacity
+            stream, library, encoder, lhs_table, lhs_table_capacity
         );
         insert_coord_hash(
-            device,
+            stream,
             library,
             encoder,
             inputs[1],
@@ -187,15 +192,16 @@ void eval_set_coords(
             CoordHashShape{shape.rhs_rows, rhs_table_capacity}
         );
         insert_coord_hash(
-            device,
+            stream,
             library,
             encoder,
             inputs[0],
             lhs_table,
             CoordHashShape{shape.lhs_rows, lhs_table_capacity}
         );
-        auto plan =
-            device.get_kernel("plan_intersection_coord_set_i32", library);
+        auto plan = backend::metal::lattice_kernel(
+            stream, "plan_intersection_coord_set_i32", library
+        );
         encoder.set_compute_pipeline_state(plan);
         encoder.set_input_array(inputs[0], 0);
         encoder.set_input_array(inputs[1], 1);
@@ -207,7 +213,8 @@ void eval_set_coords(
         encoder.set_bytes(lhs_table_capacity, 7);
         dispatch_1d(encoder, plan, static_cast<size_t>(shape.lhs_rows));
 
-        auto compact = device.get_kernel(
+        auto compact = backend::metal::lattice_kernel(
+            stream,
             shape.lhs_rows >= kParallelCompactThreshold
                 ? "scatter_intersection_coord_set_i32"
                 : "compact_intersection_coord_set_i32",
@@ -216,7 +223,7 @@ void eval_set_coords(
         if (shape.lhs_rows >= kParallelCompactThreshold) {
             auto buffers = make_stable_compact_buffers(shape.lhs_rows);
             encode_stable_compact_offsets(
-                device,
+                stream,
                 library,
                 encoder,
                 selected,
@@ -265,16 +272,14 @@ void eval_lookup_coords(
     auto& out = outputs[0];
     backend::allocate(out);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto table_capacity = coord_hash_capacity(shape.rows);
     auto table = make_int32_temp(table_capacity);
     encoder.add_temporary(table);
-    clear_coord_hash(device, library, encoder, table, table_capacity);
+    clear_coord_hash(stream, library, encoder, table, table_capacity);
     insert_coord_hash(
-        device,
+        stream,
         library,
         encoder,
         inputs[0],
@@ -282,7 +287,9 @@ void eval_lookup_coords(
         CoordHashShape{shape.rows, table_capacity}
     );
 
-    auto kernel = device.get_kernel("lookup_coords_hash_i32", library);
+    auto kernel = backend::metal::lattice_kernel(
+        stream, "lookup_coords_hash_i32", library
+    );
     encoder.set_compute_pipeline_state(kernel);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
@@ -320,10 +327,8 @@ void eval_sparse_alignment(
 #ifdef _METAL_
     backend::allocate_all(outputs);
 
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = backend::metal::lattice_library(stream);
+    auto& encoder = backend::metal::command_encoder(stream);
     auto lhs_table_capacity = coord_hash_capacity(shape.lhs_rows);
     auto rhs_table_capacity = coord_hash_capacity(shape.rhs_rows);
     auto lhs_table = make_int32_temp(lhs_table_capacity);
@@ -336,10 +341,11 @@ void eval_sparse_alignment(
         {lhs_table, rhs_table, selected, plan_lhs_rows, plan_rhs_rows}
     );
 
-    clear_coord_hash(device, library, encoder, lhs_table, lhs_table_capacity);
-    clear_coord_hash(device, library, encoder, rhs_table, rhs_table_capacity);
-    auto insert_active =
-        device.get_kernel("coord_hash_insert_active_rows_i32", library);
+    clear_coord_hash(stream, library, encoder, lhs_table, lhs_table_capacity);
+    clear_coord_hash(stream, library, encoder, rhs_table, rhs_table_capacity);
+    auto insert_active = backend::metal::lattice_kernel(
+        stream, "coord_hash_insert_active_rows_i32", library
+    );
     encoder.set_compute_pipeline_state(insert_active);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[1], 1);
@@ -355,7 +361,9 @@ void eval_sparse_alignment(
     encoder.set_bytes(rhs_table_capacity, 4);
     dispatch_1d(encoder, insert_active, static_cast<size_t>(shape.rhs_rows));
 
-    auto plan = device.get_kernel("plan_sparse_alignment_i32", library);
+    auto plan = backend::metal::lattice_kernel(
+        stream, "plan_sparse_alignment_i32", library
+    );
     encoder.set_compute_pipeline_state(plan);
     bind_input_arrays(encoder, inputs);
     encoder.set_input_array(lhs_table, 4);
@@ -372,10 +380,12 @@ void eval_sparse_alignment(
 
     auto buffers = make_stable_compact_buffers(total);
     encode_stable_compact_offsets(
-        device, library, encoder, selected, outputs[1], buffers, total
+        stream, library, encoder, selected, outputs[1], buffers, total
     );
 
-    auto scatter = device.get_kernel("scatter_sparse_alignment_i32", library);
+    auto scatter = backend::metal::lattice_kernel(
+        stream, "scatter_sparse_alignment_i32", library
+    );
     encoder.set_compute_pipeline_state(scatter);
     encoder.set_input_array(inputs[0], 0);
     encoder.set_input_array(inputs[2], 1);

@@ -6,9 +6,6 @@
 #include "foundation/array_utils.h"
 #include "platform/metal/runtime_utils.h"
 
-#ifdef _METAL_
-#endif
-
 namespace mlx_lattice::backend::metal::pool {
 namespace {
 
@@ -21,10 +18,6 @@ int reduce_id(PoolReduceOp op) {
     case PoolReduceOp::Avg:
         return 2;
     }
-}
-
-int stride_at(const mx::array& array, int dim) {
-    return static_cast<int>(array.strides(dim));
 }
 
 #ifdef _METAL_
@@ -41,8 +34,8 @@ void bind_forward_shape(
         reduce_id(reduce),
         shape.out_capacity,
         shape.channels,
-        stride_at(inputs[0], 0),
-        stride_at(inputs[0], 1)
+        stride_i32(inputs[0], 0),
+        stride_i32(inputs[0], 1)
     );
 }
 
@@ -62,12 +55,12 @@ void bind_autodiff_shape(
         shape.out_capacity,
         shape.n_kernels,
         shape.channels,
-        stride_at(inputs[0], 0),
-        stride_at(inputs[0], 1),
-        stride_at(inputs[1], 0),
-        stride_at(inputs[1], 1),
-        stride_at(inputs[2], 0),
-        stride_at(inputs[2], 1)
+        stride_i32(inputs[0], 0),
+        stride_i32(inputs[0], 1),
+        stride_i32(inputs[1], 0),
+        stride_i32(inputs[1], 1),
+        stride_i32(inputs[2], 0),
+        stride_i32(inputs[2], 1)
     );
 }
 #endif
@@ -84,15 +77,12 @@ void eval(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
-    auto kernel = device.get_kernel("sparse_pool_relation_f32_i32", library);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
+    auto kernel =
+        lattice_kernel(stream, "sparse_pool_relation_f32_i32", library);
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < 6; ++index) {
-        encoder.set_input_array(inputs[index], index);
-    }
+    bind_input_arrays(encoder, inputs, 0, 6);
     encoder.set_output_array(out, 6);
     bind_forward_shape(encoder, inputs, reduce, shape);
     dispatch_1d(
@@ -121,10 +111,8 @@ void eval_grad(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
 
     auto kernel_name = "sparse_pool_relation_sum_avg_input_grad_f32_i32";
     if (shape.input_exclusive) {
@@ -132,11 +120,9 @@ void eval_grad(
     } else if (reduce == PoolReduceOp::Max) {
         kernel_name = "sparse_pool_relation_max_input_grad_f32_i32";
     }
-    auto kernel = device.get_kernel(kernel_name, library);
+    auto kernel = lattice_kernel(stream, kernel_name, library);
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < int(inputs.size()); ++index) {
-        encoder.set_input_array(inputs[index], index);
-    }
+    bind_input_arrays(encoder, inputs);
     encoder.set_output_array(out, 10);
     bind_autodiff_shape(encoder, inputs, reduce, shape, 11);
     dispatch_1d(
@@ -165,16 +151,12 @@ void eval_jvp(
 #ifdef _METAL_
     auto& out = outputs[0];
     allocate(out);
-    auto& device = mx::metal::device(stream.device);
-    auto library =
-        device.get_library("mlx_lattice", mlx_lattice::metal::binary_dir());
-    auto& encoder = mx::metal::get_command_encoder(stream);
+    auto library = lattice_library(stream);
+    auto& encoder = command_encoder(stream);
     auto kernel =
-        device.get_kernel("sparse_pool_relation_jvp_f32_i32", library);
+        lattice_kernel(stream, "sparse_pool_relation_jvp_f32_i32", library);
     encoder.set_compute_pipeline_state(kernel);
-    for (int index = 0; index < int(inputs.size()); ++index) {
-        encoder.set_input_array(inputs[index], index);
-    }
+    bind_input_arrays(encoder, inputs);
     encoder.set_output_array(out, 8);
     bind_autodiff_shape(encoder, inputs, reduce, shape, 9);
     dispatch_1d(
