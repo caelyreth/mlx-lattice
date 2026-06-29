@@ -25,7 +25,7 @@ If you use this project in research, please cite this repository using the metad
   author = {Lin, Zhenyan},
   license = {MIT},
   title = {{mlx-lattice}: Sparse convolution library for MLX},
-  url = {https://github.com/utakotoba/mlx-lattice},
+  url = {https://github.com/caelyreth/mlx-lattice},
   year = {2026},
 }
 ```

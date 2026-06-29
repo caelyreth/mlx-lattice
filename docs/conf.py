@@ -30,9 +30,9 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_theme = 'furo'
 html_static_path = ['_static']
-html_title = 'mlx-lattice'
+html_title = 'MLX Lattice'
 html_theme_options = {
-    'source_repository': 'https://github.com/utakotoba/mlx-lattice/',
+    'source_repository': 'https://github.com/caelyreth/mlx-lattice/',
     'source_branch': 'main',
     'source_directory': 'docs/',
 }

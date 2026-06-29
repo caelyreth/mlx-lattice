@@ -11,10 +11,10 @@ keywords = ["mlx", "ml", "sparse", "convolution", "point-cloud"]
 dependencies = ["mlx>=0.31"]
 
 [project.urls]
-Homepage = "https://github.com/utakotoba/mlx-lattice"
-Repository = "https://github.com/utakotoba/mlx-lattice.git"
-Issues = "https://github.com/utakotoba/mlx-lattice/issues"
-Changelog = "https://github.com/utakotoba/mlx-lattice/releases"
+Homepage = "https://github.com/caelyreth/mlx-lattice"
+Repository = "https://github.com/caelyreth/mlx-lattice.git"
+Issues = "https://github.com/caelyreth/mlx-lattice/issues"
+Changelog = "https://github.com/caelyreth/mlx-lattice/releases"
 
 [build-system]
 requires = ["scikit-build-core>=0.12", "nanobind>=2", "mlx>=0.31"]
