@@ -58,7 +58,7 @@ jobs:
           node-version: "24"
 
       - name: Install documentation dependencies
-        run: uv sync --group docs --no-dev
+        run: uv sync --all-packages --group dev --group docs
 
       - name: Install Vercel CLI
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
