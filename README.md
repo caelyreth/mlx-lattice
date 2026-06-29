@@ -1,4 +1,4 @@
-# MLX Lattice
+## MLX Lattice
 
 `mlx-lattice` is a sparse point-cloud and sparse-voxel library for
 [MLX](https://github.com/ml-explore/mlx). It provides sparse tensors,
@@ -26,7 +26,7 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 > alternative sparse library whose development process better matches your
 > requirements.
 
-## Install
+### Install
 
 `mlx-lattice` requires Python 3.12 or newer and MLX 0.31 or newer.
 
@@ -44,7 +44,7 @@ The Metal backend is the primary performance target. CPU routes are also
 provided for supported operators and are useful for correctness checks,
 development, and environments without the same Metal capability.
 
-## Sparse tensor model
+### Sparse tensor model
 
 Sparse coordinates are integer rows with shape `(N, 4)` in
 `(batch, x, y, z)` order. Features are dense MLX arrays with shape `(N, C)`;
@@ -71,7 +71,7 @@ x = SparseTensor(coords, feats, batch_counts=(4,))
 This row-aligned representation is shared by convolution, pooling, sparse
 algebra, point/voxel conversion, and neural network modules.
 
-## Basic convolution
+### Basic convolution
 
 Functional sparse convolution uses dense weights with layout
 `(C_out, Kx, Ky, Kz, C_in)`.
@@ -105,7 +105,7 @@ y_target = conv3d(
 )
 ```
 
-## Neural network modules
+### Neural network modules
 
 `mlx_lattice.nn` mirrors the functional surface with parameter-owning modules.
 
@@ -128,7 +128,7 @@ for layer in layers:
 Modules accept and return `SparseTensor` for sparse operations. Global pooling
 returns dense MLX arrays with one row per batch.
 
-## Pooling and sparse algebra
+### Pooling and sparse algebra
 
 Local sparse pooling supports sum, max, and average reductions. Global pooling
 uses `batch_counts` metadata.
@@ -152,7 +152,7 @@ Sparse algebra aligns by coordinate value when coordinate identity is not
 already shared. This avoids relying on accidental row order when combining
 sparse branches.
 
-## Point and voxel utilities
+### Point and voxel utilities
 
 Point-cloud inputs can be quantized into sparse voxels and sampled back to
 point rows.
@@ -177,7 +177,7 @@ point_feats_again = devoxelize(points, voxels, voxel_size=0.1)
 The lower-level point/voxel map APIs are available when assignments are reused
 across multiple feature tensors.
 
-## Quantized inference weights
+### Quantized inference weights
 
 `mlx-lattice` supports packed affine int4 and int8 weights for supported linear
 and sparse-convolution paths. Activations remain floating point.
@@ -205,7 +205,7 @@ Quantized weights reduce model storage and can improve selected inference
 routes. Benchmark quantized and floating paths on the same sparse support,
 channel count, and device before choosing a deployment configuration.
 
-## What 0.2.0 covers
+### What 0.2.0 covers
 
 - Sparse tensor container with coordinate identity metadata.
 - Coordinate management and cached sparse relations.
@@ -224,7 +224,7 @@ channel count, and device before choosing a deployment configuration.
 See the [getting started guide](https://mlx-lattice.iki.moe/getting-started/)
 and [API reference](https://mlx-lattice.iki.moe/api/) for the full surface.
 
-## Development
+### Development
 
 Common local checks:
 
@@ -253,7 +253,7 @@ Benchmark results depend on active rows, coordinate distribution, channel
 count, dtype, backend device, and compilation state. Keep these dimensions
 explicit when comparing changes.
 
-## Documentation
+### Documentation
 
 The full documentation is hosted at
 [mlx-lattice.iki.moe](https://mlx-lattice.iki.moe):
@@ -264,7 +264,7 @@ The full documentation is hosted at
 - [Backend references](https://mlx-lattice.iki.moe/reference/backend/)
 - [API reference](https://mlx-lattice.iki.moe/api/)
 
-## Acknowledgements
+### Acknowledgements
 
 `mlx-lattice` builds on [MLX](https://github.com/ml-explore/mlx), Apple’s array
 framework for machine learning on Apple Silicon.
@@ -276,7 +276,7 @@ Special thanks to MIT HAN Lab’s
 [TorchSparse](https://github.com/mit-han-lab/torchsparse) for its influence on
 practical sparse convolution workflows.
 
-## Citation
+### Citation
 
 If you use this project in research, please cite this repository using the
 metadata in [CITATION.cff](./CITATION.cff).
@@ -296,7 +296,7 @@ learning on Apple Silicon. If MLX is relevant to your research results, please
 cite MLX as requested by its authors:
 [mlx#citing-mlx](https://github.com/ml-explore/mlx#citing-mlx).
 
-## License
+### License
 
 Copyright © 2026 Z.Y. Lin.
 
