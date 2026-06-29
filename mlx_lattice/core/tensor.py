@@ -226,6 +226,21 @@ class SparseTensor:
 
         return sparse_add(self, other)
 
+    def __sub__(self, other: SparseTensor) -> SparseTensor:
+        from mlx_lattice.ops.tensor import sparse_sub
+
+        return sparse_sub(self, other)
+
+    def __mul__(self, other: SparseTensor) -> SparseTensor:
+        from mlx_lattice.ops.tensor import sparse_mul
+
+        return sparse_mul(self, other)
+
+    def __and__(self, other: SparseTensor) -> SparseTensor:
+        from mlx_lattice.ops.tensor import sparse_mul
+
+        return sparse_mul(self, other)
+
     def _require_batch_counts(self) -> tuple[int, ...]:
         if self.batch_counts is None:
             raise ValueError(

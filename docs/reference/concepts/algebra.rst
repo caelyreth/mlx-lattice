@@ -48,6 +48,18 @@ Operation defaults
      - ``inner``
      - Concatenate feature channels on shared support unless a join is supplied.
 
+Operator shortcuts
+------------------
+
+``SparseTensor`` defines shortcuts for the common defaults:
+
+* ``x + y`` uses ``sparse_add`` with an outer join;
+* ``x - y`` uses ``sparse_sub`` with an outer join;
+* ``x * y`` and ``x & y`` use ``sparse_mul`` with an inner join.
+
+Use the named functions when a branch merge requires explicit ``left``,
+``right``, or custom fill semantics.
+
 Identity fast path
 ------------------
 

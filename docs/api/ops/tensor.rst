@@ -15,6 +15,11 @@ Join modes follow database-style sparse support semantics: ``inner`` keeps
 coordinates present on both sides, ``left`` and ``right`` preserve one side,
 and ``outer`` keeps the union.
 
+``SparseTensor`` also provides operator shortcuts for the common binary paths:
+``x + y`` maps to ``sparse_add``, ``x - y`` maps to ``sparse_sub``, and
+``x * y`` / ``x & y`` map to intersection-style ``sparse_mul``. Use the named
+functions when you need a non-default join or custom fill values.
+
 Related pages
 -------------
 

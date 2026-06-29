@@ -18,7 +18,7 @@ operation:
      - Generated from input geometry, or taken from explicit target
        coordinates.
    * - ``subm_conv3d``
-     - ``forward``
+     - ``submanifold``
      - Reuses input coordinate identity.
    * - ``conv_transpose3d``
      - ``transposed``

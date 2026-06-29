@@ -5,16 +5,18 @@ import pytest
 from mlx_lattice.core import (
     KernelRelation,
     KernelSpec,
-    NeighborEdges,
     NeighborRelation,
-    RelationCSRView,
-    RelationEdges,
-    SparseRelationContract,
 )
 from mlx_lattice.core.coords.builders import (
     build_kernel_relation,
     build_submanifold_kernel_relation,
     build_target_kernel_relation,
+)
+from mlx_lattice.core.relations import (
+    NeighborEdges,
+    RelationCSRView,
+    RelationEdges,
+    SparseRelationContract,
 )
 from tests.support import mx
 

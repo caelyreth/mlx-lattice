@@ -29,7 +29,7 @@ The public surface is grouped by semantic feature:
      - ``mlx.nn.Module`` wrappers over sparse operations.
      - Mirrors the corresponding functional operation.
    * - :doc:`native`
-     - Backend diagnostics.
+     - Stable backend diagnostics through ``mlx_lattice.backend_info``.
      - Does not mutate sparse tensors.
 
 .. toctree::

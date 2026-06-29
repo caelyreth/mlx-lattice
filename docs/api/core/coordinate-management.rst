@@ -10,7 +10,8 @@ The cache key for a kernel relation includes:
 * input coordinate key;
 * optional explicit target coordinate key;
 * normalized kernel geometry;
-* relation kind, such as ``forward`` or ``target``.
+* relation kind, such as ``forward``, ``target``, ``submanifold``,
+  ``transposed``, or ``generative``.
 
 This page documents the canonical manager API. Higher-level users usually
 construct managers indirectly by creating :class:`mlx_lattice.SparseTensor`

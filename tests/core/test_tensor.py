@@ -17,6 +17,7 @@ from mlx_lattice.ops import (
     sparse_cat_aligned,
     sparse_collate,
     sparse_mul,
+    sparse_sub,
     topk_rows,
 )
 from tests.support import mx
@@ -170,6 +171,8 @@ def test_sparse_add_uses_value_aligned_outer_union() -> None:
 
     out = lhs + rhs
     explicit = sparse_add(lhs, rhs)
+    difference = lhs - rhs
+    explicit_difference = sparse_sub(lhs, rhs)
 
     assert out.coords[: _active_count(out.active_rows)].tolist() == [
         [0, 0, 0, 0],
@@ -178,6 +181,10 @@ def test_sparse_add_uses_value_aligned_outer_union() -> None:
     ]
     assert out.feats[:3].tolist() == [[1.0], [22.0], [30.0]]
     assert explicit.feats[:3].tolist() == out.feats[:3].tolist()
+    assert difference.feats[:3].tolist() == [[1.0], [-18.0], [-30.0]]
+    assert explicit_difference.feats[:3].tolist() == (
+        difference.feats[:3].tolist()
+    )
 
 
 def test_sparse_cat_and_mul_can_value_align() -> None:
@@ -193,6 +200,8 @@ def test_sparse_cat_and_mul_can_value_align() -> None:
     joined = cat([lhs, rhs], join='outer')
     inner = sparse_cat_aligned(lhs, rhs)
     multiplied = sparse_mul(lhs, rhs)
+    operator_multiplied = lhs * rhs
+    intersection_multiplied = lhs & rhs
 
     assert joined.coords[:3].tolist() == [
         [0, 0, 0, 0],
@@ -206,6 +215,8 @@ def test_sparse_cat_and_mul_can_value_align() -> None:
     ]
     assert inner.feats[:1].tolist() == [[2.0, 20.0]]
     assert multiplied.feats[:1].tolist() == [[40.0]]
+    assert operator_multiplied.feats[:1].tolist() == [[40.0]]
+    assert intersection_multiplied.feats[:1].tolist() == [[40.0]]
 
 
 def test_value_alignment_respects_active_rows() -> None:

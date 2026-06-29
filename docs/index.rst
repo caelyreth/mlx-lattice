@@ -65,6 +65,9 @@ Navigation map
    * - Diagnose dispatch
      - :doc:`reference/backend/path-selection`
      - :doc:`api/native`
+   * - Check API stability
+     - :doc:`project/stability`
+     - :doc:`project/caveats`
 
 .. note::
 
@@ -96,4 +99,5 @@ Navigation map
    :maxdepth: 1
    :caption: Project notes
 
+   project/stability
    project/caveats

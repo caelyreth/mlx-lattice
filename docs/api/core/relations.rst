@@ -8,6 +8,12 @@ pooling route details are documented in
 :doc:`../../reference/backend/convolution` and
 :doc:`../../reference/backend/pooling`.
 
+Stable application code should normally depend on ``KernelSpec``,
+``KernelRelation``, ``NeighborRelation``, and the functional relation builders.
+Low-level CSR views, implicit-GEMM views, sorted implicit-GEMM views, and
+relation contracts are exposed for inspection and debugging, but their exact
+layout is provisional backend metadata.
+
 Relation specifications
 -----------------------
 
@@ -16,6 +22,10 @@ Relation specifications
 
 Relation views
 --------------
+
+The view classes below are advanced/provisional. They are useful when
+diagnosing relation construction or backend route selection; they should not be
+used as a long-term application storage format.
 
 .. automodule:: mlx_lattice.core.relations.views
    :members:

@@ -3,6 +3,15 @@ Caveats and stability notes
 
 This page records user-visible constraints and stability boundaries.
 
+For API stability levels, read :doc:`stability`.
+
+Coordinate order is stable
+--------------------------
+
+Coordinate rows are ordered as ``(batch, x, y, z)``. This is the canonical
+internal and public order. Inputs using another convention should be converted
+before constructing ``SparseTensor`` objects.
+
 Coordinate value equality is not identity
 -----------------------------------------
 
@@ -59,6 +68,13 @@ Kernel names, CSR view names, sorted implicit-GEMM views, TensorOps variants,
 and diagnostic reference routes are backend implementation details. They can be
 useful for debugging a failing run, but application code calls public
 operations and modules.
+
+Entropy byte streams are provisional
+------------------------------------
+
+Entropy helpers are public callables, but the exact encoded byte stream is not
+yet a cross-version persistence format. If you store streams externally, record
+the ``mlx-lattice`` version alongside them.
 
 Quantization is storage-real, not fake quantization
 ---------------------------------------------------
