@@ -56,3 +56,41 @@ jobs:
 
       - name: Test for Metal backend
         run: uv run --no-sync pytest --backend metal
+
+  contract-quality:
+    name: Contract Python ${{ matrix.python-version }} Linux Check
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: 0.11.21
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install contract dependencies
+        run: uv sync --project contract --group dev
+
+      - name: Ruff
+        run: uv run --project contract --no-sync ruff check contract tests/contract
+
+      - name: Ty
+        run: uv run --project contract --no-sync ty check contract/lattice_contract
+
+      - name: Test contract package
+        run: uv run --project contract --no-sync pytest tests/contract
