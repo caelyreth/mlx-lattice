@@ -87,10 +87,10 @@ jobs:
         run: uv sync --project contract --group dev
 
       - name: Ruff
-        run: uv run --project contract --no-sync ruff check contract tests/contract
+        run: uv run --project contract --no-sync ruff check contract
 
       - name: Ty
         run: uv run --project contract --no-sync ty check contract/lattice_contract
 
       - name: Test contract package
-        run: uv run --project contract --no-sync pytest tests/contract
+        run: uv run --project contract --no-sync pytest contract/tests

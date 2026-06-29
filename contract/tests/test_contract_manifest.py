@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from lattice_contract import (
     ir_value_type,
     is_ir_value_type,
