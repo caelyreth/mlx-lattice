@@ -9,6 +9,7 @@ import mlx.core as mx
 from mlx_lattice.core.coords.builders import (
     build_generative_relation,
     build_kernel_relation,
+    build_submanifold_kernel_relation,
     build_target_kernel_relation,
     build_transposed_kernel_relation,
 )
@@ -193,6 +194,37 @@ class CoordinateManager:
                 active_rows=self.active_rows(key),
                 kernel_size=spec.size,
                 stride=spec.stride,
+            )
+        return self._kernel_relations[cache_key]
+
+    def submanifold_kernel_relation(
+        self,
+        key: CoordinateMapKey,
+        *,
+        kernel_size: int | Sequence[int] = 3,
+        dilation: int | Sequence[int] = 1,
+    ) -> KernelRelation:
+        """Build or reuse a submanifold sparse kernel relation.
+
+        The relation fixes output support to the input coordinate identity.
+        It is the relation semantic used by submanifold convolution rather
+        than a generic forward relation with output coordinates discarded.
+        """
+        spec = KernelSpec(
+            size=kernel_size,
+            stride=1,
+            padding=0,
+            dilation=dilation,
+        )
+        cache_key = (key, key, spec, 'submanifold')
+        if cache_key not in self._kernel_relations:
+            self._kernel_relations[cache_key] = (
+                build_submanifold_kernel_relation(
+                    self.coords(key),
+                    active_rows=self.active_rows(key),
+                    kernel_size=spec.size,
+                    dilation=spec.dilation,
+                )
             )
         return self._kernel_relations[cache_key]
 

@@ -661,7 +661,12 @@ def test_subm_conv3d_reuses_input_coordinate_identity() -> None:
     weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
 
     out = subm_conv3d(x, weight, kernel_size=(3, 1, 1))
+    relation = x.coord_manager.submanifold_kernel_relation(
+        x.coord_key,
+        kernel_size=(3, 1, 1),
+    )
 
+    assert relation.contract.kind == 'submanifold'
     assert out.feats.tolist() == [[3.0], [6.0], [5.0]]
     assert_same_sparse_identity(out, x)
 

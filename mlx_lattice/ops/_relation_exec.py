@@ -71,7 +71,7 @@ def _can_use_sorted_quantized_implicit_gemm(
     relation: KernelRelation,
 ) -> bool:
     return (
-        relation.contract.kind in ('forward', 'target')
+        relation.contract.kind in ('forward', 'target', 'submanifold')
         and feats.dtype == mx.float16
         and relation.n_kernels == 27
         and weight.storage_in_channels == weight.in_channels
@@ -191,7 +191,7 @@ def _can_use_sorted_implicit_gemm(
     weight: mx.array,
     relation: KernelRelation,
 ) -> bool:
-    if relation.contract.kind not in ('forward', 'target'):
+    if relation.contract.kind not in ('forward', 'target', 'submanifold'):
         return False
     if feats.dtype != mx.float16 or weight.dtype != mx.float16:
         return False

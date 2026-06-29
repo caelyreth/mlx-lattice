@@ -87,11 +87,13 @@ Route predicates by operation
        convolution primitive.
    * - ``subm_conv3d``
      - Odd kernel, stride 1, no coordinate expansion
-     - Reuses input coordinate identity and sparse relation.
+     - Builds a ``submanifold`` kernel relation, reuses input coordinate
+       identity, and shares compatible sparse-convolution backend kernels.
    * - Transposed convolution
      - ``conv_transpose3d`` or ``generative_conv_transpose3d``
      - Builds transposed or generative relation; sorted implicit-GEMM is not
-       selected because the relation kind is not ``forward``/``target``.
+       selected because the relation kind is not ``forward``/``target``/
+       ``submanifold``.
    * - Local pooling
      - ``float32`` features, kernel relation
      - Metal/CPU sparse reduction kernels.

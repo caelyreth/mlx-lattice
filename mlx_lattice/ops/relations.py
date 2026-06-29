@@ -9,6 +9,7 @@ from mlx_lattice.core.coords.builders import (
     build_kernel_relation,
     build_knn_relation,
     build_radius_relation,
+    build_submanifold_kernel_relation,
     build_target_kernel_relation,
     build_transposed_kernel_relation,
     kernel_offsets,
@@ -21,6 +22,7 @@ __all__ = [
     'build_kernel_relation',
     'build_knn_relation',
     'build_radius_relation',
+    'build_submanifold_kernel_relation',
     'build_target_kernel_relation',
     'build_transposed_kernel_relation',
     'gather_neighbor_features',
@@ -29,6 +31,7 @@ __all__ = [
     'kernel_relation',
     'knn_relation',
     'radius_relation',
+    'submanifold_kernel_relation',
     'target_kernel_relation',
     'transposed_kernel_relation',
 ]
@@ -68,6 +71,24 @@ def generative_kernel_relation(
         x.coord_key,
         kernel_size=kernel_size,
         stride=stride,
+    )
+
+
+def submanifold_kernel_relation(
+    x: SparseTensor,
+    *,
+    kernel_size: int | Sequence[int] = 3,
+    dilation: int | Sequence[int] = 1,
+) -> KernelRelation:
+    """Build the submanifold kernel relation for a sparse tensor.
+
+    The returned relation fixes output support to ``x``'s coordinate identity.
+    It is the relation semantic used by :func:`subm_conv3d`.
+    """
+    return x.coord_manager.submanifold_kernel_relation(
+        x.coord_key,
+        kernel_size=kernel_size,
+        dilation=dilation,
     )
 
 

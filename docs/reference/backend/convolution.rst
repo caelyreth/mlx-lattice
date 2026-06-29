@@ -28,6 +28,10 @@ Semantic map kinds
    * - ``target``
      - ``CoordinateManager.target_kernel_relation``
      - Explicit target coordinates supplied to ``conv3d``.
+   * - ``submanifold``
+     - ``CoordinateManager.submanifold_kernel_relation``
+     - Output support is the input coordinate identity; no coordinate
+       expansion is performed.
    * - ``transposed``
      - ``CoordinateManager.transposed_kernel_relation``
      - Expanded support for transpose convolution.
@@ -35,9 +39,9 @@ Semantic map kinds
      - ``CoordinateManager.generative_relation``
      - Generated support from a transpose-convolution rule.
 
-Only ``forward`` and ``target`` map kinds are considered by the sorted
-implicit-GEMM forward route. Transposed and generative convolutions use relation
-traversal for their current public path.
+``forward``, ``target``, and ``submanifold`` map kinds are considered by the
+sorted implicit-GEMM forward route. Transposed and generative convolutions use
+relation traversal for their current public path.
 
 Floating forward routes
 -----------------------
@@ -81,7 +85,8 @@ The Python predicate for the sorted floating route is:
 
 .. math::
 
-   \operatorname{kind} \in \{\text{forward}, \text{target}\},
+   \operatorname{kind} \in
+   \{\text{forward}, \text{target}, \text{submanifold}\},
    \quad X,W \in \mathrm{fp16},
    \quad K=27,
    \quad C_{in}=C_{out}\in\{32,64\}.
@@ -207,7 +212,7 @@ Validation checklist
 
 When diagnosing a convolution route, record:
 
-* map kind: forward, target, transposed, or generative;
+* map kind: forward, target, submanifold, transposed, or generative;
 * feature dtype and coordinate dtype;
 * dense versus quantized weight;
 * kernel volume ``K``;

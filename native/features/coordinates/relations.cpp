@@ -580,6 +580,22 @@ NativeKernelRelation make_kernel_relation(
     return relation_from_outputs(outputs, views);
 }
 
+NativeKernelRelation make_submanifold_kernel_relation(
+    const mx::array& coords,
+    const mx::array& active_rows,
+    Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
+    Triple dilation
+) {
+    return make_kernel_relation(
+        coords,
+        active_rows,
+        kernel_size,
+        Triple{1, 1, 1},
+        Triple{0, 0, 0},
+        dilation
+    );
+}
+
 NativeKernelRelation make_generative_relation(
     const mx::array& coords,
     const mx::array& active_rows,

@@ -34,8 +34,11 @@ def test_case_catalog_exposes_expected_public_surface_groups() -> None:
     assert 'voxelize_mean_fixed' in names
     assert 'conv3d_generic' in names
     assert 'conv3d_generic_density' in names
+    assert 'subm_conv3d_density' in names
     assert 'conv3d_generic_dfeatures' in names
     assert 'conv3d_generic_dweight' in names
+    assert 'subm_conv3d_density_dfeatures' in names
+    assert 'subm_conv3d_density_dweight' in names
     assert 'prune_mask' in names
     assert 'workload_mini_encoder' in names
     assert 'workload_mini_encoder_fixed' in names
@@ -49,14 +52,22 @@ def test_conv_density_case_matches_wide_layout_vocabulary() -> None:
         n_values=(32,),
         channels=(4,),
     )
-    case = next(
-        item for item in cases if item.name == 'conv3d_generic_density'
-    )
+    density_cases = {
+        item.name: item
+        for item in cases
+        if item.name in ('conv3d_generic_density', 'subm_conv3d_density')
+    }
 
-    assert (
-        tuple(params['layout'] for params in case.params) == SPARSE_LAYOUTS
-    )
-    assert {params['channels'] for params in case.params} == {4}
+    assert set(density_cases) == {
+        'conv3d_generic_density',
+        'subm_conv3d_density',
+    }
+    for case in density_cases.values():
+        assert (
+            tuple(params['layout'] for params in case.params)
+            == SPARSE_LAYOUTS
+        )
+        assert {params['channels'] for params in case.params} == {4}
 
 
 def test_conv_density_case_reports_calculated_kernel_density() -> None:
@@ -66,29 +77,33 @@ def test_conv_density_case_reports_calculated_kernel_density() -> None:
         n_values=(32,),
         channels=(4,),
     )
-    case = next(
-        item for item in cases if item.name == 'conv3d_generic_density'
-    )
-    params = next(
-        params for params in case.params if params['layout'] == 'line'
-    )
+    cases_by_name = {
+        item.name: item
+        for item in cases
+        if item.name in ('conv3d_generic_density', 'subm_conv3d_density')
+    }
 
-    result = run_case(
-        case,
-        params,
-        mode='hot_op',
-        device='cpu',
-        warmup=0,
-        repeats=1,
-    )
+    for case in cases_by_name.values():
+        params = next(
+            params for params in case.params if params['layout'] == 'line'
+        )
 
-    assert result is not None
-    assert result.params['layout'] == 'line'
-    assert result.workload['edges'] > 0
-    assert result.workload['target_active_kernel_positions'] > 0.0
-    assert result.workload['target_kernel_density'] > 0.0
-    assert result.workload['expected_active_kernel_positions'] == 3.0
-    assert result.workload['expected_kernel_density'] == 3.0 / 27.0
+        result = run_case(
+            case,
+            params,
+            mode='hot_op',
+            device='cpu',
+            warmup=0,
+            repeats=1,
+        )
+
+        assert result is not None
+        assert result.params['layout'] == 'line'
+        assert result.workload['edges'] > 0
+        assert result.workload['target_active_kernel_positions'] > 0.0
+        assert result.workload['target_kernel_density'] > 0.0
+        assert result.workload['expected_active_kernel_positions'] == 3.0
+        assert result.workload['expected_kernel_density'] == 3.0 / 27.0
 
 
 def test_quantized_conv_cases_use_packed_inference_and_report_storage() -> (

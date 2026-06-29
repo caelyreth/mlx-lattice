@@ -7,7 +7,13 @@ import mlx.core as mx
 
 from mlx_lattice.core.types import Triple
 
-RelationKind = Literal['forward', 'target', 'transposed', 'generative']
+RelationKind = Literal[
+    'forward',
+    'target',
+    'submanifold',
+    'transposed',
+    'generative',
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,12 +180,13 @@ class SparseRelationContract:
         if self.kind not in (
             'forward',
             'target',
+            'submanifold',
             'transposed',
             'generative',
         ):
             raise ValueError(
                 "relation kind must be 'forward', 'target', "
-                "'transposed', or 'generative'."
+                "'submanifold', 'transposed', or 'generative'."
             )
         normalized_offsets = tuple(
             (int(x), int(y), int(z)) for x, y, z in self.kernel_offsets

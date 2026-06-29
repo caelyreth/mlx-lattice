@@ -130,7 +130,7 @@ def subm_conv3d(
         weight,
         bias,
         spec,
-        map_kind='forward',
+        map_kind='submanifold',
         output_stride=x.stride,
         reuse_input_coords=True,
     )
@@ -259,6 +259,12 @@ def _kernel_relation(
             padding=spec.padding,
             dilation=spec.dilation,
         )
+    if map_kind == 'submanifold':
+        return x.coord_manager.submanifold_kernel_relation(
+            x.coord_key,
+            kernel_size=spec.size,
+            dilation=spec.dilation,
+        )
     if map_kind == 'transposed':
         return x.coord_manager.transposed_kernel_relation(
             x.coord_key,
@@ -285,7 +291,8 @@ def _kernel_relation(
             dilation=spec.dilation,
         )
     raise ValueError(
-        "map_kind must be 'forward', 'transposed', 'generative', or 'target'."
+        "map_kind must be 'forward', 'submanifold', 'transposed', "
+        "'generative', or 'target'."
     )
 
 

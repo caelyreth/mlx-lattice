@@ -44,10 +44,10 @@ def build_relation_implicit_gemm_view(
 ) -> RelationImplicitGemmView:
     """Build the dense output-to-input map used by implicit-GEMM kernels."""
     contract = relation.contract
-    if contract.kind not in ('forward', 'target'):
+    if contract.kind not in ('forward', 'target', 'submanifold'):
         raise ValueError(
-            'implicit GEMM view currently supports forward and target '
-            'relations.'
+            'implicit GEMM view currently supports forward, target, and '
+            'submanifold relations.'
         )
     if (
         contract.source_coords is None
@@ -59,7 +59,7 @@ def build_relation_implicit_gemm_view(
         )
     output_active = (
         contract.target_active_rows
-        if contract.kind == 'target'
+        if contract.kind in ('target', 'submanifold')
         else contract.out_count
     )
     if output_active is None:
@@ -188,6 +188,48 @@ def build_kernel_relation(
         stride=spec.stride,
         padding=spec.padding,
         kind='forward',
+    )
+
+
+def build_submanifold_kernel_relation(
+    coords: mx.array,
+    active_rows: mx.array | None = None,
+    kernel_size: int | Sequence[int] = 3,
+    dilation: int | Sequence[int] = 1,
+) -> KernelRelation:
+    """Build a submanifold relation whose output support is ``coords``."""
+    validate_coords(coords)
+    spec = KernelSpec(
+        size=kernel_size,
+        stride=1,
+        padding=0,
+        dilation=dilation,
+    )
+    if not spec.is_centered_submanifold:
+        raise ValueError(
+            'submanifold relations require odd kernels, stride=1, '
+            'padding=0, and positive dilation.'
+        )
+    offsets = kernel_offsets(spec.size, spec.dilation)
+    source_active = _active_rows(active_rows, coords)
+    native = ext.build_submanifold_kernel_relation(
+        coords,
+        source_active,
+        spec.size,
+        spec.dilation,
+    )
+    return _kernel_relation_from_native(
+        native,
+        offsets=offsets,
+        in_capacity=int(coords.shape[0]),
+        out_coords=coords,
+        source_coords=coords,
+        source_active_rows=source_active,
+        target_coords=coords,
+        target_active_rows=source_active,
+        stride=spec.stride,
+        padding=spec.padding,
+        kind='submanifold',
     )
 
 
@@ -353,6 +395,7 @@ def _kernel_relation_from_native(
     *,
     offsets: tuple[Triple, ...],
     in_capacity: int,
+    out_coords: mx.array | None = None,
     source_coords: mx.array,
     source_active_rows: mx.array,
     target_coords: mx.array | None = None,
@@ -366,13 +409,16 @@ def _kernel_relation_from_native(
         out_rows,
         kernel_ids,
         row_offsets,
-        out_coords,
+        native_out_coords,
         counts,
         in_row_offsets,
         in_edge_ids,
         kernel_row_offsets,
         kernel_edge_ids,
     ) = native
+    relation_out_coords = (
+        native_out_coords if out_coords is None else out_coords
+    )
     return KernelRelation(
         in_rows,
         out_rows,
@@ -384,9 +430,9 @@ def _kernel_relation_from_native(
         kernel_row_offsets=kernel_row_offsets,
         kernel_edge_ids=kernel_edge_ids,
         kernel_offsets=offsets,
-        out_coords=out_coords,
+        out_coords=relation_out_coords,
         n_in_capacity=in_capacity,
-        n_out_capacity=int(out_coords.shape[0]),
+        n_out_capacity=int(relation_out_coords.shape[0]),
         n_kernels=len(offsets),
         source_coords=source_coords,
         source_active_rows=source_active_rows,

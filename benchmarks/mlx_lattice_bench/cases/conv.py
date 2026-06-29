@@ -106,12 +106,44 @@ def cases(
         metrics=_density_metrics,
         quantized=quantized,
     )
+    subm_density_case = _case(
+        'subm_conv3d_density',
+        'subm',
+        _density_params(
+            preset,
+            n_values=n_values,
+            channels=channels,
+            channel_pairs=channel_pairs,
+            dtype=dtype,
+        ),
+        metrics=_density_metrics,
+        quantized=quantized,
+    )
     if quantized:
-        return (*forward_cases, density_case)
+        return (*forward_cases, density_case, subm_density_case)
     density_backward_cases = tuple(
         _backward_case(
             f'conv3d_generic_density_{suffix}',
             'generic',
+            target,
+            _density_params(
+                preset,
+                n_values=n_values,
+                channels=channels,
+                channel_pairs=channel_pairs,
+                dtype=dtype,
+            ),
+            metrics=_density_metrics,
+        )
+        for suffix, target in (
+            ('dfeatures', 'features'),
+            ('dweight', 'weight'),
+        )
+    )
+    subm_density_backward_cases = tuple(
+        _backward_case(
+            f'subm_conv3d_density_{suffix}',
+            'subm',
             target,
             _density_params(
                 preset,
@@ -138,7 +170,9 @@ def cases(
     return (
         *forward_cases,
         density_case,
+        subm_density_case,
         *density_backward_cases,
+        *subm_density_backward_cases,
         *backward_cases,
     )
 

@@ -13,6 +13,7 @@ from mlx_lattice.core import (
 )
 from mlx_lattice.core.coords.builders import (
     build_kernel_relation,
+    build_submanifold_kernel_relation,
     build_target_kernel_relation,
 )
 from tests.support import mx
@@ -124,6 +125,36 @@ def test_target_relation_materializes_implicit_gemm_from_target_coords() -> (
         [2, -1, -1],
     ]
     assert view.row_masks.tolist() == [[7], [1]]
+
+
+def test_submanifold_relation_has_explicit_identity_output_support() -> (
+    None
+):
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    relation = build_submanifold_kernel_relation(
+        coords,
+        kernel_size=(3, 1, 1),
+    )
+
+    view = relation.require_implicit_gemm()
+    mx.eval(view.out_in_map, view.row_masks)
+
+    assert relation.contract.kind == 'submanifold'
+    assert relation.out_coords is coords
+    assert relation.contract.target_coords is coords
+    assert relation.n_out_capacity == coords.shape[0]
+    assert (
+        relation.contract.target_active_rows
+        is relation.contract.source_active_rows
+    )
+    assert view.out_in_map.tolist() == [
+        [-1, 0, 1],
+        [0, 1, 2],
+        [1, 2, -1],
+    ]
 
 
 def test_implicit_gemm_row_masks_scale_past_single_word() -> None:

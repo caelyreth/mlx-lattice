@@ -478,6 +478,35 @@ void register_coords(nb::module_& module) {
         "Build a generative sparse kernel relation."
     );
     module.def(
+        "build_submanifold_kernel_relation",
+        [](nb::handle coords,
+           nb::handle active_rows,
+           const std::vector<int>& kernel_size,
+           const std::vector<int>& dilation) {
+            return relation_tuple(build_submanifold_kernel_relation(
+                array_arg(coords, "coords"),
+                array_arg(active_rows, "active_rows"),
+                triple_from_values(kernel_size, "kernel_size"),
+                triple_from_values(dilation, "dilation")
+            ));
+        },
+        "coords"_a,
+        "active_rows"_a,
+        "kernel_size"_a,
+        "dilation"_a,
+        nb::sig(
+            "def build_submanifold_kernel_relation(coords: mlx.core.array, "
+            "active_rows: mlx.core.array, "
+            "kernel_size: collections.abc.Sequence[int], "
+            "dilation: collections.abc.Sequence[int]) -> "
+            "tuple[mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array, mlx.core.array, mlx.core.array, "
+            "mlx.core.array]"
+        ),
+        "Build a submanifold sparse kernel relation."
+    );
+    module.def(
         "build_transposed_kernel_relation",
         [](nb::handle coords,
            nb::handle active_rows,

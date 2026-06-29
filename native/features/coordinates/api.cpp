@@ -168,6 +168,28 @@ NativeKernelRelation build_kernel_relation(
     );
 }
 
+NativeKernelRelation build_submanifold_kernel_relation(
+    const mx::array& coords,
+    const mx::array& active_rows,
+    Triple kernel_size,
+    Triple dilation
+) {
+    validate_coords(coords);
+    validate_active_rows(active_rows);
+    validate_positive(kernel_size, "kernel_size");
+    validate_positive(dilation, "dilation");
+    for (auto value : kernel_size) {
+        if (value % 2 == 0) {
+            throw std::invalid_argument(
+                "submanifold kernel_size values must be odd."
+            );
+        }
+    }
+    return make_submanifold_kernel_relation(
+        coords, active_rows, kernel_size, dilation
+    );
+}
+
 NativeKernelRelation build_generative_relation(
     const mx::array& coords,
     const mx::array& active_rows,

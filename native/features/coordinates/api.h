@@ -73,6 +73,13 @@ NativeKernelRelation build_kernel_relation(
     Triple dilation
 );
 
+NativeKernelRelation build_submanifold_kernel_relation(
+    const mx::array& coords,
+    const mx::array& active_rows,
+    Triple kernel_size,
+    Triple dilation
+);
+
 NativeKernelRelation build_generative_relation(
     const mx::array& coords,
     const mx::array& active_rows,
