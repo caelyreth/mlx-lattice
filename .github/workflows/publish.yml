@@ -15,12 +15,101 @@ concurrency:
 env:
   UV_FROZEN: "1"
   UV_LINK_MODE: copy
-  EXPECTED_DISTRIBUTIONS: "4"
+  EXPECTED_CONTRACT_DISTRIBUTIONS: "2"
+  EXPECTED_MLX_DISTRIBUTIONS: "4"
 
 jobs:
+  build-contract:
+    name: Contract distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: 0.11.21
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Check tag matches contract version
+        run: test "${GITHUB_REF_NAME#v}" = "$(uv version --project contract --short)"
+
+      - name: Build contract distributions
+        run: uv build --project contract --out-dir dist/contract --no-create-gitignore
+
+      - name: Upload contract distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: lattice-contract
+          path: dist/contract/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish-contract:
+    name: Publish contract to PyPI
+    runs-on: ubuntu-latest
+    needs: build-contract
+    environment:
+      name: pypi
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: 0.11.21
+
+      - name: Download contract distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: lattice-contract
+          path: artifacts/lattice-contract
+
+      - name: Prepare contract distributions
+        run: |
+          bash .github/scripts/prepare-distributions.sh \
+            artifacts/lattice-contract \
+            dist/contract \
+            "$EXPECTED_CONTRACT_DISTRIBUTIONS"
+
+      - name: Check contract distribution archives
+        run: |
+          for wheel in dist/contract/*.whl; do
+            unzip -t "$wheel"
+          done
+
+          for sdist in dist/contract/*.tar.gz; do
+            tar -tzf "$sdist" >/dev/null
+          done
+
+      - name: Check contract distribution metadata
+        run: uvx twine check dist/contract/*
+
+      - name: Publish contract distributions
+        run: |
+          uv publish \
+            --trusted-publishing always \
+            --check-url https://pypi.org/simple/lattice-contract/ \
+            dist/contract/*
+
   build-wheels:
     name: Wheel (macos-26, Python ${{ matrix.python-version }})
     runs-on: macos-26
+    needs: publish-contract
 
     strategy:
       fail-fast: false
@@ -62,7 +151,8 @@ jobs:
 
   build-sdist:
     name: Source distribution
-    runs-on: macos-26
+    runs-on: ubuntu-latest
+    needs: publish-contract
 
     steps:
       - name: Checkout
@@ -97,7 +187,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     needs: [build-wheels, build-sdist]
     environment:
       name: pypi
@@ -120,7 +210,7 @@ jobs:
           path: artifacts
 
       - name: Prepare distributions
-        run: bash .github/scripts/prepare-distributions.sh artifacts dist "$EXPECTED_DISTRIBUTIONS"
+        run: bash .github/scripts/prepare-distributions.sh artifacts dist "$EXPECTED_MLX_DISTRIBUTIONS"
 
       - name: Check distribution archives
         run: |
@@ -136,12 +226,16 @@ jobs:
         run: uvx twine check dist/*
 
       - name: Publish distributions
-        run: uv publish --trusted-publishing always dist/*
+        run: |
+          uv publish \
+            --trusted-publishing always \
+            --check-url https://pypi.org/simple/mlx-lattice/ \
+            dist/*
 
   release:
     name: GitHub release
-    runs-on: macos-26
-    needs: publish
+    runs-on: ubuntu-latest
+    needs: [publish-contract, publish]
     permissions:
       contents: write
 
@@ -162,7 +256,9 @@ jobs:
           path: artifacts
 
       - name: Prepare distributions
-        run: bash .github/scripts/prepare-distributions.sh artifacts dist "$EXPECTED_DISTRIBUTIONS"
+        run: |
+          expected="$((EXPECTED_CONTRACT_DISTRIBUTIONS + EXPECTED_MLX_DISTRIBUTIONS))"
+          bash .github/scripts/prepare-distributions.sh artifacts dist "$expected"
 
       - name: Create release notes
         run: npx --yes changelogithub@14 --contributors --emoji false
