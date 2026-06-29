@@ -216,7 +216,7 @@ Quantized weights reduce model storage and can improve selected inference
 routes. Benchmark quantized and floating paths on the same sparse support,
 channel count, and device before choosing a deployment configuration.
 
-### What 0.2.0 covers
+### What 0.2.1 covers
 
 - Sparse tensor container with coordinate identity metadata.
 - Coordinate management and cached sparse relations.

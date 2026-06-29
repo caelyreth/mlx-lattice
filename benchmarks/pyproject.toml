@@ -1,9 +1,9 @@
 [project]
 name = "mlx-lattice-bench"
-version = "0.2.0"
+version = "0.2.1"
 description = "Benchmark suite for mlx-lattice public sparse operators"
 requires-python = ">=3.12"
-dependencies = ["mlx-lattice"]
+dependencies = ["mlx-lattice>=0.2.1,<0.3"]
 
 [project.scripts]
 mlx-lattice-bench = "mlx_lattice_bench.run:main"

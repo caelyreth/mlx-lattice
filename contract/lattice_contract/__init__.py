@@ -30,6 +30,8 @@ from lattice_contract.ops import (
     validate_node_against_spec,
 )
 
+__version__ = '0.2.1'
+
 __all__ = [
     'CURRENT_SCHEMA_VERSION',
     'DTypePolicy',
@@ -44,6 +46,7 @@ __all__ = [
     'IRTensorSpec',
     'IRValueType',
     'Triple',
+    '__version__',
     'ir_op_spec',
     'ir_value_type',
     'is_ir_value_type',

@@ -125,10 +125,10 @@ def ir_op_spec(
     """Register the semantic contract for one IR operation.
 
     The annotation keeps the stable IR operation set compact and discoverable
-    without maintaining a hand-written registry table. Runtime backends attach
-    their implementations separately, so importing :mod:`mlx_lattice.ir`
-    always exposes the complete semantic contract without importing a backend
-    graph executor.
+    without maintaining a hand-written registry table. Artifact consumers
+    attach their implementations separately, so importing
+    :mod:`lattice_contract` exposes the complete semantic contract without
+    importing an MLX, Torch, or native graph executor.
     """
 
     spec = IROpSpec(

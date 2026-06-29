@@ -13,4 +13,5 @@ def test_lattice_contract_imports_without_mlx_lattice_runtime() -> None:
     contract = importlib.import_module('lattice_contract')
 
     assert contract.CURRENT_SCHEMA_VERSION == '0.1'
+    assert contract.__version__ == '0.2.1'
     assert 'mlx_lattice' not in sys.modules
