@@ -6,6 +6,9 @@ from typing import Protocol, cast
 import mlx.nn as mxnn
 import pytest
 from lattice_contract import (
+    FEATURE_LINEAR,
+    SPARSE_SUBM_CONV3D,
+    IRNode,
     IRValueType,
     manifest_from_dict,
     manifest_to_dict,
@@ -31,6 +34,7 @@ from mlx_lattice.artifact import (
     save_lattice_module,
 )
 from mlx_lattice.artifact.bindings import value_type_fields
+from mlx_lattice.artifact.registry import validate_node_against_artifact
 from mlx_lattice.nn._artifact import module_artifact_spec
 from mlx_lattice.ops import (
     conv3d,
@@ -502,6 +506,13 @@ def test_lattice_runtime_registry_covers_public_ops_surface() -> None:
         'active_rows': 'active_rows',
         'batch_indices': 'batch_indices',
     }
+    assert (
+        operation_binding(FEATURE_LINEAR.name).spec is FEATURE_LINEAR.spec
+    )
+    assert (
+        operation_binding(SPARSE_SUBM_CONV3D.name).spec
+        is SPARSE_SUBM_CONV3D.spec
+    )
 
 
 def test_lattice_runtime_registry_keeps_tensors_out_of_json_attributes() -> (
@@ -536,6 +547,61 @@ def test_lattice_runtime_registry_uses_variant_specific_quantized_conv_contracts
         ).spec.value_attributes
         == frozenset()
     )
+
+
+def test_lattice_runtime_rejects_non_canonical_producer_attributes() -> (
+    None
+):
+    validate_node_against_artifact(
+        IRNode(
+            id='subm',
+            op='sparse.subm_conv3d',
+            inputs={'input': 'input'},
+            outputs={'output': 'subm'},
+            parameters={'weight': 'subm.weight'},
+            attributes={'kernel_size': [1, 1, 1], 'dilation': [1, 1, 1]},
+        )
+    )
+
+    for attributes in (
+        {'stride': [1, 1, 1]},
+        {'padding': [0, 0, 0]},
+    ):
+        with pytest.raises(ValueError, match='unsupported keys'):
+            validate_node_against_artifact(
+                IRNode(
+                    id='subm',
+                    op='sparse.subm_conv3d',
+                    inputs={'input': 'input'},
+                    outputs={'output': 'subm'},
+                    parameters={'weight': 'subm.weight'},
+                    attributes={
+                        'kernel_size': [1, 1, 1],
+                        'dilation': [1, 1, 1],
+                        **attributes,
+                    },
+                )
+            )
+
+    with pytest.raises(ValueError, match='unsupported lattice IR op'):
+        validate_node_against_artifact(
+            IRNode(
+                id='bn',
+                op='sparse.batch_norm',
+                inputs={'input': 'subm'},
+                outputs={'output': 'bn'},
+            )
+        )
+    with pytest.raises(ValueError, match='unsupported keys'):
+        validate_node_against_artifact(
+            IRNode(
+                id='relu',
+                op='feature.relu',
+                inputs={'input': 'subm'},
+                outputs={'output': 'relu'},
+                attributes={'inplace': False},
+            )
+        )
 
 
 def test_lattice_runtime_registry_tracks_public_ops_functions() -> None:
@@ -1145,11 +1211,22 @@ def test_lattice_module_artifact_infers_output_type() -> None:
     assert artifact.manifest.outputs[0].type == 'dense_tensor'
 
 
-def test_lattice_module_artifact_rejects_incompatible_input_type() -> None:
-    with pytest.raises(ValueError, match=r"expects 'sparse_tensor'"):
-        build_lattice_module_artifact(
-            lnn.Linear(1, 1), input_type='dense_tensor'
-        )
+def test_lattice_module_artifact_supports_dense_linear_input_type() -> None:
+    module = lnn.Linear(1, 2)
+    module.weight = _weights()['linear.weight']
+    module.bias = _weights()['linear.bias']
+    artifact = build_lattice_module_artifact(
+        module,
+        input_type='dense_tensor',
+        output_name='output',
+        output_type='dense_tensor',
+    )
+    x = mx.array([[1.0], [2.0]], dtype=mx.float32)
+    actual = LatticeModel(artifact.manifest, artifact.weights)(x)
+    expected = x @ module.weight.T + module.bias
+    mx.eval(actual, expected)
+
+    assert_nested_close(actual.tolist(), expected.tolist())
 
 
 @pytest.mark.parametrize('bits', [4, 8])

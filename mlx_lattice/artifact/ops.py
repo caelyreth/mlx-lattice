@@ -6,6 +6,32 @@ from typing import Any, Literal, Protocol, cast
 
 import mlx.core as mx
 from lattice_contract import (
+    FEATURE_BATCH_NORM,
+    FEATURE_DROPOUT,
+    FEATURE_GELU,
+    FEATURE_LAYER_NORM,
+    FEATURE_LEAKY_RELU,
+    FEATURE_LINEAR,
+    FEATURE_QUANTIZED_LINEAR,
+    FEATURE_RELU,
+    FEATURE_RMS_NORM,
+    FEATURE_SIGMOID,
+    FEATURE_SILU,
+    FEATURE_SOFTPLUS,
+    FEATURE_TANH,
+    POOL_GLOBAL_AVG,
+    POOL_GLOBAL_MAX,
+    POOL_GLOBAL_SUM,
+    SPARSE_ADD,
+    SPARSE_CONV3D,
+    SPARSE_CONV_TRANSPOSE3D,
+    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
+    SPARSE_QUANTIZED_CONV3D,
+    SPARSE_QUANTIZED_CONV_TRANSPOSE3D,
+    SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D,
+    SPARSE_QUANTIZED_SUBM_CONV3D,
+    SPARSE_SUBM_CONV3D,
+    VALUE_FIELD,
     IRNode,
     IRParameterKind,
     IRValueType,
@@ -21,11 +47,12 @@ from mlx_lattice.artifact.bindings import (
     iter_value_type_bindings,
     value_type_fields,
 )
-from mlx_lattice.core import SparseTensor
+from mlx_lattice.core import QuantizedWeight, SparseTensor
 from mlx_lattice.nn._artifact import (
     annotation_is_graph_value,
     annotation_is_value_sequence,
 )
+from mlx_lattice.ops._quantized import quantized_matmul
 
 
 class OperationRegistrar(Protocol):
@@ -48,11 +75,9 @@ def register_artifact_ops(lattice_op: OperationRegistrar) -> None:
     """Register small artifact-graph utility ops."""
 
     @lattice_op(
-        'value.field',
+        VALUE_FIELD,
         function=_field_value,
         inputs={'input': 'value'},
-        attributes={'field': 'field'},
-        output_types={'output': 'any'},
     )
     def _field(
         context: ExecutionContext,
@@ -132,41 +157,29 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
 
     p = public_ops()
 
-    for op, fn, attrs, value_attrs in (
+    for contract, fn in (
         (
-            'sparse.conv3d',
+            SPARSE_CONV3D,
             p['conv3d'],
-            _KERNEL_ATTRS,
-            {'coordinates': 'coordinates'},
         ),
         (
-            'sparse.subm_conv3d',
+            SPARSE_SUBM_CONV3D,
             p['subm_conv3d'],
-            {'kernel_size': 'kernel_size', 'dilation': 'dilation'},
-            {},
         ),
         (
-            'sparse.conv_transpose3d',
+            SPARSE_CONV_TRANSPOSE3D,
             p['conv_transpose3d'],
-            _KERNEL_ATTRS,
-            {},
         ),
         (
-            'sparse.generative_conv_transpose3d',
+            SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
             p['generative_conv_transpose3d'],
-            {'kernel_size': 'kernel_size', 'stride': 'stride'},
-            {},
         ),
     ):
 
         @lattice_op(
-            op,
+            contract,
             function=fn,
             inputs={'input': 'x'},
-            parameters={'weight': 'weight'},
-            optional_parameters={'bias': 'bias'},
-            attributes=attrs,
-            value_attributes=value_attrs,
         )
         def _conv(
             context: ExecutionContext,
@@ -175,10 +188,9 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
             return passthrough(lattice_op, context, node)
 
     @lattice_op(
-        'sparse.add',
+        SPARSE_ADD,
         function=p['sparse_add'],
         inputs={'lhs': 'lhs', 'rhs': 'rhs'},
-        attributes={'join': 'join'},
     )
     def _sparse_add(
         context: ExecutionContext,
@@ -187,26 +199,22 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
         return passthrough(lattice_op, context, node)
 
     @lattice_op(
-        'feature.linear',
+        FEATURE_LINEAR,
         function=p['linear'],
         inputs={'input': 'x'},
-        parameters={'weight': 'weight'},
-        optional_parameters={'bias': 'bias'},
+        handler=_linear(lattice_op),
     )
-    def _linear(
+    def _linear_op(
         context: ExecutionContext,
         node: IRNode,
     ) -> dict[str, GraphValue]:
         return passthrough(lattice_op, context, node)
 
     @lattice_op(
-        'feature.quantized_linear',
+        FEATURE_QUANTIZED_LINEAR,
         function=p['linear'],
         inputs={'input': 'x'},
-        parameters={
-            'weight': ParameterBinding('weight', 'quantized_weight'),
-        },
-        optional_parameters={'bias': 'bias'},
+        handler=_linear(lattice_op),
     )
     def _quantized_linear(
         context: ExecutionContext,
@@ -214,43 +222,29 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
     ) -> dict[str, GraphValue]:
         return passthrough(lattice_op, context, node)
 
-    for op, fn, attrs, value_attrs in (
+    for contract, fn in (
         (
-            'sparse.quantized_conv3d',
+            SPARSE_QUANTIZED_CONV3D,
             p['conv3d'],
-            _KERNEL_ATTRS,
-            {'coordinates': 'coordinates'},
         ),
         (
-            'sparse.quantized_subm_conv3d',
+            SPARSE_QUANTIZED_SUBM_CONV3D,
             p['subm_conv3d'],
-            {'kernel_size': 'kernel_size', 'dilation': 'dilation'},
-            {},
         ),
         (
-            'sparse.quantized_conv_transpose3d',
+            SPARSE_QUANTIZED_CONV_TRANSPOSE3D,
             p['conv_transpose3d'],
-            _KERNEL_ATTRS,
-            {},
         ),
         (
-            'sparse.quantized_generative_conv_transpose3d',
+            SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D,
             p['generative_conv_transpose3d'],
-            {'kernel_size': 'kernel_size', 'stride': 'stride'},
-            {},
         ),
     ):
 
         @lattice_op(
-            op,
+            contract,
             function=fn,
             inputs={'input': 'x'},
-            parameters={
-                'weight': ParameterBinding('weight', 'quantized_weight'),
-            },
-            optional_parameters={'bias': 'bias'},
-            attributes=attrs,
-            value_attributes=value_attrs,
         )
         def _quantized_conv(
             context: ExecutionContext,
@@ -258,38 +252,24 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
         ) -> dict[str, GraphValue]:
             return passthrough(lattice_op, context, node)
 
-    for name in (
-        'relu',
-        'sigmoid',
-        'silu',
-        'tanh',
-        'gelu',
-        'leaky_relu',
-        'softplus',
-        'dropout',
-        'batch_norm',
-        'layer_norm',
-        'rms_norm',
+    for contract, name in (
+        (FEATURE_RELU, 'relu'),
+        (FEATURE_SIGMOID, 'sigmoid'),
+        (FEATURE_SILU, 'silu'),
+        (FEATURE_TANH, 'tanh'),
+        (FEATURE_GELU, 'gelu'),
+        (FEATURE_LEAKY_RELU, 'leaky_relu'),
+        (FEATURE_SOFTPLUS, 'softplus'),
+        (FEATURE_DROPOUT, 'dropout'),
+        (FEATURE_BATCH_NORM, 'batch_norm'),
+        (FEATURE_LAYER_NORM, 'layer_norm'),
+        (FEATURE_RMS_NORM, 'rms_norm'),
     ):
-        signature = inspect.signature(p[name])
-        parameter_args = {
-            arg: arg
-            for arg in ('weight', 'bias', 'mean', 'var')
-            if arg in signature.parameters
-        }
-        attrs = {
-            arg: arg
-            for arg, param in signature.parameters.items()
-            if param.default is not inspect.Parameter.empty
-            and arg not in parameter_args
-        }
 
         @lattice_op(
-            f'feature.{name}',
+            contract,
             function=p[name],
             inputs={'input': 'x'},
-            optional_parameters=parameter_args,
-            attributes=attrs,
         )
         def _feature(
             context: ExecutionContext,
@@ -297,10 +277,14 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
         ) -> dict[str, GraphValue]:
             return passthrough(lattice_op, context, node)
 
-    for name in ('sum', 'avg', 'max'):
+    for contract, name in (
+        (POOL_GLOBAL_SUM, 'sum'),
+        (POOL_GLOBAL_AVG, 'avg'),
+        (POOL_GLOBAL_MAX, 'max'),
+    ):
 
         @lattice_op(
-            f'pool.global_{name}',
+            contract,
             function=p[f'global_{name}_pool'],
             inputs={'input': 'x'},
             handler=_pool_global(lattice_op),
@@ -342,6 +326,49 @@ def passthrough(
     return lattice_op.binding(node.op).run_default(context, node)
 
 
+def _linear(lattice_op: OperationRegistrar):
+    def handler(
+        context: ExecutionContext,
+        node: IRNode,
+    ) -> dict[str, GraphValue]:
+        binding = lattice_op.binding(node.op)
+        kwargs = binding.arguments(context, node)
+        x = kwargs['x']
+        if isinstance(x, mx.array):
+            return {
+                binding.output: _dense_linear(
+                    x,
+                    kwargs['weight'],
+                    cast(mx.array | None, kwargs.get('bias')),
+                )
+            }
+        return {binding.output: binding.function(**kwargs)}
+
+    return handler
+
+
+def _dense_linear(
+    x: mx.array,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None,
+) -> mx.array:
+    if isinstance(weight, QuantizedWeight):
+        out = quantized_matmul(x, weight)
+    else:
+        if weight.ndim != 2:
+            raise ValueError('weight must have shape (C_out, C_in).')
+        if x.ndim < 1 or int(x.shape[-1]) != int(weight.shape[1]):
+            raise ValueError(
+                'weight input channels must match x trailing dimension.'
+            )
+        out = x @ weight.T
+    if bias is None:
+        return out
+    if bias.ndim != 1 or int(bias.shape[0]) != int(out.shape[-1]):
+        raise ValueError('bias must have shape (C_out,).')
+    return out + bias
+
+
 def _field_value(value: GraphValue, field: str) -> GraphValue:
     if not _is_allowed_field(value, field):
         raise ValueError(
@@ -369,7 +396,7 @@ def _pool_global(lattice_op: OperationRegistrar):
         x = context.sparse(_str_ref(node.inputs['input']))
         binding = lattice_op.binding(node.op)
         fn = cast(Callable[[SparseTensor], mx.array], binding.function)
-        if x.batch_counts is not None or node.op == 'pool.global_max':
+        if x.batch_counts is not None or node.op == POOL_GLOBAL_MAX.name:
             return {'output': fn(x)}
         if context.batch_size is None:
             raise ValueError(
@@ -423,14 +450,6 @@ def _op_name(name: str) -> str:
     return f'ops.{name}'
 
 
-_KERNEL_ATTRS = {
-    'kernel_size': 'kernel_size',
-    'stride': 'stride',
-    'padding': 'padding',
-    'dilation': 'dilation',
-}
-
-
 def _is_sequence_parameter(
     name: str,
     parameter: inspect.Parameter,
@@ -449,39 +468,5 @@ def _hint_parameters(
     hints: Mapping[str, IRParameterKind],
 ) -> dict[str, ParameterBinding]:
     return {
-        name: ParameterBinding(name, _parameter_kind(kind))
-        for name, kind in hints.items()
+        name: ParameterBinding(name, kind) for name, kind in hints.items()
     }
-
-
-def _parameter_kind(kind: IRParameterKind):
-    if kind == 'array_or_quantized_weight':
-        return 'array_or_quantized_weight'
-    if kind == 'quantized_weight':
-        return 'quantized_weight'
-    if kind == 'optional_array':
-        return 'optional_array'
-    return 'array'
-
-
-_SEMANTIC_ALIAS_FUNCTIONS = {
-    'conv3d',
-    'subm_conv3d',
-    'conv_transpose3d',
-    'generative_conv_transpose3d',
-    'linear',
-    'relu',
-    'sigmoid',
-    'silu',
-    'tanh',
-    'gelu',
-    'leaky_relu',
-    'softplus',
-    'dropout',
-    'batch_norm',
-    'layer_norm',
-    'rms_norm',
-    'global_sum_pool',
-    'global_avg_pool',
-    'global_max_pool',
-}

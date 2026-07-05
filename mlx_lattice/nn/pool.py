@@ -5,6 +5,11 @@ from typing import Literal
 
 import mlx.core as mx
 import mlx.nn as mxnn
+from lattice_contract import (
+    POOL_GLOBAL_AVG,
+    POOL_GLOBAL_MAX,
+    POOL_GLOBAL_SUM,
+)
 
 from mlx_lattice.core import KernelSpec, SparseTensor
 from mlx_lattice.nn._artifact import (
@@ -198,7 +203,7 @@ class AvgPool3d(Pool3d):
         )
 
 
-@lattice_module('pool.global_sum')
+@lattice_module(POOL_GLOBAL_SUM)
 class GlobalSumPool(mxnn.Module):
     """Batch-wise global sum-pooling module returning dense ``(B, C)`` rows."""
 
@@ -206,7 +211,7 @@ class GlobalSumPool(mxnn.Module):
         return global_sum_pool(x)
 
 
-@lattice_module('pool.global_avg')
+@lattice_module(POOL_GLOBAL_AVG)
 class GlobalAvgPool(mxnn.Module):
     """Batch-wise global average-pooling module returning dense ``(B, C)`` rows."""
 
@@ -214,7 +219,7 @@ class GlobalAvgPool(mxnn.Module):
         return global_avg_pool(x)
 
 
-@lattice_module('pool.global_max')
+@lattice_module(POOL_GLOBAL_MAX)
 class GlobalMaxPool(mxnn.Module):
     """Batch-wise global max-pooling module returning dense ``(B, C)`` rows."""
 

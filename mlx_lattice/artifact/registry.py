@@ -5,13 +5,20 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar, cast
 
 import mlx.nn as mxnn
-from lattice_contract import IRNode, IROpSpec, IRValueType
+from lattice_contract import (
+    IRNode,
+    IROpContract,
+    IROpSpec,
+    IRParameterKind,
+    IRValueType,
+)
 
 import mlx_lattice.nn as lnn
 from mlx_lattice.artifact.bindings import (
     GraphHandler,
     GraphValue,
     ModuleBinding,
+    ModuleParameterBinding,
     OperationBinding,
     ParameterBinding,
 )
@@ -35,7 +42,7 @@ class _OperationRegistrar:
 
     def __call__(
         self,
-        name: str,
+        op: str | IROpContract,
         *,
         function: Callable[..., GraphValue],
         inputs: Mapping[str, str],
@@ -54,7 +61,7 @@ class _OperationRegistrar:
         handler: GraphHandler | None = None,
     ) -> Callable[[HandlerT], HandlerT]:
         return lattice_op(
-            name,
+            op,
             function=function,
             inputs=inputs,
             outputs=outputs,
@@ -78,7 +85,7 @@ class _OperationRegistrar:
 
 
 def lattice_op(
-    name: str,
+    op: str | IROpContract,
     *,
     function: Callable[..., GraphValue],
     inputs: Mapping[str, str],
@@ -97,32 +104,72 @@ def lattice_op(
 ) -> Callable[[HandlerT], HandlerT]:
     """Register a public operation with one compact annotation."""
 
+    contract = op if isinstance(op, IROpContract) else None
+    op_name: str = contract.name if contract is not None else cast(str, op)
+    spec: IROpSpec
+    if contract is not None:
+        _reject_contract_schema_overrides(
+            op_name,
+            outputs=outputs,
+            parameters=parameters,
+            optional_parameters=optional_parameters,
+            attributes=attributes,
+            value_attributes=value_attributes,
+            output_types=output_types,
+            input_types=input_types,
+            value_attribute_types=value_attribute_types,
+        )
+        _require_same_keys(
+            frozenset(inputs),
+            contract.spec.inputs,
+            op_name,
+            'inputs',
+        )
+        spec = contract.spec
+        outputs = set(spec.outputs)
+        parameters = _contract_parameters(
+            contract.spec.parameters,
+            contract.parameter_kinds,
+        )
+        optional_parameters = _contract_parameters(
+            contract.spec.optional_parameters,
+            contract.optional_parameter_kinds,
+        )
+        attributes = {name: name for name in contract.spec.attributes}
+        value_attributes = {
+            name: name for name in contract.spec.value_attributes
+        }
+    else:
+        spec = IROpSpec(
+            name=op_name,
+            inputs=frozenset(inputs),
+            outputs=frozenset(outputs or {output}),
+            output_types=dict(
+                output_types or {output: function_output_type(function)}
+            ),
+            input_types=dict(
+                input_types or _argument_types(function, inputs)
+            ),
+            value_attribute_types=dict(
+                value_attribute_types
+                or _argument_types(function, value_attributes or {})
+            ),
+            parameters=frozenset(_parameter_bindings(parameters or {})),
+            optional_parameters=frozenset(
+                _parameter_bindings(optional_parameters or {})
+            ),
+            attributes=frozenset(attributes or ()),
+            value_attributes=frozenset(value_attributes or ()),
+        )
     parameter_bindings = _parameter_bindings(parameters or {})
     optional_bindings = _parameter_bindings(optional_parameters or {})
-    spec = IROpSpec(
-        name=name,
-        inputs=frozenset(inputs),
-        outputs=frozenset(outputs or {output}),
-        output_types=dict(
-            output_types or {output: function_output_type(function)}
-        ),
-        input_types=dict(input_types or _argument_types(function, inputs)),
-        value_attribute_types=dict(
-            value_attribute_types
-            or _argument_types(function, value_attributes or {})
-        ),
-        parameters=frozenset(parameter_bindings),
-        optional_parameters=frozenset(optional_bindings),
-        attributes=frozenset(attributes or ()),
-        value_attributes=frozenset(value_attributes or ()),
-    )
 
     def decorator(default_handler: HandlerT) -> HandlerT:
-        if name in _OPS:
+        if op_name in _OPS:
             raise ValueError(
-                f'duplicate lattice operation binding: {name}.'
+                f'duplicate lattice operation binding: {op_name}.'
             )
-        _OPS[name] = OperationBinding(
+        _OPS[op_name] = OperationBinding(
             spec=spec,
             function=function,
             input_arguments=dict(inputs),
@@ -142,8 +189,8 @@ def lattice_op(
 def module_binding[ModuleT: mxnn.Module](
     module_type: type[ModuleT],
     *,
-    op: str,
-    parameter_names: Sequence[str] = (),
+    op: str | IROpContract,
+    parameters: Sequence[ModuleParameterBinding] = (),
     attributes: Callable[[ModuleT], dict[str, Any]] = lambda _: {},
 ) -> Callable[[type[ModuleT]], type[ModuleT]]:
     """Register a serializable NN module producer."""
@@ -155,8 +202,8 @@ def module_binding[ModuleT: mxnn.Module](
             )
         _MODULES[module_type] = ModuleBinding(
             module_type=module_type,
-            op=op,
-            parameter_names=tuple(parameter_names),
+            op=op.name if isinstance(op, IROpContract) else op,
+            parameters=tuple(parameters),
             attributes=lambda module: attributes(cast(ModuleT, module)),
         )
         return cls
@@ -254,6 +301,43 @@ def _parameter_bindings(
     return out
 
 
+def _contract_parameters(
+    names: frozenset[str],
+    kinds: Mapping[str, IRParameterKind],
+) -> dict[str, ParameterBinding]:
+    return {
+        name: ParameterBinding(name, kinds.get(name, IRParameterKind.ARRAY))
+        for name in names
+    }
+
+
+def _require_same_keys(
+    actual: frozenset[str],
+    expected: frozenset[str],
+    op: str,
+    label: str,
+) -> None:
+    if actual == expected:
+        return
+    raise ValueError(
+        f'{op}.{label} drifted from contract: expected '
+        f'{sorted(expected)}, got {sorted(actual)}.'
+    )
+
+
+def _reject_contract_schema_overrides(
+    op: str,
+    **values: object,
+) -> None:
+    present = sorted(
+        name for name, value in values.items() if value is not None
+    )
+    if present:
+        raise ValueError(
+            f'{op} binding cannot override contract fields: {present}.'
+        )
+
+
 def _argument_types(
     function: Callable[..., GraphValue],
     arguments: Mapping[str, str],
@@ -311,7 +395,7 @@ def _register_modules() -> None:
         _MODULES[module_type] = ModuleBinding(
             module_type=module_type,
             op=spec.op,
-            parameter_names=spec.parameters,
+            parameters=spec.parameters,
             attributes=spec.attribute_values,
         )
 

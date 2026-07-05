@@ -7,6 +7,7 @@ import mlx.core as mx
 from lattice_contract import (
     IRInputRef,
     IRManifest,
+    IRParameterKind,
     IRTensorSpec,
     IRValueType,
 )
@@ -267,10 +268,13 @@ def _validate_weight(
     binding: ParameterBinding,
     weights: Mapping[str, mx.array],
 ) -> None:
-    if binding.kind in ('quantized_weight', 'array_or_quantized_weight'):
+    if binding.kind in (
+        IRParameterKind.QUANTIZED_WEIGHT,
+        IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT,
+    ):
         if _has_quantized_weight(name, weights):
             return
-        if binding.kind == 'quantized_weight':
+        if binding.kind is IRParameterKind.QUANTIZED_WEIGHT:
             _raise_missing_quantized_weight(node_id, name, weights)
         if name in weights:
             return

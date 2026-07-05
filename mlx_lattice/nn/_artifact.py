@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Any, TypeVar, cast
 
 import mlx.nn as mxnn
-from lattice_contract import IRValueType
+from lattice_contract import IROpContract, IRValueType
+
+from mlx_lattice.artifact.bindings import ModuleParameterBinding
 
 ModuleT = TypeVar('ModuleT', bound=type[mxnn.Module])
 _ARTIFACT_SPECS: dict[type[mxnn.Module], ModuleArtifactSpec] = {}
@@ -25,7 +27,7 @@ class ModuleArtifactSpec:
     """Serializable sparse-module contract attached to an NN class."""
 
     op: str
-    parameters: tuple[str, ...] = ()
+    parameters: tuple[ModuleParameterBinding, ...] = ()
     attributes: tuple[ArtifactAttribute, ...] = ()
 
     def attribute_values(self, module: mxnn.Module) -> dict[str, Any]:
@@ -38,16 +40,16 @@ class ModuleArtifactSpec:
 
 
 def lattice_module(
-    op: str,
+    op: str | IROpContract,
     *,
-    parameters: Sequence[str] = (),
+    parameters: Sequence[str | ModuleParameterBinding] = (),
     attributes: Sequence[ArtifactAttribute] = (),
 ) -> Callable[[ModuleT], ModuleT]:
     """Attach lattice artifact metadata to a sparse NN module class."""
 
     spec = ModuleArtifactSpec(
-        op=op,
-        parameters=tuple(parameters),
+        op=op.name if isinstance(op, IROpContract) else op,
+        parameters=tuple(_module_parameter(item) for item in parameters),
         attributes=tuple(attributes),
     )
 
@@ -89,6 +91,15 @@ def computed_attribute(
     return ArtifactAttribute(name, getter)
 
 
+def module_parameter(
+    name: str,
+    source: str | None = None,
+) -> ModuleParameterBinding:
+    """Map an NN module field to an artifact parameter name."""
+
+    return ModuleParameterBinding(name, name if source is None else source)
+
+
 def kernel_spec_attributes(*names: str) -> tuple[ArtifactAttribute, ...]:
     """Read selected :class:`KernelSpec` fields as manifest attributes."""
 
@@ -99,6 +110,12 @@ def kernel_spec_attributes(*names: str) -> tuple[ArtifactAttribute, ...]:
         'dilation': 'spec.dilation',
     }
     return tuple(path_attribute(name, paths[name]) for name in names)
+
+
+def _module_parameter(
+    value: str | ModuleParameterBinding,
+) -> ModuleParameterBinding:
+    return module_parameter(value) if isinstance(value, str) else value
 
 
 def annotation_value_type(annotation: object) -> IRValueType:

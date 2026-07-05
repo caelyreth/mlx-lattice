@@ -6,6 +6,12 @@ from typing import TYPE_CHECKING
 
 import mlx.core as mx
 import mlx.nn as mxnn
+from lattice_contract import (
+    SPARSE_CONV3D,
+    SPARSE_CONV_TRANSPOSE3D,
+    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
+    SPARSE_SUBM_CONV3D,
+)
 
 from mlx_lattice.core import (
     CoordinateMapKey,
@@ -37,7 +43,7 @@ if TYPE_CHECKING:
 
 
 @lattice_module(
-    'sparse.conv3d',
+    SPARSE_CONV3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes(
         'kernel_size',
@@ -114,7 +120,7 @@ class Conv3d(mxnn.Module):
 
 
 @lattice_module(
-    'sparse.subm_conv3d',
+    SPARSE_SUBM_CONV3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes('kernel_size', 'dilation'),
 )
@@ -171,7 +177,7 @@ class SubmConv3d(mxnn.Module):
 
 
 @lattice_module(
-    'sparse.conv_transpose3d',
+    SPARSE_CONV_TRANSPOSE3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes(
         'kernel_size',
@@ -237,7 +243,7 @@ class ConvTranspose3d(mxnn.Module):
 
 
 @lattice_module(
-    'sparse.generative_conv_transpose3d',
+    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes('kernel_size', 'stride'),
 )

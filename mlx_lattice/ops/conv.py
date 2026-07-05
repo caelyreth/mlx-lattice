@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import mlx.core as mx
-from lattice_contract import lattice_op_hints
+from lattice_contract import IRParameterKind, lattice_op_hints
 
 from mlx_lattice.core import (
     CoordinateMapKey,
@@ -27,8 +27,8 @@ __all__ = [
 
 
 @lattice_op_hints(
-    parameters={'weight': 'array_or_quantized_weight'},
-    optional_parameters={'bias': 'array'},
+    parameters={'weight': IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT},
+    optional_parameters={'bias': IRParameterKind.ARRAY},
     value_attributes={'coordinates'},
 )
 def conv3d(
@@ -106,8 +106,8 @@ def conv3d(
 
 
 @lattice_op_hints(
-    parameters={'weight': 'array_or_quantized_weight'},
-    optional_parameters={'bias': 'array'},
+    parameters={'weight': IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT},
+    optional_parameters={'bias': IRParameterKind.ARRAY},
 )
 def subm_conv3d(
     x: SparseTensor,
@@ -147,8 +147,8 @@ def subm_conv3d(
 
 
 @lattice_op_hints(
-    parameters={'weight': 'array_or_quantized_weight'},
-    optional_parameters={'bias': 'array'},
+    parameters={'weight': IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT},
+    optional_parameters={'bias': IRParameterKind.ARRAY},
 )
 def conv_transpose3d(
     x: SparseTensor,
@@ -183,8 +183,8 @@ def conv_transpose3d(
 
 
 @lattice_op_hints(
-    parameters={'weight': 'array_or_quantized_weight'},
-    optional_parameters={'bias': 'array'},
+    parameters={'weight': IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT},
+    optional_parameters={'bias': IRParameterKind.ARRAY},
 )
 def generative_conv_transpose3d(
     x: SparseTensor,

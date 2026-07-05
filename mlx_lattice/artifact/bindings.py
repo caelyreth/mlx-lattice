@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import mlx.core as mx
 import mlx.nn as mxnn
-from lattice_contract import DTypePolicy, IRNode, IROpSpec, IRValueType
+from lattice_contract import (
+    DTypePolicy,
+    IRNode,
+    IROpSpec,
+    IRParameterKind,
+    IRValueType,
+)
 from lattice_contract.manifest import IRInputRef
 
 from mlx_lattice.core import QuantizedWeight, SparseTensor
@@ -40,12 +46,7 @@ type GraphValue = (
 type GraphHandler = Callable[
     ['ExecutionContext', IRNode], dict[str, GraphValue]
 ]
-ParamKind = Literal[
-    'array',
-    'optional_array',
-    'quantized_weight',
-    'array_or_quantized_weight',
-]
+ParamKind = IRParameterKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +54,15 @@ class ParameterBinding:
     """How an IR parameter name is converted into a runtime argument."""
 
     argument: str
-    kind: ParamKind = 'array'
+    kind: ParamKind = IRParameterKind.ARRAY
+
+
+@dataclass(frozen=True, slots=True)
+class ModuleParameterBinding:
+    """How an NN module field is stored as an IR parameter."""
+
+    name: str
+    source: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +158,7 @@ class ModuleBinding:
 
     module_type: type[mxnn.Module]
     op: str
-    parameter_names: tuple[str, ...] = ()
+    parameters: tuple[ModuleParameterBinding, ...] = ()
     attributes: Callable[[mxnn.Module], dict[str, Any]] = lambda _: {}
 
 
@@ -185,12 +194,17 @@ class ExecutionContext:
             raise ValueError(f'graph value {name!r} is not a SparseTensor.')
         return value
 
-    def parameter(self, name: str, kind: ParamKind = 'array') -> Any:
-        if kind == 'optional_array':
+    def parameter(
+        self,
+        name: str,
+        kind: ParamKind | str = IRParameterKind.ARRAY,
+    ) -> Any:
+        kind = IRParameterKind(kind)
+        if kind is IRParameterKind.OPTIONAL_ARRAY:
             return None if name == '' else self.array(name)
-        if kind == 'quantized_weight':
+        if kind is IRParameterKind.QUANTIZED_WEIGHT:
             return self.quantized_weight(name)
-        if kind == 'array_or_quantized_weight':
+        if kind is IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT:
             return (
                 self.quantized_weight(name)
                 if f'{name}.attrs' in self.weights

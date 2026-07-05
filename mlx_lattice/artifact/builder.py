@@ -8,15 +8,18 @@ import mlx.core as mx
 import mlx.nn as mxnn
 from lattice_contract import (
     CURRENT_SCHEMA_VERSION,
+    VALUE_FIELD,
     IRInputRef,
     IRManifest,
     IRNode,
+    IROpContract,
+    IRParameterKind,
     IRTensorSpec,
     IRValueType,
     ir_value_type,
 )
 
-from mlx_lattice.artifact.bindings import layout_id
+from mlx_lattice.artifact.bindings import ModuleParameterBinding, layout_id
 from mlx_lattice.artifact.ops import field_value_type
 from mlx_lattice.artifact.registry import (
     module_artifact_binding,
@@ -84,7 +87,7 @@ class LatticeGraphBuilder:
     def add_op(
         self,
         name: str,
-        op: str,
+        op: str | IROpContract,
         *,
         inputs: Mapping[str, IRInputRef],
         output: str | None = None,
@@ -94,13 +97,14 @@ class LatticeGraphBuilder:
     ) -> str:
         """Append an operation node and return its primary output value."""
 
-        binding = operation_binding(op)
+        op_name = _contract_name(op)
+        binding = operation_binding(op_name)
         node_id = self.unique_name(name)
         primary = output or f'{node_id}.output'
         node_outputs = dict(outputs or {binding.output: primary})
         node = IRNode(
             id=node_id,
-            op=op,
+            op=op_name,
             inputs=dict(inputs),
             outputs=node_outputs,
             parameters=dict(parameters or {}),
@@ -120,7 +124,7 @@ class LatticeGraphBuilder:
 
     def call(
         self,
-        op: str,
+        op: str | IROpContract,
         /,
         name: str | None = None,
         *,
@@ -141,8 +145,9 @@ class LatticeGraphBuilder:
         needs exact port dictionaries.
         """
 
-        binding = operation_binding(op)
-        node_name = name or _call_name(op)
+        op_name = _contract_name(op)
+        binding = operation_binding(op_name)
+        node_name = name or _call_name(op_name)
         if parameters is None:
             node_parameters: dict[str, str] = {}
         else:
@@ -159,7 +164,7 @@ class LatticeGraphBuilder:
                 value = arguments[name_]
                 if not isinstance(value, str):
                     raise ValueError(
-                        f'{op}.{name_} must be a graph value name.'
+                        f'{op_name}.{name_} must be a graph value name.'
                     )
                 attributes[name_] = value
                 remaining.remove(name_)
@@ -174,17 +179,18 @@ class LatticeGraphBuilder:
                     f'{node_name}.{name_}',
                     value,
                     binding.parameter_arguments[name_].kind,
-                    op,
+                    op_name,
                     name_,
                 )
                 remaining.remove(name_)
         if remaining:
             raise ValueError(
-                f'{op} received unsupported arguments: {sorted(remaining)}.'
+                f'{op_name} received unsupported arguments: '
+                f'{sorted(remaining)}.'
             )
         return self.add_op(
             node_name,
-            op,
+            op_name,
             inputs=inputs,
             output=output,
             outputs=outputs,
@@ -196,7 +202,7 @@ class LatticeGraphBuilder:
         self,
         name: str,
         value: object,
-        kind: str,
+        kind: IRParameterKind,
         op: str,
         argument: str,
     ) -> str:
@@ -204,15 +210,15 @@ class LatticeGraphBuilder:
             return value
         if isinstance(value, QuantizedWeight):
             if kind not in (
-                'quantized_weight',
-                'array_or_quantized_weight',
+                IRParameterKind.QUANTIZED_WEIGHT,
+                IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT,
             ):
                 raise ValueError(
                     f'{op}.{argument} does not accept QuantizedWeight.'
                 )
             return self.add_quantized_parameter(name, value)
         if isinstance(value, mx.array):
-            if kind == 'quantized_weight':
+            if kind is IRParameterKind.QUANTIZED_WEIGHT:
                 raise ValueError(
                     f'{op}.{argument} requires QuantizedWeight or a packed '
                     'parameter key.'
@@ -239,7 +245,7 @@ class LatticeGraphBuilder:
         parameters = self.module_parameters(
             node_id,
             module,
-            binding.parameter_names,
+            binding.parameters,
         )
         node = IRNode(
             id=node_id,
@@ -287,7 +293,7 @@ class LatticeGraphBuilder:
 
         output = self.add_op(
             name or f'{value}.{field}',
-            'value.field',
+            VALUE_FIELD,
             inputs={'input': value},
             attributes={'field': field},
         )
@@ -332,39 +338,26 @@ class LatticeGraphBuilder:
         self,
         node_id: str,
         module: mxnn.Module,
-        names: tuple[str, ...],
+        parameters: tuple[ModuleParameterBinding, ...],
     ) -> dict[str, str]:
         """Artifact registered module parameters into artifact weights."""
 
         out: dict[str, str] = {}
-        for name in names:
-            if name == 'bias' and name not in module:
+        for parameter in parameters:
+            name = parameter.name
+            source = parameter.source
+            if source == 'bias' and source not in module:
                 continue
-            if name == 'weight' and hasattr(module, '_quantized_weight'):
+            if source == 'weight' and hasattr(module, '_quantized_weight'):
                 out[name] = self.add_quantized_parameter(
                     f'{node_id}.{name}',
                     module._quantized_weight(),
                 )
                 continue
-            if name == 'running_mean':
-                if hasattr(module, 'running_mean'):
-                    out['mean'] = self.add_parameter(
-                        f'{node_id}.mean',
-                        module.running_mean,
-                    )
+            value = _module_parameter_value(module, source)
+            if value is None:
                 continue
-            if name == 'running_var':
-                if hasattr(module, 'running_var'):
-                    out['var'] = self.add_parameter(
-                        f'{node_id}.var',
-                        module.running_var,
-                    )
-                continue
-            if name not in module:
-                continue
-            out[name] = self.add_parameter(
-                f'{node_id}.{name}', module[name]
-            )
+            out[name] = self.add_parameter(f'{node_id}.{name}', value)
         return out
 
     def unique_name(self, name: str) -> str:
@@ -587,6 +580,16 @@ def _build_child(
     )
 
 
+def _module_parameter_value(
+    module: mxnn.Module,
+    source: str,
+) -> mx.array | None:
+    if source in module:
+        return module[source]
+    value = getattr(module, source, None)
+    return value if isinstance(value, mx.array) else None
+
+
 def _ordered_children(
     module: mxnn.Module,
 ) -> tuple[tuple[str, object], ...]:
@@ -714,6 +717,10 @@ def _input_ref(value: object, name: str) -> IRInputRef:
     )
 
 
+def _contract_name(op: str | IROpContract) -> str:
+    return op.name if isinstance(op, IROpContract) else op
+
+
 def _call_name(op: str) -> str:
     return op.removeprefix('ops.').replace('.', '_')
 
@@ -734,10 +741,10 @@ def _output_items(
 
 
 def _infer_operation_output_type(
-    op: str,
+    op: str | IROpContract,
     port: str = 'output',
 ) -> IRValueType:
-    binding = operation_binding(op)
+    binding = operation_binding(_contract_name(op))
     return binding.spec.output_types.get(port, 'any')
 
 

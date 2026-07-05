@@ -167,20 +167,30 @@ names:
 Operation coverage
 ------------------
 
-The backend-neutral contract package stores the manifest data model and the
-annotation helpers used to describe operation contracts. The MLX artifact
-registry is generated from the approved public lattice surface rather than from
-one bespoke handler per operation. This gives the manifest a compact call
-representation:
+The backend-neutral contract package owns the semantic operation registry used
+by deployable artifacts. Each built-in contract is exported as an object such as
+``lattice_contract.SPARSE_CONV3D`` or
+``lattice_contract.FEATURE_LINEAR``. The object carries the manifest op name,
+input and output ports, value types, parameter storage kind, JSON attributes,
+and value attributes. MLX does not rebuild those semantic specs locally; it
+binds implementations to the shared contract objects and validates the binding
+shape at import time.
+
+This gives the manifest a compact call representation:
 
 * ``inputs`` map operation argument names to graph values;
 * ``parameters`` map tensor argument names to entries in ``weights.safetensors``;
 * ``attributes`` store JSON-compatible constants such as strides, modes, and
   numeric thresholds;
 * sequence-valued inputs are represented as a list of graph value names;
-* operation specs expose input, value-attribute, and output value types, so
+* contract specs expose input, value-attribute, and output value types, so
   graph builders and future producers can validate wiring and infer manifest
   output contracts without duplicating type strings at every call site.
+
+The semantic registry is the cross-backend IR surface. It should describe
+deployable sparse-lattice behavior rather than MLX or Torch implementation
+details. Current built-ins cover convolution, quantized convolution, feature
+transforms, global pooling, sparse addition, and value-field extraction.
 
 Every public function in ``mlx_lattice.ops`` is addressable as
 ``ops.<function_name>``. The generic route is intentionally broad: it covers
@@ -191,8 +201,8 @@ and output value types from function annotations. When an argument is
 ambiguous, for example a tensor-valued weight that must be stored in
 ``weights.safetensors`` instead of passed as a graph input, the public function
 itself carries a small ``lattice_contract.lattice_op_hints`` annotation. This
-keeps the contract near the operation definition and avoids a separate local
-enumeration table in the artifact implementation.
+keeps MLX-local extension calls concise without making the stable IR a mirror
+of MLX's full Python API.
 
 Common NN inference routes also receive stable semantic aliases:
 
@@ -216,8 +226,8 @@ Common NN inference routes also receive stable semantic aliases:
      - sparse/sparse to sparse output
      - :func:`mlx_lattice.ops.sparse_add`
    * - ``feature.linear``
-     - sparse input to sparse output
-     - :func:`mlx_lattice.ops.linear`
+     - sparse or dense input to matching output form
+     - :func:`mlx_lattice.ops.linear` for sparse values, dense matmul for dense values
    * - ``feature.quantized_linear``
      - sparse input plus packed weight to sparse output
      - :func:`mlx_lattice.ops.linear`
@@ -230,10 +240,10 @@ The generic form remains available as ``ops.<function_name>``. For example,
 ``ops.voxelize`` directly calls :func:`mlx_lattice.ops.voxelize`, and
 ``ops.sparse_add`` directly calls :func:`mlx_lattice.ops.sparse_add`.
 
-Operation support is registered with small annotations and binding descriptors
-instead of hand-written dispatch tables. Specialized aliases are used only when
-the deployment contract benefits from a stable semantic name or from packed
-quantized-parameter decoding.
+Operation support is registered with contract objects and small binding
+descriptors instead of independent hand-written schema tables. Specialized
+aliases are used when the deployment contract benefits from a stable semantic
+name or packed quantized-parameter decoding.
 
 Module artifact
 ---------------
