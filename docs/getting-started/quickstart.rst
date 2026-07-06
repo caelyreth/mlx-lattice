@@ -118,7 +118,7 @@ Target coordinates
 ------------------
 
 ``conv3d`` can compute onto an explicit output support. Pass another
-``SparseTensor``, a ``CoordinateMapKey``, or a coordinate array through
+``SparseTensor``, a runtime ``CoordinateMapKey`` from ``mlx_lattice.core``, or a coordinate array through
 ``coordinates``:
 
 .. code-block:: python

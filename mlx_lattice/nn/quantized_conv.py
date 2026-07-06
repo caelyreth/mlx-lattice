@@ -5,10 +5,10 @@ from collections.abc import Sequence
 import mlx.core as mx
 import mlx.nn as mxnn
 from lattice_contract import (
-    SPARSE_QUANTIZED_CONV3D,
-    SPARSE_QUANTIZED_CONV_TRANSPOSE3D,
-    SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D,
-    SPARSE_QUANTIZED_SUBM_CONV3D,
+    SPARSE_CONV3D,
+    SPARSE_CONV_TRANSPOSE3D,
+    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
+    SPARSE_SUBM_CONV3D,
 )
 
 from mlx_lattice.core import (
@@ -87,7 +87,7 @@ class _QuantizedConvBase(mxnn.Module):
 
 
 @lattice_module(
-    SPARSE_QUANTIZED_CONV3D,
+    SPARSE_CONV3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes(
         'kernel_size',
@@ -175,7 +175,7 @@ class QuantizedConv3d(_QuantizedConvBase):
 
 
 @lattice_module(
-    SPARSE_QUANTIZED_SUBM_CONV3D,
+    SPARSE_SUBM_CONV3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes('kernel_size', 'dilation'),
 )
@@ -239,7 +239,7 @@ class QuantizedSubmConv3d(_QuantizedConvBase):
 
 
 @lattice_module(
-    SPARSE_QUANTIZED_CONV_TRANSPOSE3D,
+    SPARSE_CONV_TRANSPOSE3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes(
         'kernel_size',
@@ -317,7 +317,7 @@ class QuantizedConvTranspose3d(_QuantizedConvBase):
 
 
 @lattice_module(
-    SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D,
+    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
     parameters=('weight', 'bias'),
     attributes=kernel_spec_attributes('kernel_size', 'stride'),
 )

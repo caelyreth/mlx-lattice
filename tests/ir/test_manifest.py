@@ -8,7 +8,8 @@ from lattice_contract import (
     manifest_to_dict,
 )
 
-from mlx_lattice.artifact import LatticeModel, iter_operation_specs
+from mlx_lattice.artifact import LatticeModel
+from mlx_lattice.artifact.registry import iter_operation_specs
 
 
 def _manifest() -> dict:
@@ -55,10 +56,10 @@ def test_ir_op_specs_are_registry_backed() -> None:
         'feature.linear',
         'feature.relu',
         'feature.gelu',
-        'ops.voxelize',
-        'ops.occupancy_downsample',
+        'pool.avg3d',
         'pool.global_avg',
     } <= names
+    assert not any(name.startswith('ops.') for name in names)
     conv = next(spec for spec in specs if spec.name == 'sparse.conv3d')
     assert {
         'kernel_size',

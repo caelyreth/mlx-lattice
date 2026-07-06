@@ -10,10 +10,9 @@ Stable public surface
 The following surfaces are intended to remain source-compatible across normal
 minor releases:
 
-* top-level package imports: ``SparseTensor``, ``CoordinateManager``,
-  ``CoordinateMapKey``, ``QuantizedWeight``, ``quantize_weight``,
-  ``dequantize_weight``, ``backend_info``, and the ``core``, ``ops``, and
-  ``nn`` namespaces;
+* top-level package imports: ``SparseTensor``, ``SparseTensorComponents``,
+  ``QuantizedWeight``, ``quantize_weight``, ``dequantize_weight``,
+  ``backend_info``, and the ``core``, ``ops``, and ``nn`` namespaces;
 * sparse tensor construction and metadata: coordinate rows ordered as
   ``(batch, x, y, z)``, feature rows ordered as ``(N, C)``, sparse stride, and
   coordinate identity via manager/key ownership;
@@ -33,6 +32,8 @@ as stable:
 
 * relation execution views such as CSR views, implicit-GEMM views, and sorted
   implicit-GEMM views;
+* coordinate manager/key identity objects under ``mlx_lattice.core``;
+* legacy JSON artifact graph builders and operation registries;
 * backend route names, Metal kernel names, TensorOps kernel variants, and
   diagnostic reference routes;
 * encoded byte streams from entropy helpers;

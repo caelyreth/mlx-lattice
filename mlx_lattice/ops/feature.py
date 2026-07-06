@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Literal
 
 import mlx.core as mx
-from lattice_contract import IRParameterKind, lattice_op_hints
 
 from mlx_lattice.core import QuantizedWeight, SparseTensor
 from mlx_lattice.ops._quantized import quantized_matmul
@@ -26,10 +25,6 @@ __all__ = [
 ]
 
 
-@lattice_op_hints(
-    parameters={'weight': IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT},
-    optional_parameters={'bias': IRParameterKind.ARRAY},
-)
 def linear(
     x: SparseTensor,
     weight: mx.array | QuantizedWeight,
@@ -155,14 +150,6 @@ def dropout(
     return x.replace(feats=x.feats * mask.astype(x.feats.dtype) / keep)
 
 
-@lattice_op_hints(
-    optional_parameters={
-        'weight': IRParameterKind.ARRAY,
-        'bias': IRParameterKind.ARRAY,
-        'mean': IRParameterKind.ARRAY,
-        'var': IRParameterKind.ARRAY,
-    }
-)
 def batch_norm(
     x: SparseTensor,
     *,
@@ -187,12 +174,6 @@ def batch_norm(
     return x.replace(feats=_affine(feats, weight=weight, bias=bias))
 
 
-@lattice_op_hints(
-    optional_parameters={
-        'weight': IRParameterKind.ARRAY,
-        'bias': IRParameterKind.ARRAY,
-    }
-)
 def layer_norm(
     x: SparseTensor,
     *,
@@ -210,7 +191,6 @@ def layer_norm(
     return x.replace(feats=mx.fast.layer_norm(x.feats, weight, bias, eps))
 
 
-@lattice_op_hints(optional_parameters={'weight': IRParameterKind.ARRAY})
 def rms_norm(
     x: SparseTensor,
     *,

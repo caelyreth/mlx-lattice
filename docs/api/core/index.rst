@@ -4,8 +4,9 @@ Core API
 The core API contains sparse tensor containers, coordinate-management
 primitives, relation data structures, quantized weight containers, and small
 shared type helpers. Pages in this section document canonical implementation
-modules rather than convenience re-export modules. That keeps duplicated entries
-out of the API reference while preserving the normal public import surface.
+modules rather than convenience re-export modules. Runtime identity helpers such
+as coordinate managers are documented here, but the top-level package keeps the
+modeling surface focused on sparse values, ops, modules, and quantized weights.
 
 Core objects are the metadata layer shared by CPU and Metal execution. They do
 not select kernels by themselves; they describe coordinates, active capacity,

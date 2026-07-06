@@ -274,6 +274,8 @@ def _validate_weight(
     ):
         if _has_quantized_weight(name, weights):
             return
+        if _has_partial_quantized_weight(name, weights):
+            _raise_missing_quantized_weight(node_id, name, weights)
         if binding.kind is IRParameterKind.QUANTIZED_WEIGHT:
             _raise_missing_quantized_weight(node_id, name, weights)
         if name in weights:
@@ -287,6 +289,16 @@ def _has_quantized_weight(
     weights: Mapping[str, mx.array],
 ) -> bool:
     return all(
+        f'{name}.{suffix}' in weights
+        for suffix in ('weight', 'scales', 'biases', 'attrs')
+    )
+
+
+def _has_partial_quantized_weight(
+    name: str,
+    weights: Mapping[str, mx.array],
+) -> bool:
+    return any(
         f'{name}.{suffix}' in weights
         for suffix in ('weight', 'scales', 'biases', 'attrs')
     )

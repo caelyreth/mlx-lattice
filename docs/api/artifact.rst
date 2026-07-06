@@ -1,13 +1,15 @@
 Artifact API
 ============
 
-``mlx_lattice.artifact`` loads and saves lattice model artifacts. The deployment
-entry point is :func:`mlx_lattice.artifact.load_lattice_model`, which reads a
-manifest and ``safetensors`` weight file, validates the graph, and returns an
-in-memory :class:`mlx_lattice.artifact.LatticeModel`.
+``mlx_lattice.artifact`` loads and saves legacy lattice model artifacts. The
+deployment entry point is :func:`mlx_lattice.artifact.load_lattice_model`, which
+reads a manifest and ``safetensors`` weight file, validates the graph, and
+returns an in-memory :class:`mlx_lattice.artifact.LatticeModel`.
 
-The package implements the MLX-side artifact loader, graph executor, graph
-builder, and strict low-level writer used by tests and future producers.
+The public package root intentionally exposes only loading, saving, and the
+runtime model. JSON graph builders and registries are legacy submodule tools;
+future producer work should target the MLIR lattice dialect rather than growing
+the JSON graph authoring surface.
 
 The artifact implementation has three layers:
 
@@ -16,28 +18,10 @@ The artifact implementation has three layers:
 * :mod:`mlx_lattice.artifact.registry` maps manifest operations and module
   annotations to approved public ``mlx_lattice.ops`` calls.
 
-Module artifact helpers under :mod:`mlx_lattice.artifact.builder` build manifests
-and weight dictionaries from serializable sparse NN modules or explicit graph
-builders. Shared artifact binding primitives live in
-:mod:`mlx_lattice.artifact.bindings`.
-
-Explicit graph builders infer output value types from registered operation
-return annotations. Callers can still override the type with
-:class:`mlx_lattice.artifact.GraphOutput` when a custom graph value needs a more
-specific public contract. Structured lattice values such as sparse occupancy
-or coordinate ordering objects expose approved tensor fields through
-``LatticeGraphBuilder.field()``.
-The builder and loader also validate registered input and value-attribute
-types, which catches manifest wiring errors before an operation implementation
-is called.
-
-Use ``LatticeGraphBuilder.call()`` for most explicit graphs. It reads the
-registered operation contract and separates graph-value inputs, value
-attributes, JSON attributes, and parameters automatically. Parameter arguments
-may be existing artifact key strings, dense ``mx.array`` tensors, or packed
-``QuantizedWeight`` objects for quantized operation bindings. Use the
-lower-level ``add_op()`` only when constructing a manifest with exact port
-dictionaries.
+Module artifact helpers under :mod:`mlx_lattice.artifact.builder` still build
+legacy manifests and weight dictionaries from approved sparse NN modules. They
+are kept for tests, local fixtures, and compatibility with the current JSON
+runner, but they are not the long-term cross-framework IR API.
 
 The artifact runner honors manifest ``dtype_policy`` for floating dense arrays and
 sparse feature matrices while preserving coordinates, integer arrays, byte
@@ -63,20 +47,14 @@ Artifact model
 .. automodule:: mlx_lattice.artifact.model
    :members:
 
-Artifact registry
------------------
+Legacy internals
+----------------
 
 .. automodule:: mlx_lattice.artifact.registry
    :members:
 
-Artifact bindings
------------------
-
 .. automodule:: mlx_lattice.artifact.bindings
    :members:
-
-Module artifact
----------------
 
 .. automodule:: mlx_lattice.artifact.builder
    :members:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any, Literal, Protocol, cast
 
 import mlx.core as mx
@@ -12,30 +12,27 @@ from lattice_contract import (
     FEATURE_LAYER_NORM,
     FEATURE_LEAKY_RELU,
     FEATURE_LINEAR,
-    FEATURE_QUANTIZED_LINEAR,
     FEATURE_RELU,
     FEATURE_RMS_NORM,
     FEATURE_SIGMOID,
     FEATURE_SILU,
     FEATURE_SOFTPLUS,
     FEATURE_TANH,
+    POOL3D,
+    POOL_AVG3D,
     POOL_GLOBAL_AVG,
     POOL_GLOBAL_MAX,
     POOL_GLOBAL_SUM,
+    POOL_MAX3D,
+    POOL_SUM3D,
     SPARSE_ADD,
     SPARSE_CONV3D,
     SPARSE_CONV_TRANSPOSE3D,
     SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
-    SPARSE_QUANTIZED_CONV3D,
-    SPARSE_QUANTIZED_CONV_TRANSPOSE3D,
-    SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D,
-    SPARSE_QUANTIZED_SUBM_CONV3D,
     SPARSE_SUBM_CONV3D,
     VALUE_FIELD,
     IRNode,
-    IRParameterKind,
     IRValueType,
-    op_artifact_hints,
 )
 from lattice_contract.manifest import IRInputRef
 
@@ -43,15 +40,10 @@ import mlx_lattice.ops as ops
 from mlx_lattice.artifact.bindings import (
     ExecutionContext,
     GraphValue,
-    ParameterBinding,
     iter_value_type_bindings,
     value_type_fields,
 )
 from mlx_lattice.core import QuantizedWeight, SparseTensor
-from mlx_lattice.nn._artifact import (
-    annotation_is_graph_value,
-    annotation_is_value_sequence,
-)
 from mlx_lattice.ops._quantized import quantized_matmul
 
 
@@ -64,11 +56,10 @@ class OperationRegistrar(Protocol):
 
 
 def register_operations(lattice_op: OperationRegistrar) -> None:
-    """Register semantic aliases and generic public op bindings."""
+    """Register the legacy JSON artifact's explicit semantic op set."""
 
     register_artifact_ops(lattice_op)
     register_semantic_ops(lattice_op)
-    register_public_ops(lattice_op)
 
 
 def register_artifact_ops(lattice_op: OperationRegistrar) -> None:
@@ -90,66 +81,6 @@ def register_artifact_ops(lattice_op: OperationRegistrar) -> None:
                 f'{node.id}.attributes.field must be a string.'
             )
         return {'output': _field_value(value, field)}
-
-
-def register_public_ops(lattice_op: OperationRegistrar) -> None:
-    """Register generic ``ops.<function>`` bindings from the public ops API."""
-
-    public = public_ops()
-    for name, function in public.items():
-        signature = inspect.signature(function)
-        hints = op_artifact_hints(function)
-        input_args: dict[str, str] = {}
-        attr_args: dict[str, str] = {}
-        value_attr_args: dict[str, str] = {}
-        sequence_inputs: set[str] = set()
-        for arg_name, parameter in signature.parameters.items():
-            if parameter.kind in (
-                inspect.Parameter.VAR_POSITIONAL,
-                inspect.Parameter.VAR_KEYWORD,
-            ):
-                continue
-            if (
-                arg_name in hints.parameters
-                or arg_name in hints.optional_parameters
-            ):
-                continue
-            if arg_name in hints.attributes:
-                attr_args[arg_name] = arg_name
-                continue
-            if arg_name in hints.value_attributes:
-                value_attr_args[arg_name] = arg_name
-                continue
-            if parameter.default is inspect.Parameter.empty:
-                if parameter.kind is inspect.Parameter.KEYWORD_ONLY:
-                    attr_args[arg_name] = arg_name
-                elif _is_value_parameter(arg_name, parameter):
-                    input_args[arg_name] = arg_name
-                    if _is_sequence_parameter(arg_name, parameter):
-                        sequence_inputs.add(arg_name)
-                else:
-                    attr_args[arg_name] = arg_name
-            else:
-                if _is_value_parameter(arg_name, parameter):
-                    value_attr_args[arg_name] = arg_name
-                else:
-                    attr_args[arg_name] = arg_name
-
-        @lattice_op(
-            _op_name(name),
-            function=function,
-            inputs=input_args,
-            attributes=attr_args,
-            value_attributes=value_attr_args,
-            parameters=_hint_parameters(hints.parameters),
-            optional_parameters=_hint_parameters(hints.optional_parameters),
-            sequence_inputs=sequence_inputs,
-        )
-        def _auto(
-            context: ExecutionContext,
-            node: IRNode,
-        ) -> dict[str, GraphValue]:
-            return passthrough(lattice_op, context, node)
 
 
 def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
@@ -210,48 +141,6 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
     ) -> dict[str, GraphValue]:
         return passthrough(lattice_op, context, node)
 
-    @lattice_op(
-        FEATURE_QUANTIZED_LINEAR,
-        function=p['linear'],
-        inputs={'input': 'x'},
-        handler=_linear(lattice_op),
-    )
-    def _quantized_linear(
-        context: ExecutionContext,
-        node: IRNode,
-    ) -> dict[str, GraphValue]:
-        return passthrough(lattice_op, context, node)
-
-    for contract, fn in (
-        (
-            SPARSE_QUANTIZED_CONV3D,
-            p['conv3d'],
-        ),
-        (
-            SPARSE_QUANTIZED_SUBM_CONV3D,
-            p['subm_conv3d'],
-        ),
-        (
-            SPARSE_QUANTIZED_CONV_TRANSPOSE3D,
-            p['conv_transpose3d'],
-        ),
-        (
-            SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D,
-            p['generative_conv_transpose3d'],
-        ),
-    ):
-
-        @lattice_op(
-            contract,
-            function=fn,
-            inputs={'input': 'x'},
-        )
-        def _quantized_conv(
-            context: ExecutionContext,
-            node: IRNode,
-        ) -> dict[str, GraphValue]:
-            return passthrough(lattice_op, context, node)
-
     for contract, name in (
         (FEATURE_RELU, 'relu'),
         (FEATURE_SIGMOID, 'sigmoid'),
@@ -278,6 +167,24 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
             return passthrough(lattice_op, context, node)
 
     for contract, name in (
+        (POOL3D, 'pool3d'),
+        (POOL_SUM3D, 'sum_pool3d'),
+        (POOL_MAX3D, 'max_pool3d'),
+        (POOL_AVG3D, 'avg_pool3d'),
+    ):
+
+        @lattice_op(
+            contract,
+            function=p[name],
+            inputs={'input': 'x'},
+        )
+        def _local_pool(
+            context: ExecutionContext,
+            node: IRNode,
+        ) -> dict[str, GraphValue]:
+            return passthrough(lattice_op, context, node)
+
+    for contract, name in (
         (POOL_GLOBAL_SUM, 'sum'),
         (POOL_GLOBAL_AVG, 'avg'),
         (POOL_GLOBAL_MAX, 'max'),
@@ -297,7 +204,7 @@ def register_semantic_ops(lattice_op: OperationRegistrar) -> None:
 
 
 def public_ops() -> dict[str, Callable[..., GraphValue]]:
-    """Return public functional ops that can be registered in lattice IR."""
+    """Return public functional ops for diagnostics only."""
 
     return {
         name: cast(Callable[..., GraphValue], getattr(ops, name))
@@ -444,29 +351,3 @@ def _str_ref(value: IRInputRef) -> str:
     if not isinstance(value, str):
         raise ValueError('expected a single graph value reference.')
     return value
-
-
-def _op_name(name: str) -> str:
-    return f'ops.{name}'
-
-
-def _is_sequence_parameter(
-    name: str,
-    parameter: inspect.Parameter,
-) -> bool:
-    return annotation_is_value_sequence(parameter.annotation)
-
-
-def _is_value_parameter(
-    name: str,
-    parameter: inspect.Parameter,
-) -> bool:
-    return annotation_is_graph_value(parameter.annotation)
-
-
-def _hint_parameters(
-    hints: Mapping[str, IRParameterKind],
-) -> dict[str, ParameterBinding]:
-    return {
-        name: ParameterBinding(name, kind) for name, kind in hints.items()
-    }

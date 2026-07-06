@@ -13,6 +13,47 @@ from mlx_lattice.core.coords import (
 from mlx_lattice.core.types import Triple, triple
 
 
+@dataclass(frozen=True, slots=True)
+class SparseTensorComponents:
+    """Portable sparse value components.
+
+    Components are the stable decomposition boundary for artifact import/export
+    work. They carry semantic tensor leaves and metadata only; runtime
+    coordinate managers, coordinate keys, and relation caches are rebuilt by
+    the consumer.
+    """
+
+    coords: mx.array
+    feats: mx.array
+    active_rows: mx.array
+    stride: Triple = (1, 1, 1)
+    batch_counts: tuple[int, ...] | None = None
+
+    def __post_init__(self) -> None:
+        validate_coords(self.coords)
+        if self.feats.ndim != 2:
+            raise ValueError('feats must have shape (N, C).')
+        if self.coords.shape[0] != self.feats.shape[0]:
+            raise ValueError(
+                'coords and feats must have the same row count.'
+            )
+        if (
+            self.active_rows.shape != (1,)
+            or self.active_rows.dtype != mx.int32
+        ):
+            raise ValueError(
+                'active_rows must have shape (1,) and int32 dtype.'
+            )
+        object.__setattr__(
+            self, 'stride', triple(self.stride, name='stride')
+        )
+        object.__setattr__(
+            self,
+            'batch_counts',
+            _batch_counts(self.batch_counts, rows=self.coords.shape[0]),
+        )
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class SparseTensor:
     """Sparse feature tensor indexed by batched integer coordinates.
@@ -93,6 +134,40 @@ class SparseTensor:
         object.__setattr__(self, 'coord_manager', manager)
         object.__setattr__(self, 'batch_counts', normalized_counts)
         object.__setattr__(self, 'active_rows', normalized_active)
+
+    @classmethod
+    def from_components(
+        cls,
+        components: SparseTensorComponents,
+        *,
+        coord_manager: CoordinateManager | None = None,
+    ) -> SparseTensor:
+        """Build a sparse tensor from portable sparse value components."""
+
+        return cls(
+            components.coords,
+            components.feats,
+            stride=components.stride,
+            coord_manager=coord_manager,
+            batch_counts=components.batch_counts,
+            active_rows=components.active_rows,
+        )
+
+    def export_components(self) -> SparseTensorComponents:
+        """Return portable sparse value components.
+
+        The returned value intentionally excludes ``CoordinateManager`` and
+        ``CoordinateMapKey`` because those are runtime/cache identity objects,
+        not portable sparse semantics.
+        """
+
+        return SparseTensorComponents(
+            coords=self.coords,
+            feats=self.feats,
+            active_rows=self.active_rows,
+            stride=self.stride,
+            batch_counts=self.batch_counts,
+        )
 
     @property
     def capacity(self) -> int:

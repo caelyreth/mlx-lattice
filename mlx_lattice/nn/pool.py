@@ -6,9 +6,13 @@ from typing import Literal
 import mlx.core as mx
 import mlx.nn as mxnn
 from lattice_contract import (
+    POOL3D,
+    POOL_AVG3D,
     POOL_GLOBAL_AVG,
     POOL_GLOBAL_MAX,
     POOL_GLOBAL_SUM,
+    POOL_MAX3D,
+    POOL_SUM3D,
 )
 
 from mlx_lattice.core import KernelSpec, SparseTensor
@@ -41,7 +45,7 @@ __all__ = [
 
 
 @lattice_module(
-    'ops.pool3d',
+    POOL3D,
     attributes=(
         path_attribute('mode', 'mode'),
         *kernel_spec_attributes(
@@ -90,7 +94,7 @@ class Pool3d(mxnn.Module):
 
 
 @lattice_module(
-    'ops.sum_pool3d',
+    POOL_SUM3D,
     attributes=kernel_spec_attributes(
         'kernel_size',
         'stride',
@@ -128,7 +132,7 @@ class SumPool3d(Pool3d):
 
 
 @lattice_module(
-    'ops.max_pool3d',
+    POOL_MAX3D,
     attributes=kernel_spec_attributes(
         'kernel_size',
         'stride',
@@ -166,7 +170,7 @@ class MaxPool3d(Pool3d):
 
 
 @lattice_module(
-    'ops.avg_pool3d',
+    POOL_AVG3D,
     attributes=kernel_spec_attributes(
         'kernel_size',
         'stride',

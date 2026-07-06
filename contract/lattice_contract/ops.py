@@ -13,7 +13,6 @@ from lattice_contract.manifest import (
 )
 
 DeclarationT = TypeVar('DeclarationT', bound=Callable)
-FunctionT = TypeVar('FunctionT', bound=Callable)
 
 
 class IRParameterKind(StrEnum):
@@ -63,54 +62,7 @@ class IROpContract:
         return self.spec.name
 
 
-@dataclass(frozen=True, slots=True)
-class IROpArtifactHints:
-    """Artifact hints that cannot be inferred from annotations alone."""
-
-    parameters: Mapping[str, IRParameterKind] = field(default_factory=dict)
-    optional_parameters: Mapping[str, IRParameterKind] = field(
-        default_factory=dict
-    )
-    attributes: frozenset[str] = frozenset()
-    value_attributes: frozenset[str] = frozenset()
-
-
 _OP_CONTRACTS: dict[str, IROpContract] = {}
-_ARTIFACT_HINT_ATTR = '__mlx_lattice_op_artifact_hints__'
-
-
-def lattice_op_hints(
-    *,
-    parameters: Mapping[str, str | IRParameterKind] | None = None,
-    optional_parameters: Mapping[str, str | IRParameterKind] | None = None,
-    attributes: set[str] | None = None,
-    value_attributes: set[str] | None = None,
-) -> Callable[[FunctionT], FunctionT]:
-    """Attach artifact classification hints to a public op function."""
-
-    hints = IROpArtifactHints(
-        parameters=_parameter_kinds(parameters),
-        optional_parameters=_parameter_kinds(optional_parameters),
-        attributes=frozenset(attributes or ()),
-        value_attributes=frozenset(value_attributes or ()),
-    )
-
-    def decorator(function: FunctionT) -> FunctionT:
-        setattr(function, _ARTIFACT_HINT_ATTR, hints)
-        return function
-
-    return decorator
-
-
-def op_artifact_hints(function: Callable) -> IROpArtifactHints:
-    """Return artifact hints attached by :func:`lattice_op_hints`."""
-
-    value = getattr(function, _ARTIFACT_HINT_ATTR, None)
-    return (
-        value
-        if isinstance(value, IROpArtifactHints)
-        else IROpArtifactHints()
-    )
 
 
 def ir_op_contract(
@@ -383,6 +335,17 @@ def _global_pool(name: str) -> IROpContract:
     )
 
 
+def _local_pool(name: str, *, attributes: set[str]) -> IROpContract:
+    return _builtin(
+        name,
+        inputs={'input'},
+        outputs={'output'},
+        input_types={'input': 'sparse_tensor'},
+        output_types={'output': 'sparse_tensor'},
+        attributes=attributes,
+    )
+
+
 # MARK: - built-in semantic contracts
 
 VALUE_FIELD = _builtin(
@@ -445,51 +408,6 @@ SPARSE_ADD = _builtin(
     output_types={'output': 'sparse_tensor'},
     attributes={'join'},
 )
-SPARSE_QUANTIZED_CONV3D = _builtin(
-    'sparse.quantized_conv3d',
-    inputs={'input'},
-    outputs={'output'},
-    input_types={'input': 'sparse_tensor'},
-    output_types={'output': 'sparse_tensor'},
-    parameters={'weight'},
-    optional_parameters={'bias'},
-    attributes={'kernel_size', 'stride', 'padding', 'dilation'},
-    value_attributes={'coordinates'},
-    parameter_kinds={'weight': IRParameterKind.QUANTIZED_WEIGHT},
-)
-SPARSE_QUANTIZED_SUBM_CONV3D = _builtin(
-    'sparse.quantized_subm_conv3d',
-    inputs={'input'},
-    outputs={'output'},
-    input_types={'input': 'sparse_tensor'},
-    output_types={'output': 'sparse_tensor'},
-    parameters={'weight'},
-    optional_parameters={'bias'},
-    attributes={'kernel_size', 'dilation'},
-    parameter_kinds={'weight': IRParameterKind.QUANTIZED_WEIGHT},
-)
-SPARSE_QUANTIZED_CONV_TRANSPOSE3D = _builtin(
-    'sparse.quantized_conv_transpose3d',
-    inputs={'input'},
-    outputs={'output'},
-    input_types={'input': 'sparse_tensor'},
-    output_types={'output': 'sparse_tensor'},
-    parameters={'weight'},
-    optional_parameters={'bias'},
-    attributes={'kernel_size', 'stride', 'padding', 'dilation'},
-    parameter_kinds={'weight': IRParameterKind.QUANTIZED_WEIGHT},
-)
-SPARSE_QUANTIZED_GENERATIVE_CONV_TRANSPOSE3D = _builtin(
-    'sparse.quantized_generative_conv_transpose3d',
-    inputs={'input'},
-    outputs={'output'},
-    input_types={'input': 'sparse_tensor'},
-    output_types={'output': 'sparse_tensor'},
-    parameters={'weight'},
-    optional_parameters={'bias'},
-    attributes={'kernel_size', 'stride'},
-    parameter_kinds={'weight': IRParameterKind.QUANTIZED_WEIGHT},
-)
 FEATURE_LINEAR = _builtin(
     'feature.linear',
     inputs={'input'},
@@ -499,16 +417,6 @@ FEATURE_LINEAR = _builtin(
     parameters={'weight'},
     optional_parameters={'bias'},
     parameter_kinds={'weight': IRParameterKind.ARRAY_OR_QUANTIZED_WEIGHT},
-)
-FEATURE_QUANTIZED_LINEAR = _builtin(
-    'feature.quantized_linear',
-    inputs={'input'},
-    outputs={'output'},
-    input_types={'input': 'any'},
-    output_types={'output': 'any'},
-    parameters={'weight'},
-    optional_parameters={'bias'},
-    parameter_kinds={'weight': IRParameterKind.QUANTIZED_WEIGHT},
 )
 FEATURE_RELU = _feature_unary('feature.relu')
 FEATURE_SIGMOID = _feature_unary('feature.sigmoid')
@@ -541,6 +449,22 @@ FEATURE_RMS_NORM = _feature_unary(
     'feature.rms_norm',
     optional_parameters={'weight'},
     attributes={'eps'},
+)
+POOL3D = _local_pool(
+    'pool.pool3d',
+    attributes={'mode', 'kernel_size', 'stride', 'padding', 'dilation'},
+)
+POOL_SUM3D = _local_pool(
+    'pool.sum3d',
+    attributes={'kernel_size', 'stride', 'padding', 'dilation'},
+)
+POOL_MAX3D = _local_pool(
+    'pool.max3d',
+    attributes={'kernel_size', 'stride', 'padding', 'dilation'},
+)
+POOL_AVG3D = _local_pool(
+    'pool.avg3d',
+    attributes={'kernel_size', 'stride', 'padding', 'dilation'},
 )
 POOL_GLOBAL_SUM = _global_pool('pool.global_sum')
 POOL_GLOBAL_AVG = _global_pool('pool.global_avg')

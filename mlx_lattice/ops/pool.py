@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, cast
 
 import mlx.core as mx
 
@@ -123,30 +123,41 @@ def avg_pool3d(
     )
 
 
-def global_sum_pool(x: SparseTensor) -> mx.array:
+def global_sum_pool(
+    x: SparseTensor, *, batch_size: int | None = None
+) -> mx.array:
     """Sum features independently for each batch.
 
-    Requires ``x.batch_counts`` and returns a dense ``(B, C)`` MLX array.
+    Returns a dense ``(B, C)`` MLX array. ``batch_counts`` is used when
+    present; otherwise batches are reduced from the coordinate batch column.
+    Pass ``batch_size`` to preserve trailing empty batches.
     """
-    return _stack_batch_reductions(x, mode='sum')
+    return _stack_batch_reductions(x, mode='sum', batch_size=batch_size)
 
 
-def global_avg_pool(x: SparseTensor) -> mx.array:
+def global_avg_pool(
+    x: SparseTensor, *, batch_size: int | None = None
+) -> mx.array:
     """Average features independently for each batch.
 
-    Requires ``x.batch_counts`` and returns a dense ``(B, C)`` MLX array.
-    Empty batches produce zero rows.
+    Empty batches produce zero rows. ``batch_counts`` is used when present;
+    otherwise batches are reduced from the coordinate batch column. Pass
+    ``batch_size`` to preserve trailing empty batches.
     """
-    return _stack_batch_reductions(x, mode='avg')
+    return _stack_batch_reductions(x, mode='avg', batch_size=batch_size)
 
 
-def global_max_pool(x: SparseTensor) -> mx.array:
+def global_max_pool(
+    x: SparseTensor, *, batch_size: int | None = None
+) -> mx.array:
     """Max-reduce features independently for each batch.
 
-    Requires ``x.batch_counts`` and returns a dense ``(B, C)`` MLX array.
     Empty batches are rejected because max has no neutral finite sparse row.
+    ``batch_counts`` is used when present; otherwise batches are reduced from
+    the coordinate batch column. Pass ``batch_size`` to validate explicit empty
+    batches.
     """
-    return _stack_batch_reductions(x, mode='max')
+    return _stack_batch_reductions(x, mode='max', batch_size=batch_size)
 
 
 # MARK: - local pooling
@@ -194,9 +205,20 @@ def _fused_pool(
 # MARK: - global pooling
 
 
-def _stack_batch_reductions(x: SparseTensor, *, mode: PoolMode) -> mx.array:
+def _stack_batch_reductions(
+    x: SparseTensor,
+    *,
+    mode: PoolMode,
+    batch_size: int | None = None,
+) -> mx.array:
     _validate_pool_dtype(x.feats)
-    counts = _require_batch_counts(x)
+    if x.batch_counts is None:
+        return _coordinate_batch_reduction(
+            x, mode=mode, batch_size=batch_size
+        )
+    counts = x.batch_counts
+    if batch_size is not None and batch_size != len(counts):
+        raise ValueError('batch_size must match batch_counts length.')
     if len(counts) == 1:
         if mode == 'sum':
             return mx.sum(x.feats, axis=0, keepdims=True)
@@ -236,12 +258,74 @@ def _stack_batch_reductions(x: SparseTensor, *, mode: PoolMode) -> mx.array:
     raise ValueError("mode must be 'sum', 'max', or 'avg'.")
 
 
-def _require_batch_counts(x: SparseTensor) -> tuple[int, ...]:
-    if x.batch_counts is None:
-        raise ValueError(
-            'batch_counts metadata is required for global pooling.'
+def _coordinate_batch_reduction(
+    x: SparseTensor,
+    *,
+    mode: PoolMode,
+    batch_size: int | None,
+) -> mx.array:
+    if batch_size is None:
+        active = int(cast('list[int]', x.active_rows.tolist())[0])
+        if active == 0:
+            batch_size = 0
+        else:
+            batch_size = (
+                int(cast('int', mx.max(x.coords[:active, 0]).tolist())) + 1
+            )
+    if batch_size < 0:
+        raise ValueError('batch_size must be non-negative.')
+    shape = (batch_size, x.channels)
+    if batch_size == 0:
+        if mode == 'max':
+            raise ValueError(
+                'global_max_pool does not support empty batches.'
+            )
+        return mx.zeros(shape, dtype=x.feats.dtype)
+
+    rows = mx.arange(x.capacity, dtype=mx.int32)
+    active_mask = (rows < x.active_rows[0]).astype(x.feats.dtype)
+    batch_ids = x.coords[:, 0].astype(mx.int32)
+    valid = (batch_ids >= 0) & (batch_ids < batch_size)
+    active_mask = active_mask * valid.astype(x.feats.dtype)
+    clipped = mx.minimum(mx.maximum(batch_ids, 0), batch_size - 1)
+
+    if mode == 'sum':
+        return (
+            mx.zeros(shape, dtype=x.feats.dtype)
+            .at[clipped]
+            .add(x.feats * active_mask[:, None])
         )
-    return x.batch_counts
+    counts = (
+        mx.zeros((batch_size,), dtype=x.feats.dtype)
+        .at[clipped]
+        .add(active_mask)
+    )
+    if mode == 'avg':
+        sums = (
+            mx.zeros(shape, dtype=x.feats.dtype)
+            .at[clipped]
+            .add(x.feats * active_mask[:, None])
+        )
+        return mx.where(
+            counts[:, None] > 0, sums / mx.maximum(counts, 1)[:, None], sums
+        )
+    if mode == 'max':
+        empty = cast(mx.array, counts == 0)
+        if bool(cast('bool', mx.any(empty).tolist())):
+            raise ValueError(
+                'global_max_pool does not support empty batches.'
+            )
+        masked = mx.where(
+            active_mask[:, None].astype(mx.bool_),
+            x.feats,
+            mx.full(x.feats.shape, -float('inf'), dtype=x.feats.dtype),
+        )
+        return (
+            mx.full(shape, -float('inf'), dtype=x.feats.dtype)
+            .at[clipped]
+            .maximum(masked)
+        )
+    raise ValueError("mode must be 'sum', 'max', or 'avg'.")
 
 
 def _batch_ids(counts: tuple[int, ...]) -> mx.array:

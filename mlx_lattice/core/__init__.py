@@ -28,7 +28,7 @@ from mlx_lattice.core.relations import (
     KernelSpec,
     NeighborRelation,
 )
-from mlx_lattice.core.tensor import SparseTensor
+from mlx_lattice.core.tensor import SparseTensor, SparseTensorComponents
 from mlx_lattice.core.types import Triple, triple
 
 __all__ = [
@@ -47,6 +47,7 @@ __all__ = [
     'SparseOccupancy',
     'SparseQuantization',
     'SparseTensor',
+    'SparseTensorComponents',
     'Triple',
     'build_point_voxel_map',
     'build_sparse_alignment',

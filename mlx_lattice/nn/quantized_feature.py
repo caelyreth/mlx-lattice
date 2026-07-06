@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import mlx.core as mx
 import mlx.nn as mxnn
-from lattice_contract import FEATURE_QUANTIZED_LINEAR
+from lattice_contract import FEATURE_LINEAR
 
 from mlx_lattice.core import QuantizedWeight, SparseTensor, quantize_weight
 from mlx_lattice.nn._artifact import lattice_module
@@ -11,7 +11,7 @@ from mlx_lattice.ops import feature as F
 __all__ = ['QuantizedLinear']
 
 
-@lattice_module(FEATURE_QUANTIZED_LINEAR, parameters=('weight', 'bias'))
+@lattice_module(FEATURE_LINEAR, parameters=('weight', 'bias'))
 class QuantizedLinear(mxnn.Module):
     """Affine weight-quantized sparse-feature linear module.
 

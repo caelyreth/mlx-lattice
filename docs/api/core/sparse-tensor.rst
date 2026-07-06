@@ -18,6 +18,15 @@ capacity from the dynamic number of valid rows:
 Feature-only operations preserve coordinate identity. Row-changing operations
 construct a new coordinate key and active-row scalar.
 
+Portable component ABI
+----------------------
+
+``SparseTensor.export_components()`` returns ``SparseTensorComponents``:
+coordinates, features, active row count, stride, and optional batch row counts.
+This is the intended boundary for artifact import/export work. It excludes
+``CoordinateManager`` and ``CoordinateMapKey`` identity because those objects
+are runtime caches reconstructed by the consumer.
+
 Related pages
 -------------
 
