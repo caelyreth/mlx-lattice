@@ -14,28 +14,24 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 > the MLX/Metal artifact consumer, while a future sibling `torch-lattice`
 > package can provide PyTorch/CUDA research and training ergonomics.
 >
-> The bridge should be a stable sparse model IR: a validated manifest plus
+> ~~The bridge should be a stable sparse model IR: a validated manifest plus
 > tensor weights, not arbitrary generated Python or a TorchSparse compatibility
-> promise. On the MLX side, that artifact should reconstruct an in-memory
-> semantic graph and dispatch through normal `mlx-lattice` operators.
+> promise.~~ LLVM [MLIR](https://mlir.llvm.org/) is our current top choice.
+> We plan to validate this path and _may_ release support alongside v0.3.0.
+>
+> On the MLX side, the artifact should reconstruct an in-memory semantic graph
+> and dispatch through standard `mlx-lattice` operators.
 
 > [!NOTE]
-> This codebase has been **heavily** assisted by OpenAI GPT models, especially
-> [GPT-5.5](https://openai.com/index/introducing-gpt-5-5).
+> This codebase was heavily assisted by OpenAI GPT models, especially
+> [GPT-5.5](https://openai.com/index/introducing-gpt-5-5), enabling practical
+> solo, part-time development.
 >
-> That assistance made it **practical** to move a performance-oriented sparse MLX
-> codebase forward as solo, _part-time_ work in a short development window.
+> It is tested and benchmarked, but sparse workloads are **shape-sensitive**.
+> Edge-case shapes or backend/device combinations may still expose issues.
 >
-> The implementation is tested and benchmarked, but sparse workloads are
-> **shape-sensitive**. Some edge-case coordinate distributions, channel counts, or
-> backend/device combinations may still expose correctness or performance
-> issues.
->
-> Clear issue reports with reproducible shapes are appreciated.
->
-> If you prefer not to depend on AI-assisted infrastructure, consider an
-> alternative sparse library whose development process better matches your
-> requirements.
+> Reproducible reports are welcome. If AI-assisted infrastructure is unsuitable
+> for your needs, consider another sparse library.
 
 ### Install
 
