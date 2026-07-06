@@ -434,7 +434,7 @@ class LatticeGraphBuilder:
         return IRManifest(
             schema_version=CURRENT_SCHEMA_VERSION,
             producer=dict(producer or {'name': 'mlx-lattice'}),
-            runtime={'name': 'mlx-lattice', 'version': '>=0.2.1,<0.3'},
+            runtime={'name': 'mlx-lattice', 'version': '>=0.2.2,<0.3'},
             inputs=tuple(
                 IRTensorSpec(name, _value_type(value_type))
                 for name, value_type in self.inputs.items()

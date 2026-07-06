@@ -15,7 +15,7 @@ def _manifest() -> dict:
     return {
         'schema_version': '0.1',
         'producer': {'name': 'test'},
-        'runtime': {'name': 'mlx-lattice', 'version': '>=0.2.1,<0.3'},
+        'runtime': {'name': 'mlx-lattice', 'version': '>=0.2.2,<0.3'},
         'coordinate_order': ['batch', 'x', 'y', 'z'],
         'feature_layout': ['row', 'channel'],
         'weight_layout': 'mlx-lattice',

@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 project = 'mlx-lattice'
 author = 'Z.Y. Lin'
 copyright = f'{datetime.now(UTC).year}, {author}'
-release = '0.2.1'
+release = '0.2.2'
 version = release
 
 extensions = [

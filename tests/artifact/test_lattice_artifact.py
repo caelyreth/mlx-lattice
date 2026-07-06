@@ -74,7 +74,7 @@ def _manifest():
         {
             'schema_version': '0.1',
             'producer': {'name': 'test'},
-            'runtime': {'name': 'mlx-lattice', 'version': '>=0.2.1,<0.3'},
+            'runtime': {'name': 'mlx-lattice', 'version': '>=0.2.2,<0.3'},
             'inputs': [{'name': 'input', 'type': 'sparse_tensor'}],
             'outputs': [{'name': 'logits', 'type': 'dense_tensor'}],
             'nodes': [
@@ -200,7 +200,7 @@ def test_lattice_artifact_roundtrips_through_safetensors(tmp_path) -> None:
 
 def test_lattice_model_accepts_compatible_runtime_metadata() -> None:
     raw = manifest_to_dict(_manifest())
-    raw['runtime'] = {'name': 'mlx-lattice', 'version': '>=0.2.1,<0.3.0'}
+    raw['runtime'] = {'name': 'mlx-lattice', 'version': '>=0.2.2,<0.3.0'}
     manifest = manifest_from_dict(raw)
 
     model = LatticeModel(manifest, _weights())
@@ -220,7 +220,7 @@ def test_lattice_model_accepts_missing_runtime_metadata() -> None:
 
 def test_lattice_model_rejects_incompatible_runtime_name() -> None:
     raw = manifest_to_dict(_manifest())
-    raw['runtime'] = {'name': 'other-runtime', 'version': '>=0.2.1,<0.3'}
+    raw['runtime'] = {'name': 'other-runtime', 'version': '>=0.2.2,<0.3'}
     manifest = manifest_from_dict(raw)
 
     with pytest.raises(ValueError, match=r'runtime\.name'):

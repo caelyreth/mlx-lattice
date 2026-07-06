@@ -61,7 +61,7 @@ from lattice_contract.ops import (
     validate_node_against_spec,
 )
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 __all__ = [
     'CURRENT_SCHEMA_VERSION',

@@ -1,14 +1,14 @@
 # MARK: - metadata
 [project]
 name = "mlx-lattice"
-version = "0.2.1"
+version = "0.2.2"
 description = "Sparse point cloud convolution library for MLX"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Z.Y. Lin", email = "me@iki.moe" }]
 keywords = ["mlx", "ml", "sparse", "convolution", "point-cloud"]
-dependencies = ["lattice-contract>=0.2.1,<0.3", "mlx>=0.31"]
+dependencies = ["lattice-contract>=0.2.2,<0.3", "mlx>=0.31"]
 
 [project.urls]
 Homepage = "https://github.com/caelyreth/mlx-lattice"
