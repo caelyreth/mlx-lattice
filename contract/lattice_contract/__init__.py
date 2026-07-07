@@ -4,6 +4,7 @@ from lattice_contract.artifact import (
     ARTIFACT_GRAPH_FILE,
     ARTIFACT_WEIGHT_FILE,
     CURRENT_DIALECT_VERSION,
+    DIALECT_SCHEMA_DIGEST,
 )
 from lattice_contract.dialect import LATTICE_DIALECT
 from lattice_contract.mlir import (
@@ -31,6 +32,7 @@ from lattice_contract.schema import (
     operand,
     result,
     schema_digest,
+    schema_fingerprint,
     type_param,
 )
 
@@ -40,6 +42,7 @@ __all__ = [
     'ARTIFACT_GRAPH_FILE',
     'ARTIFACT_WEIGHT_FILE',
     'CURRENT_DIALECT_VERSION',
+    'DIALECT_SCHEMA_DIGEST',
     'LATTICE_DIALECT',
     'AttrDef',
     'AttrParameter',
@@ -64,5 +67,6 @@ __all__ = [
     'quantized_packing',
     'result',
     'schema_digest',
+    'schema_fingerprint',
     'type_param',
 ]

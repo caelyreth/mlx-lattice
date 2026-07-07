@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from lattice_contract.artifact import (
     ARTIFACT_WEIGHT_FILE,
     CURRENT_DIALECT_VERSION,
+    DIALECT_SCHEMA_DIGEST,
 )
 from lattice_contract.dialect import (
     LATTICE_DIALECT,
@@ -16,6 +17,13 @@ from lattice_contract.dialect import (
 from lattice_contract.schema import OpDef
 
 Triple = tuple[int, int, int]
+InputRole = Literal[
+    'tensor',
+    'sparse_coords',
+    'sparse_features',
+    'sparse_active',
+]
+OutputRole = Literal['tensor', 'sparse_tensor']
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,29 +180,46 @@ class MLIRModuleBuilder:
     def __init__(self, name: str = 'forward') -> None:
         self.name = name
         self._args: list[SSAValue] = []
+        self._arg_roles: list[str] = []
         self._ops: list[str] = []
         self._return: SSAValue | tuple[SSAValue, ...] | None = None
+        self._return_names: tuple[str, ...] | None = None
+        self._return_roles: tuple[str, ...] | None = None
         self._name_counts: dict[str, int] = {}
 
     def argument(
         self,
         name: str,
         type: str | TensorType | SparseTensorType,
+        *,
+        role: InputRole = 'tensor',
     ) -> SSAValue:
         """Append a function argument and return its SSA value."""
 
         value = SSAValue(name, _type(type))
         self._args.append(value)
+        self._arg_roles.append(role)
         return value
 
-    def return_(self, *values: SSAValue) -> None:
+    def return_(
+        self,
+        *values: SSAValue,
+        names: Sequence[str] | None = None,
+        roles: Sequence[OutputRole] | None = None,
+    ) -> None:
         """Set function return values."""
 
         if not values:
             raise ValueError(
                 'MLIR function must return at least one value.'
             )
+        if names is not None and len(names) != len(values):
+            raise ValueError('output names must match return value count.')
+        if roles is not None and len(roles) != len(values):
+            raise ValueError('output roles must match return value count.')
         self._return = values[0] if len(values) == 1 else values
+        self._return_names = tuple(names) if names is not None else None
+        self._return_roles = tuple(roles) if roles is not None else None
 
     def to_mlir(self) -> str:
         """Render the module as textual MLIR."""
@@ -213,6 +238,12 @@ class MLIRModuleBuilder:
         result_types = ', '.join(
             _mlir_type(value.type) for value in returns
         )
+        return_names = self._return_names or tuple(
+            value.name for value in returns
+        )
+        return_roles = self._return_roles or tuple(
+            _default_output_role(value) for value in returns
+        )
         body = '\n'.join(f'    {line}' for line in self._ops)
         return_values = ', '.join(value.ref() for value in returns)
         return_types = ', '.join(
@@ -221,6 +252,11 @@ class MLIRModuleBuilder:
         return (
             'module attributes {\n'
             f'  lattice.ir_version = {CURRENT_DIALECT_VERSION},\n'
+            f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
+            f'  lattice.input_names = {_string_array(value.name for value in self._args)},\n'
+            f'  lattice.input_roles = {_string_array(self._arg_roles)},\n'
+            f'  lattice.output_names = {_string_array(return_names)},\n'
+            f'  lattice.output_roles = {_string_array(return_roles)},\n'
             f'  lattice.weight_file = "{ARTIFACT_WEIGHT_FILE}"\n'
             '} {\n'
             f'  func.func @{self.name}(\n'
@@ -359,6 +395,24 @@ def _type(
 
 def _mlir_type(value: TensorType | SparseTensorType | WeightType) -> str:
     return value.mlir()
+
+
+def _default_output_role(value: SSAValue) -> OutputRole:
+    if isinstance(value.type, SparseTensorType):
+        return 'sparse_tensor'
+    return 'tensor'
+
+
+def _string_array(values: Iterable[str]) -> str:
+    return (
+        '['
+        + ', '.join(f'"{_escape_string(value)}"' for value in values)
+        + ']'
+    )
+
+
+def _escape_string(value: str) -> str:
+    return value.replace('\\', '\\\\').replace('"', '\\"')
 
 
 def _require_value(kwargs: Mapping[str, Any], name: str) -> SSAValue:

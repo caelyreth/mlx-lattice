@@ -8,6 +8,7 @@ from mlx_lattice.artifact.io import (
 from mlx_lattice.artifact.plan import (
     PlanArgument,
     PlanOperation,
+    PlanOutput,
     RuntimePlan,
 )
 from mlx_lattice.artifact.runtime import (
@@ -30,6 +31,7 @@ __all__ = [
     'LatticeProgram',
     'PlanArgument',
     'PlanOperation',
+    'PlanOutput',
     'RuntimePlan',
     'compile_lattice_artifact',
     'lattice_artifact_status',

@@ -8,6 +8,7 @@ from lattice_contract import (
     ARTIFACT_GRAPH_FILE,
     ARTIFACT_WEIGHT_FILE,
     CURRENT_DIALECT_VERSION,
+    DIALECT_SCHEMA_DIGEST,
     LATTICE_DIALECT,
     MLIRModuleBuilder,
     SparseTensorType,
@@ -15,6 +16,7 @@ from lattice_contract import (
     WeightType,
     dense_packing,
 )
+from lattice_contract.schema import schema_digest
 
 from mlx_lattice import SparseTensor
 from mlx_lattice import _ext as ext
@@ -145,6 +147,34 @@ def test_lattice_artifact_validates_with_mlir_tooling(tmp_path) -> None:
         ),
         (
             lambda: _graph().replace(
+                f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n',
+                '',
+            ),
+            'lattice.schema_digest',
+        ),
+        (
+            lambda: _graph().replace(
+                DIALECT_SCHEMA_DIGEST,
+                '0' * len(DIALECT_SCHEMA_DIGEST),
+            ),
+            'unsupported lattice.schema_digest',
+        ),
+        (
+            lambda: _graph().replace(
+                '  lattice.input_names = ["coords", "features", "active"],\n',
+                '',
+            ),
+            'lattice.input_names',
+        ),
+        (
+            lambda: _graph().replace(
+                '  lattice.output_roles = ["sparse_tensor"],\n',
+                '  lattice.output_roles = ["backend_tensor_ops"],\n',
+            ),
+            'unsupported role',
+        ),
+        (
+            lambda: _graph().replace(
                 ',\n  lattice.weight_file = "weights.safetensors"\n',
                 '',
             ),
@@ -214,20 +244,24 @@ def test_native_lattice_mlir_plan_exposes_typed_abi_metadata() -> None:
     plan = ext.lattice_mlir_plan(_pointwise_graph())
 
     assert plan['ir_version'] == CURRENT_DIALECT_VERSION
+    assert plan['schema_digest'] == DIALECT_SCHEMA_DIGEST
     assert plan['weight_file'] == ARTIFACT_WEIGHT_FILE
     assert plan['args'] == [
         {
             'name': 'arg0',
+            'abi_name': 'coords',
             'type': 'tensor<?x4xi32>',
             'role': 'sparse_coords',
         },
         {
             'name': 'arg1',
+            'abi_name': 'features',
             'type': 'tensor<?x3xf16>',
             'role': 'sparse_features',
         },
         {
             'name': 'arg2',
+            'abi_name': 'active',
             'type': 'tensor<1xi32>',
             'role': 'sparse_active',
         },
@@ -242,14 +276,48 @@ def test_native_lattice_mlir_plan_exposes_typed_abi_metadata() -> None:
         '!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, '
         'feature = row_channel, dtype = f16>'
     ]
+    assert plan['outputs'] == [
+        {
+            'name': 'v5',
+            'abi_name': 'conv3d',
+            'type': '!lattice.sparse_tensor<rank = 3, '
+            'coord = batch_x_y_z, feature = row_channel, dtype = f16>',
+            'role': 'sparse_tensor',
+        }
+    ]
+
+
+def test_native_lattice_mlir_schema_matches_python_contract() -> None:
+    if not hasattr(ext, 'lattice_mlir_schema'):
+        pytest.skip('MLIR-enabled native extension is not available.')
+
+    native = ext.lattice_mlir_schema()
+    digest = schema_digest(LATTICE_DIALECT)
+
+    assert native['schema_digest'] == DIALECT_SCHEMA_DIGEST
+    assert tuple(native['types']) == tuple(
+        item.mnemonic for item in LATTICE_DIALECT.types.values()
+    )
+    assert tuple(native['attrs']) == tuple(
+        item.mnemonic for item in LATTICE_DIALECT.attrs.values()
+    )
+    assert tuple(native['ops']) == tuple(
+        f'lattice.{name}' for name in digest['ops']
+    )
 
 
 def test_runtime_plan_freezes_native_payload() -> None:
     plan = _runtime_plan(_activation_plan(kind='relu'))
 
     assert plan.ir_version == CURRENT_DIALECT_VERSION
+    assert plan.schema_digest == DIALECT_SCHEMA_DIGEST
     assert plan.weight_file == ARTIFACT_WEIGHT_FILE
     assert plan.name == 'forward'
+    assert [argument.abi_name for argument in plan.args] == [
+        'coords',
+        'features',
+        'active',
+    ]
     assert [argument.role for argument in plan.args] == [
         'sparse_coords',
         'sparse_features',
@@ -292,6 +360,14 @@ def test_runtime_plan_rejects_missing_module_metadata() -> None:
     del raw['ir_version']
 
     with pytest.raises(KeyError, match='ir_version'):
+        RuntimePlan.from_native(raw)
+
+
+def test_runtime_plan_rejects_unsupported_schema_digest() -> None:
+    raw = _activation_plan(kind='relu')
+    raw['schema_digest'] = '0' * len(DIALECT_SCHEMA_DIGEST)
+
+    with pytest.raises(ValueError, match='schema_digest'):
         RuntimePlan.from_native(raw)
 
 
@@ -539,6 +615,23 @@ def test_lattice_artifact_runtime_lowers_activation_with_sparse_identity() -> (
     assert bool(mx.allclose(actual.feats, expected.feats))
 
 
+def test_lattice_artifact_runtime_binds_stable_keyword_abi() -> None:
+    x = _input_tensor()
+
+    actual = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )(
+        coords=x.coords,
+        features=x.feats,
+        active=x.active_rows,
+    )
+    expected = relu(x)
+
+    assert isinstance(actual, SparseTensor)
+    mx.eval(actual.feats, expected.feats)
+    assert bool(mx.allclose(actual.feats, expected.feats))
+
+
 def test_lattice_artifact_runtime_lowers_norms_with_sparse_identity() -> (
     None
 ):
@@ -650,9 +743,21 @@ def test_lattice_artifact_runtime_resolves_quantized_linear_weights(
 def _graph() -> str:
     sparse = SparseTensorType(dtype='f16')
     builder = MLIRModuleBuilder()
-    coords = builder.argument('coords', TensorType('tensor<?x4xi32>'))
-    feats = builder.argument('features', TensorType('tensor<?x32xf16>'))
-    active = builder.argument('active', TensorType('tensor<1xi32>'))
+    coords = builder.argument(
+        'coords',
+        TensorType('tensor<?x4xi32>'),
+        role='sparse_coords',
+    )
+    feats = builder.argument(
+        'features',
+        TensorType('tensor<?x32xf16>'),
+        role='sparse_features',
+    )
+    active = builder.argument(
+        'active',
+        TensorType('tensor<1xi32>'),
+        role='sparse_active',
+    )
     x = builder.sparse_make(
         coords=coords,
         features=feats,
@@ -685,6 +790,11 @@ def _no_entry_graph() -> str:
     return (
         'module attributes {\n'
         '  lattice.ir_version = 0,\n'
+        f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
+        '  lattice.input_names = [],\n'
+        '  lattice.input_roles = [],\n'
+        '  lattice.output_names = ["output"],\n'
+        '  lattice.output_roles = ["tensor"],\n'
         '  lattice.weight_file = "weights.safetensors"\n'
         '} {\n'
         '}\n'
@@ -695,6 +805,11 @@ def _multiple_entry_graph() -> str:
     return (
         'module attributes {\n'
         '  lattice.ir_version = 0,\n'
+        f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
+        '  lattice.input_names = ["x"],\n'
+        '  lattice.input_roles = ["tensor"],\n'
+        '  lattice.output_names = ["output"],\n'
+        '  lattice.output_roles = ["tensor"],\n'
         '  lattice.weight_file = "weights.safetensors"\n'
         '} {\n'
         '  func.func @forward(%x: tensor<?x4xi32>) -> tensor<?x4xi32> {\n'
@@ -711,6 +826,11 @@ def _empty_return_graph() -> str:
     return (
         'module attributes {\n'
         '  lattice.ir_version = 0,\n'
+        f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
+        '  lattice.input_names = [],\n'
+        '  lattice.input_roles = [],\n'
+        '  lattice.output_names = [],\n'
+        '  lattice.output_roles = [],\n'
         '  lattice.weight_file = "weights.safetensors"\n'
         '} {\n'
         '  func.func @forward() {\n'
@@ -724,6 +844,11 @@ def _non_lattice_body_graph() -> str:
     return (
         'module attributes {\n'
         '  lattice.ir_version = 0,\n'
+        f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
+        '  lattice.input_names = ["x"],\n'
+        '  lattice.input_roles = ["tensor"],\n'
+        '  lattice.output_names = ["output"],\n'
+        '  lattice.output_roles = ["tensor"],\n'
         '  lattice.weight_file = "weights.safetensors"\n'
         '} {\n'
         '  func.func @forward(%x: tensor<?x4xi32>) -> tensor<?x4xi32> {\n'
@@ -738,9 +863,21 @@ def _non_lattice_body_graph() -> str:
 def _pointwise_graph() -> str:
     sparse = SparseTensorType(dtype='f16')
     builder = MLIRModuleBuilder()
-    coords = builder.argument('coords', TensorType('tensor<?x4xi32>'))
-    feats = builder.argument('features', TensorType('tensor<?x3xf16>'))
-    active = builder.argument('active', TensorType('tensor<1xi32>'))
+    coords = builder.argument(
+        'coords',
+        TensorType('tensor<?x4xi32>'),
+        role='sparse_coords',
+    )
+    feats = builder.argument(
+        'features',
+        TensorType('tensor<?x3xf16>'),
+        role='sparse_features',
+    )
+    active = builder.argument(
+        'active',
+        TensorType('tensor<1xi32>'),
+        role='sparse_active',
+    )
     x = builder.sparse_make(
         coords=coords,
         features=feats,
@@ -772,9 +909,21 @@ def _pointwise_graph() -> str:
 def _decompose_graph() -> str:
     sparse = SparseTensorType(dtype='f16')
     builder = MLIRModuleBuilder()
-    coords = builder.argument('coords', TensorType('tensor<?x4xi32>'))
-    feats = builder.argument('features', TensorType('tensor<?x3xf16>'))
-    active = builder.argument('active', TensorType('tensor<1xi32>'))
+    coords = builder.argument(
+        'coords',
+        TensorType('tensor<?x4xi32>'),
+        role='sparse_coords',
+    )
+    feats = builder.argument(
+        'features',
+        TensorType('tensor<?x3xf16>'),
+        role='sparse_features',
+    )
+    active = builder.argument(
+        'active',
+        TensorType('tensor<1xi32>'),
+        role='sparse_active',
+    )
     x = builder.sparse_make(
         coords=coords,
         features=feats,
@@ -818,11 +967,21 @@ def _plan_payload(
 ) -> dict[str, object]:
     return {
         'ir_version': CURRENT_DIALECT_VERSION,
+        'schema_digest': DIALECT_SCHEMA_DIGEST,
         'weight_file': ARTIFACT_WEIGHT_FILE,
         'name': 'forward',
         'args': _sparse_tensor_plan_args(),
         'ops': ops,
         'returns': returns,
+        'outputs': [
+            {
+                'name': value,
+                'abi_name': 'output' if index == 0 else f'output{index}',
+                'type': 'unknown',
+                'role': 'sparse_tensor',
+            }
+            for index, value in enumerate(returns)
+        ],
     }
 
 
@@ -830,16 +989,19 @@ def _sparse_tensor_plan_args() -> list[dict[str, str]]:
     return [
         {
             'name': 'arg0',
+            'abi_name': 'coords',
             'type': 'tensor<?x4xi32>',
             'role': 'sparse_coords',
         },
         {
             'name': 'arg1',
+            'abi_name': 'features',
             'type': 'tensor<?x3xf16>',
             'role': 'sparse_features',
         },
         {
             'name': 'arg2',
+            'abi_name': 'active',
             'type': 'tensor<1xi32>',
             'role': 'sparse_active',
         },

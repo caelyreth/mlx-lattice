@@ -46,6 +46,8 @@ The project should optimize for these properties:
   ``lattice.weight`` operations.
 - native MLIR tooling parses and verifies graph structure before Python
   lowering.
+- module-level artifact metadata records the dialect version, schema digest,
+  weight file, and stable input/output ABI.
 - Python receives a typed ``RuntimePlan`` and rejects malformed importer
   payloads at the boundary.
 - every accepted v0 dialect operation either has a complete MLX lowering or is
@@ -89,12 +91,43 @@ and ``func.return``. SSA argument names in textual MLIR are not semantic API
 names; stable named inputs should be added through explicit ABI metadata rather
 than inferred from parser-preserved text.
 
+The module must also carry artifact metadata:
+
+.. code-block:: text
+
+   module attributes {
+     lattice.ir_version = 0,
+     lattice.schema_digest = "...",
+     lattice.input_names = ["coords", "features", "active"],
+     lattice.input_roles = ["sparse_coords",
+                            "sparse_features",
+                            "sparse_active"],
+     lattice.output_names = ["output"],
+     lattice.output_roles = ["sparse_tensor"],
+     lattice.weight_file = "weights.safetensors"
+   } {
+     ...
+   }
+
+``lattice.schema_digest`` is a SHA-256 fingerprint of the annotation-backed
+dialect schema. It closes the gap where two producers both claim
+``ir_version = 0`` but disagree on the operation, attribute, or type surface.
+The native verifier and Python ``RuntimePlan`` both reject mismatched digests.
+
+``lattice.input_names`` and ``lattice.output_names`` are the public call ABI.
+They are independent from SSA value labels such as ``%arg0`` or importer
+runtime labels such as ``arg0``/``v3``. ``lattice.input_roles`` and
+``lattice.output_roles`` describe how each public item should be bound. The
+currently accepted input roles are ``tensor``, ``sparse_coords``,
+``sparse_features``, and ``sparse_active``. The accepted output roles are
+``tensor`` and ``sparse_tensor``.
+
 The native MLX importer exposes a structured execution plan after verification.
-Plan argument records include generated runtime value names, canonical MLIR type
-text, and an ABI role. Sparse tensor shorthand is accepted only when the first
-three entry arguments are tagged as ``sparse_coords``, ``sparse_features``, and
-``sparse_active`` by the importer. This keeps the ergonomic Python call surface
-while making the contract type/role based instead of name based.
+Plan argument and output records include generated runtime value labels,
+stable ABI names, canonical MLIR type text, and roles. Sparse tensor shorthand
+is accepted only when the entry ABI exposes ``sparse_coords``,
+``sparse_features``, and ``sparse_active`` roles. Keyword execution binds by
+ABI names, not by generated runtime labels.
 
 Python freezes the native payload into ``RuntimePlan`` before execution.
 Lowering annotations receive typed plan operations rather than raw dictionaries;

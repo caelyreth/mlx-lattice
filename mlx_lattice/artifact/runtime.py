@@ -80,7 +80,8 @@ class LatticeProgram:
         kwargs: Mapping[str, Any],
     ) -> dict[str, RuntimeValue]:
         plan_args = self.plan.args
-        arg_names = tuple(item.name for item in plan_args)
+        value_names = tuple(item.name for item in plan_args)
+        abi_names = tuple(item.abi_name for item in plan_args)
         if len(args) == 1 and isinstance(args[0], SparseTensor):
             if kwargs:
                 raise ValueError(
@@ -94,16 +95,20 @@ class LatticeProgram:
                 active: args[0].active_rows,
             }
 
-        if len(args) > len(arg_names):
+        if len(args) > len(value_names):
             raise ValueError('too many positional artifact inputs.')
         values: dict[str, RuntimeValue] = {}
-        for name, value in zip(arg_names, args, strict=False):
-            values[name] = _runtime_value(value)
-        for name in arg_names[len(args) :]:
-            if name not in kwargs:
-                raise ValueError(f'missing artifact input: {name}')
-            values[name] = _runtime_value(kwargs[name])
-        unexpected = set(kwargs) - set(arg_names)
+        for plan_arg, value in zip(plan_args, args, strict=False):
+            values[plan_arg.name] = _runtime_value(value)
+        for plan_arg in plan_args[len(args) :]:
+            if plan_arg.abi_name not in kwargs:
+                raise ValueError(
+                    f'missing artifact input: {plan_arg.abi_name}'
+                )
+            values[plan_arg.name] = _runtime_value(
+                kwargs[plan_arg.abi_name]
+            )
+        unexpected = set(kwargs) - set(abi_names)
         if unexpected:
             names = ', '.join(sorted(unexpected))
             raise ValueError(f'unexpected artifact inputs: {names}')

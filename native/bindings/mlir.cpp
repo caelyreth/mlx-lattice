@@ -212,25 +212,73 @@ nb::object attribute_to_python(mlir::Attribute attr) {
     return nb::str(text.c_str());
 }
 
-void assign_sparse_make_argument_roles(
-    mlir::Block& entry,
-    llvm::DenseMap<mlir::Value, std::string>& roles
-) {
-    for (auto& operation : entry) {
-        auto sparseMake = mlir::dyn_cast<lattice::SparseMakeOp>(operation);
-        if (!sparseMake) {
-            continue;
-        }
-        if (mlir::isa<mlir::BlockArgument>(sparseMake.getCoords())) {
-            roles.try_emplace(sparseMake.getCoords(), "sparse_coords");
-        }
-        if (mlir::isa<mlir::BlockArgument>(sparseMake.getFeatures())) {
-            roles.try_emplace(sparseMake.getFeatures(), "sparse_features");
-        }
-        if (mlir::isa<mlir::BlockArgument>(sparseMake.getActive())) {
-            roles.try_emplace(sparseMake.getActive(), "sparse_active");
+std::vector<std::string>
+module_string_array(mlir::ModuleOp module, llvm::StringRef name) {
+    std::vector<std::string> out;
+    auto attr = module->getAttrOfType<mlir::ArrayAttr>(name);
+    if (!attr) {
+        return out;
+    }
+    out.reserve(attr.size());
+    for (auto item : attr) {
+        auto string = mlir::dyn_cast<mlir::StringAttr>(item);
+        if (string) {
+            out.emplace_back(string.getValue().str());
         }
     }
+    return out;
+}
+
+nb::list strings_to_list(std::vector<std::string> const& values) {
+    nb::list out;
+    for (auto const& value : values) {
+        out.append(nb::str(value.c_str()));
+    }
+    return out;
+}
+
+nb::dict lattice_mlir_schema() {
+    nb::dict out;
+    out["types"] = strings_to_list({
+        lattice::SparseTensorType::getMnemonic().str(),
+        lattice::WeightType::getMnemonic().str(),
+    });
+    out["attrs"] = strings_to_list({
+        lattice::CoordAttr::getMnemonic().str(),
+        lattice::FeatureLayoutAttr::getMnemonic().str(),
+        lattice::WeightLayoutAttr::getMnemonic().str(),
+        lattice::PackingAttr::getMnemonic().str(),
+        lattice::ActivationAttr::getMnemonic().str(),
+        lattice::GeluApproxAttr::getMnemonic().str(),
+        lattice::JoinAttr::getMnemonic().str(),
+        lattice::BinaryOpAttr::getMnemonic().str(),
+        lattice::PoolModeAttr::getMnemonic().str(),
+        lattice::VoxelReductionAttr::getMnemonic().str(),
+        lattice::PointInterpolationAttr::getMnemonic().str(),
+    });
+    out["ops"] = strings_to_list({
+        lattice::WeightOp::getOperationName().str(),
+        lattice::SparseMakeOp::getOperationName().str(),
+        lattice::SparseDecomposeOp::getOperationName().str(),
+        lattice::SparseWithFeaturesOp::getOperationName().str(),
+        lattice::Conv3DOp::getOperationName().str(),
+        lattice::SubmConv3DOp::getOperationName().str(),
+        lattice::TargetConv3DOp::getOperationName().str(),
+        lattice::ConvTranspose3DOp::getOperationName().str(),
+        lattice::GenerativeConvTranspose3DOp::getOperationName().str(),
+        lattice::Pool3DOp::getOperationName().str(),
+        lattice::GlobalPoolOp::getOperationName().str(),
+        lattice::VoxelizeOp::getOperationName().str(),
+        lattice::DevoxelizeOp::getOperationName().str(),
+        lattice::LinearOp::getOperationName().str(),
+        lattice::ActivationOp::getOperationName().str(),
+        lattice::BatchNormOp::getOperationName().str(),
+        lattice::LayerNormOp::getOperationName().str(),
+        lattice::RMSNormOp::getOperationName().str(),
+        lattice::SparseBinaryOp::getOperationName().str(),
+    });
+    out["schema_digest"] = lattice::kArtifactSchemaDigest.str();
+    return out;
 }
 
 nb::dict lattice_mlir_plan(std::string const& graph) {
@@ -251,25 +299,37 @@ nb::dict lattice_mlir_plan(std::string const& graph) {
 
         nb::list args;
         auto& entry = function.front();
-        llvm::DenseMap<mlir::Value, std::string> argumentRoles;
-        assign_sparse_make_argument_roles(entry, argumentRoles);
+        auto inputNames = module_string_array(module, "lattice.input_names");
+        auto inputRoles = module_string_array(module, "lattice.input_roles");
         for (auto argument : entry.getArguments()) {
             auto name = "arg" + std::to_string(argument.getArgNumber());
             valueNames[argument] = name;
             nb::dict arg;
             arg["name"] = name;
+            arg["abi_name"] = inputNames.at(argument.getArgNumber());
             arg["type"] = type_to_string(argument.getType());
-            auto role = argumentRoles.find(argument);
-            arg["role"] = role == argumentRoles.end() ? "tensor" : role->second;
+            arg["role"] = inputRoles.at(argument.getArgNumber());
             args.append(arg);
         }
 
         nb::list ops;
         nb::list returns;
+        nb::list outputs;
+        auto outputNames = module_string_array(module, "lattice.output_names");
+        auto outputRoles = module_string_array(module, "lattice.output_roles");
         for (auto& op : entry) {
             if (auto returnOp = mlir::dyn_cast<mlir::func::ReturnOp>(op)) {
+                auto index = 0U;
                 for (auto operand : returnOp.getOperands()) {
-                    returns.append(label(operand));
+                    auto value = label(operand);
+                    returns.append(value);
+                    nb::dict output;
+                    output["name"] = value;
+                    output["abi_name"] = outputNames.at(index);
+                    output["type"] = type_to_string(operand.getType());
+                    output["role"] = outputRoles.at(index);
+                    outputs.append(output);
+                    ++index;
                 }
                 continue;
             }
@@ -317,12 +377,16 @@ nb::dict lattice_mlir_plan(std::string const& graph) {
             module->getAttrOfType<mlir::IntegerAttr>("lattice.ir_version");
         auto weightFileAttr =
             module->getAttrOfType<mlir::StringAttr>("lattice.weight_file");
+        auto schemaDigestAttr =
+            module->getAttrOfType<mlir::StringAttr>("lattice.schema_digest");
         out["ir_version"] = irVersionAttr.getInt();
+        out["schema_digest"] = schemaDigestAttr.getValue().str();
         out["weight_file"] = weightFileAttr.getValue().str();
         out["name"] = function.getSymName().str();
         out["args"] = args;
         out["ops"] = ops;
         out["returns"] = returns;
+        out["outputs"] = outputs;
         return out;
     });
 }
@@ -347,6 +411,12 @@ void register_mlir(nb::module_& module) {
         &lattice_mlir_operation_names,
         nb::sig("def lattice_mlir_operation_names(graph: str) -> list[str]"),
         "Return lattice operation names from a parsed and verified MLIR graph."
+    );
+    module.def(
+        "lattice_mlir_schema",
+        &lattice_mlir_schema,
+        nb::sig("def lattice_mlir_schema() -> dict[str, object]"),
+        "Return native MLIR lattice dialect surface metadata."
     );
     module.def(
         "lattice_mlir_plan",

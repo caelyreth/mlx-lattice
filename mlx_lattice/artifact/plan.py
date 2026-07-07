@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-from lattice_contract import ARTIFACT_WEIGHT_FILE, CURRENT_DIALECT_VERSION
+from lattice_contract import (
+    ARTIFACT_WEIGHT_FILE,
+    CURRENT_DIALECT_VERSION,
+    DIALECT_SCHEMA_DIGEST,
+)
 from lattice_contract.dialect import LATTICE_DIALECT
 from lattice_contract.schema import OpDef
 
@@ -20,6 +24,17 @@ class PlanArgument:
     """
 
     name: str
+    abi_name: str
+    type: str
+    role: str
+
+
+@dataclass(frozen=True, slots=True)
+class PlanOutput:
+    """One verified artifact entry output ABI item."""
+
+    name: str
+    abi_name: str
     type: str
     role: str
 
@@ -42,37 +57,45 @@ class RuntimePlan:
     """Typed Python view of a native-verified lattice MLIR execution plan."""
 
     ir_version: int
+    schema_digest: str
     weight_file: str
     name: str
     args: tuple[PlanArgument, ...]
     ops: tuple[PlanOperation, ...]
     returns: tuple[str, ...]
+    outputs: tuple[PlanOutput, ...]
 
     @classmethod
     def from_native(cls, raw: Mapping[str, Any]) -> RuntimePlan:
         """Validate and freeze a native ``lattice_mlir_plan`` payload."""
 
         ir_version = _int(raw, 'ir_version')
+        schema_digest = _str(raw, 'schema_digest')
         weight_file = _str(raw, 'weight_file')
         name = _str(raw, 'name')
         args = tuple(_argument(item) for item in _sequence(raw, 'args'))
         ops = tuple(_operation(item) for item in _sequence(raw, 'ops'))
         returns = tuple(str(item) for item in _sequence(raw, 'returns'))
+        outputs = tuple(_output(item) for item in _sequence(raw, 'outputs'))
         _validate_plan_dataflow(
             ir_version=ir_version,
+            schema_digest=schema_digest,
             weight_file=weight_file,
             name=name,
             args=args,
             ops=ops,
             returns=returns,
+            outputs=outputs,
         )
         return cls(
             ir_version=ir_version,
+            schema_digest=schema_digest,
             weight_file=weight_file,
             name=name,
             args=args,
             ops=ops,
             returns=returns,
+            outputs=outputs,
         )
 
 
@@ -80,6 +103,17 @@ def _argument(raw: Any) -> PlanArgument:
     mapping = _mapping(raw, 'argument')
     return PlanArgument(
         name=_str(mapping, 'name'),
+        abi_name=_str(mapping, 'abi_name'),
+        type=_str(mapping, 'type'),
+        role=_str(mapping, 'role'),
+    )
+
+
+def _output(raw: Any) -> PlanOutput:
+    mapping = _mapping(raw, 'output')
+    return PlanOutput(
+        name=_str(mapping, 'name'),
+        abi_name=_str(mapping, 'abi_name'),
         type=_str(mapping, 'type'),
         role=_str(mapping, 'role'),
     )
@@ -290,16 +324,23 @@ def _validate_triple(
 def _validate_plan_dataflow(
     *,
     ir_version: int,
+    schema_digest: str,
     weight_file: str,
     name: str,
     args: tuple[PlanArgument, ...],
     ops: tuple[PlanOperation, ...],
     returns: tuple[str, ...],
+    outputs: tuple[PlanOutput, ...],
 ) -> None:
     if ir_version != CURRENT_DIALECT_VERSION:
         raise ValueError(
             'unsupported lattice artifact runtime plan ir_version: '
             f'{ir_version} (expected {CURRENT_DIALECT_VERSION}).'
+        )
+    if schema_digest != DIALECT_SCHEMA_DIGEST:
+        raise ValueError(
+            'unsupported lattice artifact runtime plan schema_digest: '
+            f'{schema_digest!r} (expected {DIALECT_SCHEMA_DIGEST!r}).'
         )
     if weight_file != ARTIFACT_WEIGHT_FILE:
         raise ValueError(
@@ -316,13 +357,21 @@ def _validate_plan_dataflow(
         )
 
     defined: set[str] = set()
+    input_names: set[str] = set()
     for argument in args:
         _validate_value_label(argument.name, 'argument')
+        _validate_abi_name(argument.abi_name, 'argument')
+        _validate_input_role(argument.role)
         if argument.name in defined:
             raise ValueError(
                 f'duplicate runtime value label: {argument.name}'
             )
+        if argument.abi_name in input_names:
+            raise ValueError(
+                f'duplicate artifact input ABI name: {argument.abi_name}'
+            )
         defined.add(argument.name)
+        input_names.add(argument.abi_name)
 
     for operation in ops:
         for operand in operation.operands:
@@ -340,10 +389,49 @@ def _validate_plan_dataflow(
         if value not in defined:
             raise ValueError(f'return uses undefined value: {value}')
 
+    if len(outputs) != len(returns):
+        raise ValueError(
+            'lattice artifact runtime plan outputs must match returns.'
+        )
+    output_names: set[str] = set()
+    for output, value in zip(outputs, returns, strict=True):
+        if output.name != value:
+            raise ValueError(
+                'lattice artifact runtime plan output names must match '
+                'returns.'
+            )
+        _validate_abi_name(output.abi_name, 'output')
+        _validate_output_role(output.role)
+        if output.abi_name in output_names:
+            raise ValueError(
+                f'duplicate artifact output ABI name: {output.abi_name}'
+            )
+        output_names.add(output.abi_name)
+
 
 def _validate_value_label(value: str, label: str) -> None:
     if not value:
         raise ValueError(f'{label} value label must not be empty.')
+
+
+def _validate_abi_name(value: str, label: str) -> None:
+    if not value:
+        raise ValueError(f'{label} ABI name must not be empty.')
+
+
+def _validate_input_role(value: str) -> None:
+    if value not in {
+        'tensor',
+        'sparse_coords',
+        'sparse_features',
+        'sparse_active',
+    }:
+        raise ValueError(f'unsupported artifact input ABI role: {value}.')
+
+
+def _validate_output_role(value: str) -> None:
+    if value not in {'tensor', 'sparse_tensor'}:
+        raise ValueError(f'unsupported artifact output ABI role: {value}.')
 
 
 def _enum_attr_values() -> Mapping[str, tuple[str, ...]]:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Self, TypeVar
@@ -325,3 +327,74 @@ def schema_digest(schema: DialectSchema) -> Mapping[str, tuple[str, ...]]:
         'attrs': tuple(schema.attrs),
         'ops': tuple(schema.ops),
     }
+
+
+def canonical_schema(schema: DialectSchema) -> Mapping[str, Any]:
+    """Return the canonical public schema used for artifact compatibility."""
+
+    return {
+        'namespace': schema.namespace,
+        'types': tuple(
+            {
+                'name': item.name,
+                'mnemonic': item.mnemonic,
+                'parameters': tuple(
+                    {'name': param.name, 'kind': param.kind}
+                    for param in item.parameters
+                ),
+            }
+            for item in schema.types.values()
+        ),
+        'attrs': tuple(
+            {
+                'name': item.name,
+                'mnemonic': item.mnemonic,
+                'parameters': tuple(
+                    {'name': param.name, 'kind': param.kind}
+                    for param in item.parameters
+                ),
+                'values': item.values,
+            }
+            for item in schema.attrs.values()
+        ),
+        'ops': tuple(
+            {
+                'name': item.name,
+                'python_name': item.python_name,
+                'operands': tuple(
+                    {
+                        'name': operand.name,
+                        'type': operand.type,
+                        'kind': operand.kind,
+                        'optional': operand.optional,
+                    }
+                    for operand in item.operands
+                ),
+                'results': tuple(
+                    {'name': result.name, 'type': result.type}
+                    for result in item.results
+                ),
+                'attributes': tuple(
+                    {
+                        'name': attr.name,
+                        'kind': attr.kind,
+                        'required': attr.required,
+                    }
+                    for attr in item.attributes
+                ),
+                'assembly': item.assembly,
+            }
+            for item in schema.ops.values()
+        ),
+    }
+
+
+def schema_fingerprint(schema: DialectSchema) -> str:
+    """Return a deterministic SHA-256 fingerprint for a dialect schema."""
+
+    payload = json.dumps(
+        canonical_schema(schema),
+        sort_keys=True,
+        separators=(',', ':'),
+    )
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()

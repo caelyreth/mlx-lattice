@@ -32,10 +32,11 @@ The first slice intentionally owns only the portable contract:
 - local and global sparse pooling;
 - point/voxel conversion;
 - generic coordinate-aligned sparse binary algebra.
-- artifact ABI metadata validation for `lattice.ir_version` and
-  `lattice.weight_file`.
-- importer-facing argument type and sparse component role metadata for the
-  verified entry function.
+- artifact ABI metadata validation for `lattice.ir_version`,
+  `lattice.schema_digest`, `lattice.weight_file`, and explicit model
+  input/output ABI arrays.
+- importer-facing argument/output type, public ABI name, and sparse component
+  role metadata for the verified entry function.
 
 It does not contain MLX importer code, Torch exporter code, TensorOps/CSR
 execution views, or JSON artifact compatibility.
