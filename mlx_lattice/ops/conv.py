@@ -4,6 +4,16 @@ from collections.abc import Sequence
 
 import mlx.core as mx
 
+from mlx_lattice.artifact.lowering import (
+    RuntimeValue,
+    array,
+    artifact_lowering,
+    attrs,
+    lattice_lowering,
+    operands,
+    sparse,
+    triple_attr,
+)
 from mlx_lattice.core import (
     CoordinateMapKey,
     KernelSpec,
@@ -25,6 +35,7 @@ __all__ = [
 ]
 
 
+@lattice_lowering
 def conv3d(
     x: SparseTensor,
     weight: mx.array | QuantizedWeight,
@@ -99,6 +110,7 @@ def conv3d(
     )
 
 
+@lattice_lowering
 def subm_conv3d(
     x: SparseTensor,
     weight: mx.array | QuantizedWeight,
@@ -190,6 +202,68 @@ def generative_conv_transpose3d(
         spec,
         map_kind='generative',
         output_stride=_div_stride(x.stride, spec.stride),
+    )
+
+
+@artifact_lowering(op=conv3d)
+def conv3d_from_artifact(
+    program,
+    operation,
+    values: dict[str, RuntimeValue],
+) -> SparseTensor:
+    """Lower lattice.conv3d artifact ops through ``conv3d``."""
+
+    del program
+    op_operands = operands(operation)
+    op_attrs = attrs(operation)
+    return conv3d(
+        sparse(values, op_operands[0]),
+        array(values, op_operands[1]),
+        kernel_size=triple_attr(op_attrs, 'kernel_size'),
+        stride=triple_attr(op_attrs, 'stride'),
+        padding=triple_attr(op_attrs, 'padding'),
+        dilation=triple_attr(op_attrs, 'dilation'),
+    )
+
+
+@artifact_lowering(op=subm_conv3d)
+def subm_conv3d_from_artifact(
+    program,
+    operation,
+    values: dict[str, RuntimeValue],
+) -> SparseTensor:
+    """Lower lattice.subm_conv3d artifact ops through ``subm_conv3d``."""
+
+    del program
+    op_operands = operands(operation)
+    op_attrs = attrs(operation)
+    return subm_conv3d(
+        sparse(values, op_operands[0]),
+        array(values, op_operands[1]),
+        kernel_size=triple_attr(op_attrs, 'kernel_size'),
+        dilation=triple_attr(op_attrs, 'dilation'),
+    )
+
+
+@artifact_lowering(op=conv3d, dialect_op='target_conv3d')
+def target_conv3d_from_artifact(
+    program,
+    operation,
+    values: dict[str, RuntimeValue],
+) -> SparseTensor:
+    """Lower lattice.target_conv3d artifact ops through ``conv3d``."""
+
+    del program
+    op_operands = operands(operation)
+    op_attrs = attrs(operation)
+    return conv3d(
+        sparse(values, op_operands[0]),
+        array(values, op_operands[2]),
+        kernel_size=triple_attr(op_attrs, 'kernel_size'),
+        stride=triple_attr(op_attrs, 'stride'),
+        padding=triple_attr(op_attrs, 'padding'),
+        dilation=triple_attr(op_attrs, 'dilation'),
+        coordinates=sparse(values, op_operands[1]),
     )
 
 

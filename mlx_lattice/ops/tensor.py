@@ -5,6 +5,17 @@ from typing import Literal, cast
 
 import mlx.core as mx
 
+from mlx_lattice.artifact.lowering import (
+    RuntimeValue,
+    array,
+    artifact_lowering,
+    attrs,
+    float_attr,
+    join_attr,
+    lattice_lowering,
+    operands,
+    sparse,
+)
 from mlx_lattice.core.coords import SparseAlignment, build_sparse_alignment
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import triple
@@ -147,6 +158,7 @@ def sparse_binary_op(
     )
 
 
+@lattice_lowering(op='sparse.add')
 def sparse_add(
     lhs: SparseTensor,
     rhs: SparseTensor,
@@ -155,6 +167,27 @@ def sparse_add(
 ) -> SparseTensor:
     """Add sparse tensors after coordinate alignment."""
     return sparse_binary_op(lhs, rhs, 'add', join=join)
+
+
+@artifact_lowering(op=sparse_add)
+def sparse_add_from_artifact(
+    program,
+    operation,
+    values: dict[str, RuntimeValue],
+) -> SparseTensor:
+    """Lower lattice.sparse.add artifact ops through ``sparse_binary_op``."""
+
+    del program
+    op_operands = operands(operation)
+    op_attrs = attrs(operation)
+    return sparse_binary_op(
+        sparse(values, op_operands[0]),
+        sparse(values, op_operands[1]),
+        'add',
+        join=join_attr(op_attrs, 'join'),
+        lhs_fill=float_attr(op_attrs, 'lhs_fill'),
+        rhs_fill=float_attr(op_attrs, 'rhs_fill'),
+    )
 
 
 def sparse_sub(
@@ -273,6 +306,7 @@ def crop(
     return prune_mask(x, mask)
 
 
+@lattice_lowering(op='sparse.with_features')
 def replace_feature(x: SparseTensor, feats: mx.array) -> SparseTensor:
     """Return ``x`` with its feature matrix replaced.
 
@@ -280,6 +314,22 @@ def replace_feature(x: SparseTensor, feats: mx.array) -> SparseTensor:
     count as ``x.coords`` and two-dimensional ``(N, C_new)`` shape.
     """
     return x.replace(feats=feats)
+
+
+@artifact_lowering(op=replace_feature)
+def sparse_with_features_from_artifact(
+    program,
+    operation,
+    values: dict[str, RuntimeValue],
+) -> SparseTensor:
+    """Lower lattice.sparse.with_features through ``replace_feature``."""
+
+    del program
+    op_operands = operands(operation)
+    return replace_feature(
+        sparse(values, op_operands[0]),
+        array(values, op_operands[1]),
+    )
 
 
 def _apply_binary_op(lhs: mx.array, rhs: mx.array, op: str) -> mx.array:

@@ -10,4 +10,7 @@ NB_MODULE(_ext, module) {
     mlx_lattice::bindings::register_entropy(module);
     mlx_lattice::bindings::register_convolution(module);
     mlx_lattice::bindings::register_pooling(module);
+#if MLX_LATTICE_ENABLE_MLIR
+    mlx_lattice::bindings::register_mlir(module);
+#endif
 }

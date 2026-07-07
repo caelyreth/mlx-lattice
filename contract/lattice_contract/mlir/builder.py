@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
-from lattice_contract.dialect import LATTICE_DIALECT
+from lattice_contract.dialect import (
+    LATTICE_DIALECT,
+    sparse_decompose,
+    weight,
+)
 from lattice_contract.schema import OpDef
 
 Triple = tuple[int, int, int]
@@ -98,6 +102,61 @@ def quantized_packing(
     return Packing(kind, group_size, scale_dtype, mode)
 
 
+type EmitResult = SSAValue | tuple[SSAValue, ...]
+type OpHandle = str | OpDef | Callable[..., Any]
+
+
+class EmitFn(Protocol):
+    """Textual MLIR emitter callable with a stable function name."""
+
+    __name__: str
+
+    def __call__(
+        self,
+        builder: MLIRModuleBuilder,
+        op: OpDef,
+        kwargs: Mapping[str, Any],
+    ) -> EmitResult: ...
+
+
+@dataclass(slots=True)
+class EmitRegistry:
+    """Annotation-backed textual assembly emitter registry."""
+
+    functions: dict[str, EmitFn]
+    default: EmitFn
+
+    def register(self, op: OpHandle, fn: EmitFn) -> EmitFn:
+        """Register a specialized emitter for a dialect operation."""
+
+        definition = LATTICE_DIALECT.resolve_op(op)
+        if definition.name in self.functions:
+            raise ValueError(f'duplicate MLIR emitter: {definition.name}')
+        self.functions[definition.name] = fn
+        return fn
+
+    def emit(
+        self,
+        builder: MLIRModuleBuilder,
+        op: OpDef,
+        kwargs: Mapping[str, Any],
+    ) -> EmitResult:
+        """Emit ``op`` through a specialized or default emitter."""
+
+        return self.functions.get(op.name, self.default)(
+            builder, op, kwargs
+        )
+
+
+def mlir_emitter(*, op: OpHandle) -> Callable[[EmitFn], EmitFn]:
+    """Bind a textual assembly hook to a dialect declaration."""
+
+    def decorator(fn: EmitFn) -> EmitFn:
+        return EMITTERS.register(op, fn)
+
+    return decorator
+
+
 class MLIRModuleBuilder:
     """Annotation-driven textual MLIR module builder.
 
@@ -184,78 +243,7 @@ class MLIRModuleBuilder:
     ) -> SSAValue | tuple[SSAValue, ...]:
         """Emit an operation declared by the annotated schema."""
 
-        if op.name == 'weight':
-            return self._emit_weight(op, kwargs)
-        if op.name == 'sparse.decompose':
-            return self._emit_sparse_decompose(op, kwargs)
-        return self._emit_functional(op, kwargs)
-
-    def _emit_weight(
-        self,
-        op: OpDef,
-        kwargs: Mapping[str, Any],
-    ) -> SSAValue:
-        sym_name = _require_str(kwargs, 'sym_name')
-        storage_key = _require_str(kwargs, 'storage_key')
-        layout = _require_str(kwargs, 'layout')
-        packing = kwargs.get('packing', dense_packing())
-        result_type = _require_type(kwargs, 'result_type', WeightType)
-        result = self._result_value(op, result_type, kwargs)
-        self._ops.append(
-            f'{result.ref()} = lattice.weight @{sym_name} '
-            f'{{storage_key = "{storage_key}", '
-            f'layout = #lattice.weight_layout<{layout}>, '
-            f'packing = {_packing(packing)}}} : {_mlir_type(result.type)}'
-        )
-        return result
-
-    def _emit_sparse_decompose(
-        self,
-        op: OpDef,
-        kwargs: Mapping[str, Any],
-    ) -> tuple[SSAValue, ...]:
-        input_value = _require_value(kwargs, 'input')
-        result_types = _require_sequence(kwargs, 'result_types')
-        if len(result_types) != 3:
-            raise ValueError(
-                'sparse_decompose requires three result types.'
-            )
-        results = tuple(
-            self._result_value(op, _type(result_type), kwargs, index=index)
-            for index, result_type in enumerate(result_types)
-        )
-        refs = ', '.join(result.ref() for result in results)
-        result_type_text = ', '.join(
-            _mlir_type(result.type) for result in results
-        )
-        self._ops.append(
-            f'{refs} = lattice.sparse.decompose {input_value.ref()} : '
-            f'{_mlir_type(input_value.type)} -> ({result_type_text})'
-        )
-        return results
-
-    def _emit_functional(
-        self,
-        op: OpDef,
-        kwargs: Mapping[str, Any],
-    ) -> SSAValue:
-        operands = [
-            _require_value(kwargs, operand.name)
-            for operand in op.operands
-            if operand.kind == 'ssa'
-        ]
-        result_type = _require_any(kwargs, 'result_type')
-        result = self._result_value(op, _type(result_type), kwargs)
-        attrs = _format_attrs(op, kwargs)
-        operand_refs = ', '.join(value.ref() for value in operands)
-        operand_types = ', '.join(
-            _mlir_type(value.type) for value in operands
-        )
-        self._ops.append(
-            f'{result.ref()} = lattice.{op.name} {operand_refs} '
-            f'{attrs} : ({operand_types}) -> {_mlir_type(result.type)}'
-        )
-        return result
+        return EMITTERS.emit(self, op, kwargs)
 
     def _result_value(
         self,
@@ -280,6 +268,77 @@ class MLIRModuleBuilder:
         count = self._name_counts.get(normalized, 0)
         self._name_counts[normalized] = count + 1
         return normalized if count == 0 else f'{normalized}{count}'
+
+
+def functional_emitter(
+    builder: MLIRModuleBuilder,
+    op: OpDef,
+    kwargs: Mapping[str, Any],
+) -> SSAValue:
+    operands = [
+        _require_value(kwargs, operand.name)
+        for operand in op.operands
+        if operand.kind == 'ssa'
+    ]
+    result_type = _require_any(kwargs, 'result_type')
+    result = builder._result_value(op, _type(result_type), kwargs)
+    attrs = _format_attrs(op, kwargs)
+    operand_refs = ', '.join(value.ref() for value in operands)
+    operand_types = ', '.join(_mlir_type(value.type) for value in operands)
+    builder._ops.append(
+        f'{result.ref()} = lattice.{op.name} {operand_refs} '
+        f'{attrs} : ({operand_types}) -> {_mlir_type(result.type)}'
+    )
+    return result
+
+
+EMITTERS = EmitRegistry({}, functional_emitter)
+
+
+@mlir_emitter(op=weight)
+def weight_emitter(
+    builder: MLIRModuleBuilder,
+    op: OpDef,
+    kwargs: Mapping[str, Any],
+) -> SSAValue:
+    sym_name = _require_str(kwargs, 'sym_name')
+    storage_key = _require_str(kwargs, 'storage_key')
+    layout = _require_str(kwargs, 'layout')
+    packing = kwargs.get('packing', dense_packing())
+    result_type = _require_type(kwargs, 'result_type', WeightType)
+    result = builder._result_value(op, result_type, kwargs)
+    builder._ops.append(
+        f'{result.ref()} = lattice.weight @{sym_name} '
+        f'{{storage_key = "{storage_key}", '
+        f'layout = #lattice.weight_layout<{layout}>, '
+        f'packing = {_packing(packing)}}} : {_mlir_type(result.type)}'
+    )
+    return result
+
+
+@mlir_emitter(op=sparse_decompose)
+def sparse_decompose_emitter(
+    builder: MLIRModuleBuilder,
+    op: OpDef,
+    kwargs: Mapping[str, Any],
+) -> tuple[SSAValue, ...]:
+    input_value = _require_value(kwargs, 'input')
+    result_types = _require_sequence(kwargs, 'result_types')
+    if len(result_types) != 3:
+        raise ValueError('sparse_decompose requires three result types.')
+    results = tuple(
+        builder._result_value(op, _type(result_type), kwargs, index=index)
+        for index, result_type in enumerate(result_types)
+    )
+    refs = ', '.join(result.ref() for result in results)
+    result_type_text = ', '.join(
+        _mlir_type(result.type) for result in results
+    )
+    builder._ops.append(
+        f'{refs} = lattice.sparse.decompose {input_value.ref()} : '
+        f'{_mlir_type(input_value.type)} -> ({result_type_text})'
+    )
+    return results
 
 
 def _type(

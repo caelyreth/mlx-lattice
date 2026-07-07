@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Self, TypeVar
+from typing import Any, Literal, Self, TypeVar
 
 DeclarationT = TypeVar('DeclarationT', bound=Callable | type)
 
@@ -172,17 +172,17 @@ class DialectSchema:
         """Register a dialect operation declaration."""
 
         def decorator(declaration: DeclarationT) -> DeclarationT:
-            self.add_op(
-                OpDef(
-                    name=name,
-                    python_name=python_name or name.replace('.', '_'),
-                    operands=tuple(operands),
-                    results=tuple(results),
-                    attributes=tuple(attributes),
-                    assembly=assembly,
-                    summary=summary,
-                )
+            definition = OpDef(
+                name=name,
+                python_name=python_name or name.replace('.', '_'),
+                operands=tuple(operands),
+                results=tuple(results),
+                attributes=tuple(attributes),
+                assembly=assembly,
+                summary=summary,
             )
+            self.add_op(definition)
+            declaration.__dict__['__lattice_op__'] = definition
             return declaration
 
         return decorator
@@ -215,6 +215,29 @@ class DialectSchema:
             return self._ops_by_python_name[name]
         except KeyError as exc:
             raise AttributeError(name) from exc
+
+    def resolve_op(self, value: str | OpDef | Callable[..., Any]) -> OpDef:
+        """Resolve an op handle to its schema definition.
+
+        Decorated functions/classes carry ``__lattice_op__`` metadata. This is
+        the preferred path because it lets framework code bind to the API
+        object instead of repeating dialect strings.
+        """
+
+        if isinstance(value, OpDef):
+            return value
+        if isinstance(value, str):
+            try:
+                return self.ops[value]
+            except KeyError:
+                return self.op_by_python_name(value)
+        op = getattr(value, '__lattice_op__', None)
+        if isinstance(op, OpDef):
+            return op
+        raise TypeError(
+            'expected an OpDef, op name, python op name, or declaration '
+            'annotated with __lattice_op__.'
+        )
 
     def iter_ops(self) -> Iterator[OpDef]:
         return iter(self.ops.values())

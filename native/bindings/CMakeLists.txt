@@ -12,6 +12,27 @@ nanobind_add_module(
   module.cpp)
 
 target_link_libraries(_ext PRIVATE mlx_lattice_core)
+target_compile_definitions(
+  _ext PRIVATE MLX_LATTICE_ENABLE_MLIR=$<BOOL:${MLX_LATTICE_ENABLE_MLIR}>)
+
+if(MLX_LATTICE_ENABLE_MLIR)
+  target_sources(_ext PRIVATE mlir.cpp)
+  target_link_libraries(
+    _ext
+    PRIVATE
+      MLIRFuncDialect
+      MLIRIR
+      MLIRParser
+      MLIRSupport
+      MLIRLatticeDialect)
+  target_include_directories(
+    _ext
+    PRIVATE
+      ${PROJECT_SOURCE_DIR}/mlir/include
+      ${PROJECT_BINARY_DIR}/mlir/include
+      ${MLIR_INCLUDE_DIRS}
+      ${LLVM_INCLUDE_DIRS})
+endif()
 
 # MARK: - typing
 

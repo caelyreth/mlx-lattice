@@ -12,6 +12,7 @@ from lattice_contract import (
     dense_packing,
     quantized_packing,
 )
+from lattice_contract.mlir.builder import EMITTERS
 from lattice_contract.schema import schema_digest
 
 
@@ -39,6 +40,13 @@ def test_mlir_builder_emits_valid_conv3d_graph_shape() -> None:
     assert 'lattice.conv3d' in graph
     assert 'array<i64: 3, 3, 3>' in graph
     assert '#lattice.packing<dense>' in graph
+
+
+def test_mlir_builder_special_emitters_are_annotation_registered() -> None:
+    assert set(EMITTERS.functions) == {
+        LATTICE_DIALECT.op_by_python_name('sparse_decompose').name,
+        LATTICE_DIALECT.op_by_python_name('weight').name,
+    }
 
 
 def test_mlir_builder_supports_quantized_weight_packing() -> None:

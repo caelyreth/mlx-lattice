@@ -4,6 +4,13 @@ from typing import Literal
 
 import mlx.core as mx
 
+from mlx_lattice.artifact.lowering import (
+    RuntimeValue,
+    array,
+    artifact_lowering,
+    lattice_lowering,
+    operands,
+)
 from mlx_lattice.core import QuantizedWeight, SparseTensor
 from mlx_lattice.ops._quantized import quantized_matmul
 
@@ -25,6 +32,7 @@ __all__ = [
 ]
 
 
+@lattice_lowering
 def linear(
     x: SparseTensor,
     weight: mx.array | QuantizedWeight,
@@ -44,6 +52,25 @@ def linear(
         raise ValueError('weight input channels must match x.channels.')
     feats = x.feats @ weight.T
     return x.replace(feats=_with_bias(feats, bias))
+
+
+@artifact_lowering(op=linear)
+def linear_from_artifact(
+    program,
+    operation,
+    values: dict[str, RuntimeValue],
+) -> RuntimeValue:
+    """Lower lattice.linear artifact ops through ``linear``."""
+
+    del program
+    op_operands = operands(operation)
+    input_value = values[op_operands[0]]
+    weight = array(values, op_operands[1])
+    if isinstance(input_value, SparseTensor):
+        return linear(input_value, weight)
+    if input_value.ndim != 2 or weight.ndim != 2:
+        raise ValueError('lattice.linear expects rank-2 dense tensors.')
+    return input_value @ weight.T
 
 
 def relu(x: SparseTensor) -> SparseTensor:

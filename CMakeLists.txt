@@ -69,10 +69,6 @@ if(NOT DEFINED MLX_DIR OR NOT EXISTS "${MLX_DIR}")
 endif()
 find_package(MLX CONFIG REQUIRED PATHS "${MLX_DIR}" NO_DEFAULT_PATH)
 
-# MARK: - native
-
-add_subdirectory(native)
-
 # MARK: - optional MLIR dialect tooling
 
 option(
@@ -81,5 +77,11 @@ option(
   OFF)
 
 if(MLX_LATTICE_ENABLE_MLIR)
+  find_package(MLIR REQUIRED CONFIG)
+  find_package(LLVM REQUIRED CONFIG)
   add_subdirectory(mlir)
 endif()
+
+# MARK: - native
+
+add_subdirectory(native)
