@@ -44,10 +44,7 @@ the stable exchange contract, not optional documentation. The corresponding
 Python constants are exported as ``CURRENT_DIALECT_VERSION``,
 ``ARTIFACT_GRAPH_FILE``, and ``ARTIFACT_WEIGHT_FILE``.
 
-.. automodule:: lattice_contract
-   :members:
-
-.. automodule:: lattice_contract.mlir
+.. automodule:: lattice_contract.artifact
    :members:
 
 .. automodule:: lattice_contract.mlir.builder

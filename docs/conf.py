@@ -41,6 +41,7 @@ autosummary_generate = True
 autodoc_typehints = 'description'
 autodoc_typehints_format = 'short'
 autodoc_member_order = 'bysource'
+autodoc_mock_imports = ['mlx_lattice._ext']
 autodoc_default_options = {
     'members': True,
     'undoc-members': False,

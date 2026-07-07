@@ -31,7 +31,7 @@ Executable entry
 
 An executable artifact contains one graph entry:
 
-.. code-block:: mlir
+.. code-block:: text
 
    func.func @forward(...) -> (...) {
      ...
@@ -84,7 +84,7 @@ Quantization model
 Quantized graph op variants such as ``lattice.quantized_conv3d`` are not part
 of the semantic graph surface. Quantization is represented by weight packing:
 
-.. code-block:: mlir
+.. code-block:: text
 
    %w = lattice.weight @stem.qweight
      {storage_key = "stem.qweight",
@@ -116,7 +116,7 @@ tensors. ``lattice.batch_norm``, ``lattice.layer_norm``, and
 ``lattice.rms_norm`` follow the same rule. A graph that needs to preserve
 sparse support must spell that out:
 
-.. code-block:: mlir
+.. code-block:: text
 
    %coords, %features, %active = lattice.sparse.decompose %input
      : !lattice.sparse_tensor<rank = 3,
