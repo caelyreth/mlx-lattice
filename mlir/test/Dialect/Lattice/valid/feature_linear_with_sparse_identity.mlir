@@ -33,8 +33,16 @@ module attributes {
        packing = #lattice.packing<dense>}
       : !lattice.weight<linear, f16>
 
-    %projected = lattice.linear %features0, %weight
-      : (tensor<?x32xf16>, !lattice.weight<linear, f16>)
+    %bias = lattice.weight @mlp.proj.bias
+      {storage_key = "mlp.proj.bias",
+       layout = #lattice.weight_layout<bias_c>,
+       packing = #lattice.packing<dense>}
+      : !lattice.weight<bias, f16>
+
+    %projected = lattice.linear %features0, %weight, %bias
+      : (tensor<?x32xf16>,
+         !lattice.weight<linear, f16>,
+         !lattice.weight<bias, f16>)
         -> tensor<?x64xf16>
 
     %out = lattice.sparse.with_features %input, %projected

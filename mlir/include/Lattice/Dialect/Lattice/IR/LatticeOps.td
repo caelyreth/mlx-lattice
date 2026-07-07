@@ -73,6 +73,7 @@ def Lattice_Conv3DOp : Lattice_Op<"conv3d"> {
   let arguments = (ins
     Lattice_SparseTensorType:$input,
     Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
@@ -80,7 +81,7 @@ def Lattice_Conv3DOp : Lattice_Op<"conv3d"> {
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
-    $input `,` $weight attr-dict `:`
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -90,12 +91,13 @@ def Lattice_SubmConv3DOp : Lattice_Op<"subm_conv3d"> {
   let arguments = (ins
     Lattice_SparseTensorType:$input,
     Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$dilation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
-    $input `,` $weight attr-dict `:`
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -106,6 +108,7 @@ def Lattice_TargetConv3DOp : Lattice_Op<"target_conv3d"> {
     Lattice_SparseTensorType:$input,
     Lattice_SparseTensorType:$target,
     Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
@@ -113,8 +116,111 @@ def Lattice_TargetConv3DOp : Lattice_Op<"target_conv3d"> {
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
-    $input `,` $target `,` $weight attr-dict `:`
+    $input `,` $target `,` $weight (`,` $bias^)? attr-dict `:`
     functional-type(operands, results)
+  }];
+}
+
+def Lattice_ConvTranspose3DOp : Lattice_Op<"conv_transpose3d"> {
+  let summary = "Sparse 3D transpose convolution";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    DenseI64ArrayAttr:$padding,
+    DenseI64ArrayAttr:$dilation
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_GenerativeConvTranspose3DOp
+    : Lattice_Op<"generative_conv_transpose3d"> {
+  let summary = "Sparse 3D generative transpose convolution";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_Pool3DOp : Lattice_Op<"pool3d"> {
+  let summary = "Local sparse 3D pooling";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_PoolModeAttr:$mode,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    DenseI64ArrayAttr:$padding,
+    DenseI64ArrayAttr:$dilation
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_GlobalPoolOp : Lattice_Op<"global_pool", [Pure]> {
+  let summary = "Batch-wise global sparse pooling";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_PoolModeAttr:$mode,
+    I64Attr:$batch_size
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_VoxelizeOp : Lattice_Op<"voxelize"> {
+  let summary = "Quantize points and aggregate features into sparse voxels";
+  let arguments = (ins
+    AnyRankedTensor:$points,
+    AnyRankedTensor:$features,
+    TensorOf<[I32]>:$batch_indices,
+    TensorOf<[I32]>:$active_rows,
+    DenseF64ArrayAttr:$voxel_size,
+    DenseF64ArrayAttr:$origin,
+    Lattice_VoxelReductionAttr:$reduction,
+    DenseI64ArrayAttr:$stride
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $points `,` $features `,` $batch_indices `,` $active_rows
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def Lattice_DevoxelizeOp : Lattice_Op<"devoxelize"> {
+  let summary = "Interpolate sparse voxel features back to point rows";
+  let arguments = (ins
+    AnyRankedTensor:$points,
+    Lattice_SparseTensorType:$voxels,
+    TensorOf<[I32]>:$batch_indices,
+    TensorOf<[I32]>:$point_active_rows,
+    DenseF64ArrayAttr:$voxel_size,
+    DenseF64ArrayAttr:$origin,
+    Lattice_PointInterpolationAttr:$interpolation
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $points `,` $voxels `,` $batch_indices `,` $point_active_rows
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -122,20 +228,85 @@ def Lattice_LinearOp : Lattice_Op<"linear", [Pure]> {
   let summary = "Dense linear projection over feature tensors";
   let arguments = (ins
     AnyRankedTensor:$input,
-    Lattice_WeightType:$weight
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias
   );
   let results = (outs AnyRankedTensor:$result);
   let assemblyFormat = [{
-    $input `,` $weight attr-dict `:`
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
 
-def Lattice_SparseAddOp : Lattice_Op<"sparse.add"> {
-  let summary = "Coordinate-aligned sparse addition";
+def Lattice_ActivationOp : Lattice_Op<"activation", [Pure]> {
+  let summary = "Dense feature activation over feature tensors";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    Lattice_ActivationAttr:$kind,
+    Lattice_GeluApproxAttr:$approximate,
+    F32Attr:$alpha,
+    F32Attr:$beta,
+    F32Attr:$threshold
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_BatchNormOp : Lattice_Op<"batch_norm", [Pure]> {
+  let summary = "Dense feature batch normalization with explicit frozen stats";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    Lattice_WeightType:$scale,
+    Lattice_WeightType:$bias,
+    Lattice_WeightType:$mean,
+    Lattice_WeightType:$var,
+    F32Attr:$eps
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input `,` $scale `,` $bias `,` $mean `,` $var attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_LayerNormOp : Lattice_Op<"layer_norm", [Pure]> {
+  let summary = "Dense feature layer normalization";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    Lattice_WeightType:$scale,
+    Lattice_WeightType:$bias,
+    F32Attr:$eps
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input `,` $scale `,` $bias attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_RMSNormOp : Lattice_Op<"rms_norm", [Pure]> {
+  let summary = "Dense feature RMS normalization";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    Lattice_WeightType:$scale,
+    F32Attr:$eps
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input `,` $scale attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_SparseBinaryOp : Lattice_Op<"sparse.binary"> {
+  let summary = "Coordinate-aligned sparse binary operation";
   let arguments = (ins
     Lattice_SparseTensorType:$lhs,
     Lattice_SparseTensorType:$rhs,
+    Lattice_BinaryOpAttr:$op,
     Lattice_JoinAttr:$join,
     F32Attr:$lhs_fill,
     F32Attr:$rhs_fill

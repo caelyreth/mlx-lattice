@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
 import mlx.core as mx
 
+from mlx_lattice.artifact.lowering import (
+    artifact_lowering,
+    int_attribute,
+    lattice_lowering,
+    sparse_operand,
+    str_attribute,
+    triple_attribute,
+)
 from mlx_lattice.core import KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
 from mlx_lattice.ops._relation_exec import (
@@ -17,6 +25,7 @@ __all__ = [
     'avg_pool3d',
     'global_avg_pool',
     'global_max_pool',
+    'global_pool',
     'global_sum_pool',
     'max_pool3d',
     'pool3d',
@@ -24,6 +33,7 @@ __all__ = [
 ]
 
 
+@lattice_lowering
 def pool3d(
     x: SparseTensor,
     *,
@@ -51,6 +61,28 @@ def pool3d(
         spec,
         mode,
         output_stride=_mul_stride(x.stride, spec.stride),
+    )
+
+
+@artifact_lowering(op=pool3d)
+def pool3d_from_artifact(
+    x: Annotated[SparseTensor, sparse_operand(0)],
+    *,
+    mode: Annotated[str, str_attribute()],
+    kernel_size: Annotated[Triple, triple_attribute()],
+    stride: Annotated[Triple, triple_attribute()],
+    padding: Annotated[Triple, triple_attribute()],
+    dilation: Annotated[Triple, triple_attribute()],
+) -> SparseTensor:
+    """Lower lattice.pool3d artifact ops through ``pool3d``."""
+
+    return pool3d(
+        x,
+        mode=_pool_mode(mode),
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
     )
 
 
@@ -123,6 +155,43 @@ def avg_pool3d(
     )
 
 
+@lattice_lowering
+def global_pool(
+    x: SparseTensor,
+    *,
+    mode: PoolMode = 'sum',
+    batch_size: int | None = None,
+) -> mx.array:
+    """Reduce sparse features independently for each batch.
+
+    ``mode`` selects ``sum``, ``avg``, or ``max``. ``batch_size=None`` infers
+    the number of dense output rows from sparse batch metadata or coordinate
+    values. Explicit ``batch_size`` preserves trailing empty batches for
+    ``sum`` and ``avg`` and validates them for ``max``.
+    """
+    return _stack_batch_reductions(
+        x,
+        mode=_pool_mode(mode),
+        batch_size=batch_size,
+    )
+
+
+@artifact_lowering(op=global_pool)
+def global_pool_from_artifact(
+    x: Annotated[SparseTensor, sparse_operand(0)],
+    *,
+    mode: Annotated[str, str_attribute()],
+    batch_size: Annotated[int, int_attribute()],
+) -> mx.array:
+    """Lower lattice.global_pool artifact ops through ``global_pool``."""
+
+    return global_pool(
+        x,
+        mode=_pool_mode(mode),
+        batch_size=None if batch_size < 0 else batch_size,
+    )
+
+
 def global_sum_pool(
     x: SparseTensor, *, batch_size: int | None = None
 ) -> mx.array:
@@ -132,7 +201,7 @@ def global_sum_pool(
     present; otherwise batches are reduced from the coordinate batch column.
     Pass ``batch_size`` to preserve trailing empty batches.
     """
-    return _stack_batch_reductions(x, mode='sum', batch_size=batch_size)
+    return global_pool(x, mode='sum', batch_size=batch_size)
 
 
 def global_avg_pool(
@@ -144,7 +213,7 @@ def global_avg_pool(
     otherwise batches are reduced from the coordinate batch column. Pass
     ``batch_size`` to preserve trailing empty batches.
     """
-    return _stack_batch_reductions(x, mode='avg', batch_size=batch_size)
+    return global_pool(x, mode='avg', batch_size=batch_size)
 
 
 def global_max_pool(
@@ -157,7 +226,7 @@ def global_max_pool(
     the coordinate batch column. Pass ``batch_size`` to validate explicit empty
     batches.
     """
-    return _stack_batch_reductions(x, mode='max', batch_size=batch_size)
+    return global_pool(x, mode='max', batch_size=batch_size)
 
 
 # MARK: - local pooling
@@ -366,3 +435,9 @@ def _input_exclusive(spec: KernelSpec) -> bool:
 
 def _mul_stride(lhs: Triple, rhs: Triple) -> Triple:
     return (lhs[0] * rhs[0], lhs[1] * rhs[1], lhs[2] * rhs[2])
+
+
+def _pool_mode(value: str) -> PoolMode:
+    if value not in ('sum', 'max', 'avg'):
+        raise ValueError("mode must be 'sum', 'max', or 'avg'.")
+    return cast(PoolMode, value)

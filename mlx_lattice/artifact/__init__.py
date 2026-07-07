@@ -5,6 +5,11 @@ from mlx_lattice.artifact.io import (
     load_lattice_artifact,
     save_lattice_artifact,
 )
+from mlx_lattice.artifact.plan import (
+    PlanArgument,
+    PlanOperation,
+    RuntimePlan,
+)
 from mlx_lattice.artifact.runtime import (
     LatticeProgram,
     compile_lattice_artifact,
@@ -23,6 +28,9 @@ __all__ = [
     'LatticeArtifact',
     'LatticeMLIRStatus',
     'LatticeProgram',
+    'PlanArgument',
+    'PlanOperation',
+    'RuntimePlan',
     'compile_lattice_artifact',
     'lattice_artifact_status',
     'lattice_graph_operation_names',

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import mlx.core as mx
 from lattice_contract.dialect import sparse_decompose, sparse_make, weight
@@ -15,16 +16,20 @@ from .io import LatticeArtifact, load_lattice_artifact
 from .lowering import (
     ARTIFACT_LOWERINGS,
     LoweringProgram,
+    PackedWeightPayload,
     RuntimeValue,
-    array,
+    array_operand,
     artifact_lowering,
-    attrs,
-    operands,
+    int_attr,
+    packing_kind,
+    program_param,
+    raw_attr,
     results,
-    sparse,
-    str_attr,
-    triple_attr,
+    sparse_operand,
+    str_attribute,
+    triple_attribute,
 )
+from .plan import PlanArgument, PlanOperation, RuntimePlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,14 +41,14 @@ class LatticeProgram:
     lowers the structured plan to existing ``mlx_lattice.ops`` calls.
     """
 
-    plan: Mapping[str, Any]
+    plan: RuntimePlan
     weights: Mapping[str, mx.array]
 
     @classmethod
     def from_artifact(cls, artifact: LatticeArtifact) -> LatticeProgram:
         """Compile a loaded artifact through the native MLIR importer."""
 
-        _register_feature_lowerings()
+        _register_artifact_lowerings()
         native = getattr(ext, 'lattice_mlir_plan', None)
         if native is None:
             raise RuntimeError(
@@ -51,7 +56,9 @@ class LatticeProgram:
                 'native extension.'
             )
         return cls(
-            cast(Mapping[str, Any], native(artifact.graph)),
+            RuntimePlan.from_native(
+                cast(Mapping[str, Any], native(artifact.graph))
+            ),
             artifact.weights,
         )
 
@@ -61,15 +68,10 @@ class LatticeProgram:
         """Execute the lowered program with positional or named ABI inputs."""
 
         values = self._bind_inputs(args, kwargs)
-        for operation in cast(
-            Sequence[Mapping[str, Any]], self.plan['ops']
-        ):
+        for operation in self.plan.ops:
             result = ARTIFACT_LOWERINGS.lower(self, operation, values)
             _store_results(operation, values, result)
-        returns = tuple(
-            values[str(name)]
-            for name in cast(Sequence[Any], self.plan['returns'])
-        )
+        returns = tuple(values[name] for name in self.plan.returns)
         return returns[0] if len(returns) == 1 else returns
 
     def _bind_inputs(
@@ -77,23 +79,19 @@ class LatticeProgram:
         args: Sequence[Any],
         kwargs: Mapping[str, Any],
     ) -> dict[str, RuntimeValue]:
-        plan_args = cast(Sequence[Mapping[str, Any]], self.plan['args'])
-        arg_names = tuple(str(item['name']) for item in plan_args)
+        plan_args = self.plan.args
+        arg_names = tuple(item.name for item in plan_args)
         if len(args) == 1 and isinstance(args[0], SparseTensor):
-            if arg_names[:3] != ('arg0', 'arg1', 'arg2'):
-                raise ValueError(
-                    'SparseTensor shorthand requires coords/features/active '
-                    'as the first three artifact ABI arguments.'
-                )
             if kwargs:
                 raise ValueError(
                     'SparseTensor shorthand cannot be combined with keyword '
                     'artifact inputs.'
                 )
+            coords, features, active = _sparse_tensor_abi_args(plan_args)
             return {
-                'arg0': args[0].coords,
-                'arg1': args[0].feats,
-                'arg2': args[0].active_rows,
+                coords: args[0].coords,
+                features: args[0].feats,
+                active: args[0].active_rows,
             }
 
         if len(args) > len(arg_names):
@@ -124,73 +122,93 @@ def load_lattice_program(path: str | Path) -> LatticeProgram:
     return compile_lattice_artifact(load_lattice_artifact(path))
 
 
-def _register_feature_lowerings() -> None:
-    """Import feature modules that declare artifact lowering annotations."""
+def _register_artifact_lowerings() -> None:
+    """Import operation modules that declare artifact lowering annotations."""
 
-    from mlx_lattice.ops import conv as _conv
-    from mlx_lattice.ops import feature as _feature
-    from mlx_lattice.ops import tensor as _tensor
-
-    del _conv, _feature, _tensor
+    for module in (
+        'mlx_lattice.ops.conv',
+        'mlx_lattice.ops.feature',
+        'mlx_lattice.ops.pool',
+        'mlx_lattice.ops.quantization',
+        'mlx_lattice.ops.tensor',
+    ):
+        import_module(module)
 
 
 @artifact_lowering(op=weight)
 def weight_from_artifact(
-    program: LoweringProgram,
-    operation: Mapping[str, Any],
-    values: dict[str, RuntimeValue],
-) -> mx.array:
-    del values
-    op_attrs = attrs(operation)
-    storage_key = str_attr(op_attrs, 'storage_key')
-    packing = op_attrs.get('packing', {'kind': 'dense'})
-    if not isinstance(packing, Mapping) or packing.get('kind') != 'dense':
-        raise ValueError(
-            'artifact execution currently supports dense weights only.'
-        )
+    program: Annotated[LoweringProgram, program_param()],
+    storage_key: Annotated[str, str_attribute()],
+    layout: Annotated[str, str_attribute()],
+    packing: Annotated[Mapping[str, Any], raw_attr()],
+) -> mx.array | PackedWeightPayload:
+    if not isinstance(packing, Mapping):
+        raise TypeError('weight packing must be a mapping.')
+    if packing.get('kind') == 'dense':
+        try:
+            return program.weights[storage_key]
+        except KeyError as exc:
+            raise ValueError(
+                f'artifact weight not found: {storage_key}'
+            ) from exc
+
+    kind = packing_kind(packing.get('kind'))
+    group_size = int_attr(packing, 'group_size')
+    scale_dtype = str(packing.get('scale_dtype', ''))
+    mode = str(packing.get('mode', ''))
     try:
-        return program.weights[storage_key]
+        packed_weight = program.weights[f'{storage_key}.weight']
+        scales = program.weights[f'{storage_key}.scales']
+        biases = program.weights[f'{storage_key}.biases']
     except KeyError as exc:
         raise ValueError(
-            f'artifact weight not found: {storage_key}'
+            'quantized artifact weight requires '
+            f'{storage_key}.weight, {storage_key}.scales, and '
+            f'{storage_key}.biases tensors.'
         ) from exc
+    return PackedWeightPayload(
+        storage_key=storage_key,
+        layout=layout,
+        kind=kind,
+        group_size=group_size,
+        scale_dtype=scale_dtype,
+        mode=mode,
+        weight=packed_weight,
+        scales=scales,
+        biases=biases,
+    )
 
 
 @artifact_lowering(op=sparse_make)
 def sparse_make_from_artifact(
-    program: LoweringProgram,
-    operation: Mapping[str, Any],
-    values: dict[str, RuntimeValue],
+    coords: Annotated[mx.array, array_operand(0)],
+    features: Annotated[mx.array, array_operand(1)],
+    active: Annotated[mx.array, array_operand(2)],
+    *,
+    stride: Annotated[tuple[int, int, int], triple_attribute()],
+    coord_order: Annotated[str, str_attribute()],
 ) -> SparseTensor:
-    del program
-    op_operands = operands(operation)
-    op_attrs = attrs(operation)
-    coord_order = str_attr(op_attrs, 'coord_order')
     if coord_order != 'batch_x_y_z':
         raise ValueError(
             f'unsupported sparse coordinate order: {coord_order}'
         )
     return SparseTensor(
-        array(values, op_operands[0]),
-        array(values, op_operands[1]),
-        stride=triple_attr(op_attrs, 'stride'),
-        active_rows=array(values, op_operands[2]),
+        coords,
+        features,
+        stride=stride,
+        active_rows=active,
     )
 
 
 @artifact_lowering(op=sparse_decompose)
 def sparse_decompose_from_artifact(
-    program: LoweringProgram,
-    operation: Mapping[str, Any],
-    values: dict[str, RuntimeValue],
+    value: Annotated[SparseTensor, sparse_operand(0)],
 ) -> tuple[mx.array, mx.array, mx.array]:
-    del program
-    value = sparse(values, operands(operation)[0])
     return (value.coords, value.feats, value.active_rows)
 
 
 def _store_results(
-    operation: Mapping[str, Any],
+    operation: PlanOperation,
     values: dict[str, RuntimeValue],
     result: RuntimeValue | tuple[RuntimeValue, ...],
 ) -> None:
@@ -202,7 +220,7 @@ def _store_results(
     )
     if len(op_results) != len(values_to_store):
         raise ValueError(
-            f'{operation["name"]} produced {len(values_to_store)} results, '
+            f'{operation.name} produced {len(values_to_store)} results, '
             f'expected {len(op_results)}.'
         )
     for name, value in zip(op_results, values_to_store, strict=True):
@@ -213,3 +231,26 @@ def _runtime_value(value: Any) -> RuntimeValue:
     if isinstance(value, SparseTensor | mx.array):
         return value
     raise TypeError('artifact inputs must be SparseTensor or MLX arrays.')
+
+
+def _sparse_tensor_abi_args(
+    plan_args: Sequence[PlanArgument],
+) -> tuple[str, str, str]:
+    if len(plan_args) < 3:
+        raise ValueError(
+            'SparseTensor shorthand requires coords/features/active artifact '
+            'ABI arguments.'
+        )
+    expected_roles = ('sparse_coords', 'sparse_features', 'sparse_active')
+    actual_roles = tuple(item.role for item in plan_args[:3])
+    if actual_roles != expected_roles:
+        raise ValueError(
+            'SparseTensor shorthand requires the first three artifact ABI '
+            'arguments to be tagged as sparse_coords, sparse_features, and '
+            'sparse_active by the native MLIR importer.'
+        )
+    return (
+        plan_args[0].name,
+        plan_args[1].name,
+        plan_args[2].name,
+    )

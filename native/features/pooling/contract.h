@@ -1,17 +1,19 @@
 #pragma once
 
+#include <cstdint>
+
 #include "features/coordinates/types.h"
 #include "foundation/sparse_relation.h"
 
 namespace mlx_lattice {
 
-enum class PoolReduceOp {
+enum class PoolReduceOp : std::uint8_t {
     Sum,
     Max,
     Avg,
 };
 
-enum class PoolInputLayout {
+enum class PoolInputLayout : std::uint8_t {
     Overlap,
     Exclusive,
 };

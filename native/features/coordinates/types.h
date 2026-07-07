@@ -24,7 +24,7 @@ enum class CoordRelationOp : std::uint8_t {
     Transposed,
 };
 
-enum CoordRelationOutputSlot : std::size_t {
+enum CoordRelationOutputSlot : std::uint8_t {
     RelationInRows = 0,
     RelationOutRows,
     RelationKernelIds,
@@ -34,13 +34,13 @@ enum CoordRelationOutputSlot : std::size_t {
     RelationBaseOutputCount,
 };
 
-enum RelationGroupedViewOutputSlot : std::size_t {
+enum RelationGroupedViewOutputSlot : std::uint8_t {
     RelationViewRowOffsets = 0,
     RelationViewEdgeIds,
     RelationGroupedViewOutputCount,
 };
 
-enum RelationImplicitGemmViewOutputSlot : std::size_t {
+enum RelationImplicitGemmViewOutputSlot : std::uint8_t {
     RelationImplicitGemmOutInMap = 0,
     RelationImplicitGemmRowMasks,
     RelationImplicitGemmViewOutputCount,
@@ -68,7 +68,7 @@ enum class SparseJoinOp : std::uint8_t {
     Outer,
 };
 
-enum NeighborRelationOutputSlot : std::size_t {
+enum NeighborRelationOutputSlot : std::uint8_t {
     NeighborQueryRows = 0,
     NeighborSourceRows,
     NeighborIds,

@@ -88,14 +88,14 @@ files = "^mlir/.*\\.(cc|cpp|cxx|h|hh|hpp|hxx)$"
 [[repos.hooks]]
 id = "clang-tidy"
 name = "clang-tidy"
-entry = "clang-tidy --quiet -p build/clangd"
+entry = "clang-tidy --quiet --config-file=.clang-tidy -p build/clangd"
 language = "system"
 files = "^native/.*\\.(c|cc|cpp|cxx)$"
-exclude = "^native/bindings/mlir\\.cpp$"
+exclude = "^(native/bindings/mlir\\.cpp|native/features/.*/metal/stub\\.cpp)$"
 
 [[repos.hooks]]
 id = "clang-tidy-mlir"
 name = "clang-tidy mlir"
-entry = "clang-tidy --quiet -p build/clangd-mlir"
+entry = "clang-tidy --quiet --config-file=.clang-tidy -p build/clangd-mlir"
 language = "system"
 files = "^(mlir/.*\\.(cc|cpp|cxx)|native/bindings/mlir\\.cpp)$"

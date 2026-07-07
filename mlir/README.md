@@ -17,7 +17,9 @@ cmake --build build/mlir --target lattice-opt
 Validate committed dialect fixtures:
 
 ```sh
-build/mlir/mlir/tools/lattice-opt/lattice-opt mlir/test/Dialect/Lattice/valid/conv3d_basic.mlir
+build/mlir/mlir/tools/lattice-opt/lattice-opt \
+  --lattice-verify-artifact \
+  mlir/test/Dialect/Lattice/valid/conv3d_basic.mlir
 ```
 
 The first slice intentionally owns only the portable contract:
@@ -26,8 +28,14 @@ The first slice intentionally owns only the portable contract:
 - weight binding;
 - sparse construction/decomposition;
 - feature-only sparse identity update;
-- forward/submanifold/target sparse convolution;
-- one coordinate-aligned sparse algebra operation.
+- forward/submanifold/target/transpose/generative sparse convolution;
+- local and global sparse pooling;
+- point/voxel conversion;
+- generic coordinate-aligned sparse binary algebra.
+- artifact ABI metadata validation for `lattice.ir_version` and
+  `lattice.weight_file`.
+- importer-facing argument type and sparse component role metadata for the
+  verified entry function.
 
 It does not contain MLX importer code, Torch exporter code, TensorOps/CSR
 execution views, or JSON artifact compatibility.

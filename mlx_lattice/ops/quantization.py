@@ -1,10 +1,25 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import overload
+from typing import Annotated, cast, overload
 
 import mlx.core as mx
+from lattice_contract.dialect import (
+    devoxelize as lattice_devoxelize,
+)
+from lattice_contract.dialect import (
+    voxelize as lattice_voxelize,
+)
 
+from mlx_lattice.artifact.lowering import (
+    array_operand,
+    artifact_lowering,
+    float_triple_attribute,
+    lattice_lowering,
+    sparse_operand,
+    str_attribute,
+    triple_attribute,
+)
 from mlx_lattice.core.coords.quantization import (
     PointVoxelInterpolation,
     PointVoxelMap,
@@ -58,6 +73,7 @@ def voxelize(
 ) -> SparseTensor: ...
 
 
+@lattice_lowering(op=lattice_voxelize)
 def voxelize(
     points: mx.array,
     feats: mx.array,
@@ -94,6 +110,35 @@ def voxelize(
         feats,
         active_rows=active_rows,
         reduction=_validate_reduction(reduction),
+        stride=stride,
+    )
+
+
+@artifact_lowering(op=lattice_voxelize)
+def voxelize_from_artifact(
+    points: Annotated[mx.array, array_operand(0)],
+    feats: Annotated[mx.array, array_operand(1)],
+    batch_indices: Annotated[mx.array, array_operand(2)],
+    active_rows: Annotated[mx.array, array_operand(3)],
+    *,
+    voxel_size: Annotated[
+        tuple[float, float, float],
+        float_triple_attribute(),
+    ],
+    origin: Annotated[tuple[float, float, float], float_triple_attribute()],
+    reduction: Annotated[str, str_attribute()],
+    stride: Annotated[tuple[int, int, int], triple_attribute()],
+) -> SparseTensor:
+    """Lower lattice.voxelize artifact ops through ``voxelize``."""
+
+    return voxelize(
+        points,
+        feats,
+        voxel_size=voxel_size,
+        batch_indices=batch_indices,
+        active_rows=active_rows,
+        origin=origin,
+        reduction=reduction,
         stride=stride,
     )
 
@@ -162,6 +207,7 @@ def voxelize_with_quantization(
     )
 
 
+@lattice_lowering
 def devoxelize(
     points: mx.array,
     voxels: SparseTensor,
@@ -193,3 +239,33 @@ def devoxelize(
             interpolation=interpolation,
         )
     return interpolate_point_features(voxels.feats, point_map)
+
+
+@artifact_lowering(op=lattice_devoxelize)
+def devoxelize_from_artifact(
+    points: Annotated[mx.array, array_operand(0)],
+    voxels: Annotated[SparseTensor, sparse_operand(1)],
+    batch_indices: Annotated[mx.array, array_operand(2)],
+    point_active_rows: Annotated[mx.array, array_operand(3)],
+    *,
+    voxel_size: Annotated[
+        tuple[float, float, float],
+        float_triple_attribute(),
+    ],
+    origin: Annotated[tuple[float, float, float], float_triple_attribute()],
+    interpolation: Annotated[str, str_attribute()],
+) -> mx.array:
+    """Lower lattice.devoxelize artifact ops through ``devoxelize``."""
+
+    return devoxelize(
+        points,
+        voxels,
+        voxel_size=voxel_size,
+        batch_indices=batch_indices,
+        point_active_rows=point_active_rows,
+        origin=origin,
+        interpolation=cast(
+            PointVoxelInterpolation,
+            interpolation,
+        ),
+    )

@@ -1,4 +1,4 @@
-// Valid: sparse add declares coordinate join semantics.
+// Valid: sparse binary addition declares coordinate join semantics.
 module attributes {
   lattice.ir_version = 0,
   lattice.weight_file = "weights.safetensors"
@@ -32,8 +32,8 @@ module attributes {
                                   feature = row_channel,
                                   dtype = f16>
 
-    %out = lattice.sparse.add %lhs, %rhs
-      {join = #lattice.join<outer>,
+    %out = lattice.sparse.binary %lhs, %rhs
+      {op = #lattice.binary_op<add>, join = #lattice.join<outer>,
        lhs_fill = 0.0 : f32,
        rhs_fill = 0.0 : f32}
       : (!lattice.sparse_tensor<rank = 3,

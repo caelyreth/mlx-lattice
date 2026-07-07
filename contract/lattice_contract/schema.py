@@ -12,8 +12,16 @@ AttributeKind = Literal[
     'feature_layout',
     'weight_layout',
     'packing',
+    'activation',
+    'gelu_approx',
     'join',
+    'binary_op',
+    'pool_mode',
+    'voxel_reduction',
+    'point_interpolation',
     'i64_triple',
+    'f64_triple',
+    'i64',
     'f32',
     'str',
 ]
@@ -63,6 +71,7 @@ class OperandDef:
     name: str
     type: str
     kind: ValueKind = 'ssa'
+    optional: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +225,28 @@ class DialectSchema:
         except KeyError as exc:
             raise AttributeError(name) from exc
 
+    def qualified_op_name(self, definition: str | OpDef) -> str:
+        """Return the fully-qualified MLIR operation name."""
+
+        op = self.resolve_op(definition)
+        return f'{self.namespace}.{op.name}'
+
+    def resolve_qualified_op(self, name: str) -> OpDef:
+        """Resolve a fully-qualified MLIR operation name."""
+
+        prefix = f'{self.namespace}.'
+        if not name.startswith(prefix):
+            raise ValueError(
+                f'operation name must use {self.namespace!r} namespace: '
+                f'{name}'
+            )
+        try:
+            return self.ops[name.removeprefix(prefix)]
+        except KeyError as exc:
+            raise ValueError(
+                f'unknown {self.namespace} operation: {name}'
+            ) from exc
+
     def resolve_op(self, value: str | OpDef | Callable[..., Any]) -> OpDef:
         """Resolve an op handle to its schema definition.
 
@@ -227,6 +258,8 @@ class DialectSchema:
         if isinstance(value, OpDef):
             return value
         if isinstance(value, str):
+            if value.startswith(f'{self.namespace}.'):
+                return self.resolve_qualified_op(value)
             try:
                 return self.ops[value]
             except KeyError:
@@ -255,10 +288,16 @@ def attr_param(name: str, kind: str) -> AttrParameter:
     return AttrParameter(name, kind)
 
 
-def operand(name: str, type: str, *, kind: ValueKind = 'ssa') -> OperandDef:
+def operand(
+    name: str,
+    type: str,
+    *,
+    kind: ValueKind = 'ssa',
+    optional: bool = False,
+) -> OperandDef:
     """Declare one operation operand."""
 
-    return OperandDef(name, type, kind)
+    return OperandDef(name, type, kind, optional)
 
 
 def result(name: str, type: str) -> ResultDef:

@@ -1,26 +1,26 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
 import mlx.core as mx
+from lattice_contract.dialect import sparse_binary as lattice_sparse_binary
 
 from mlx_lattice.artifact.lowering import (
-    RuntimeValue,
-    array,
+    array_operand,
     artifact_lowering,
-    attrs,
-    float_attr,
-    join_attr,
+    float_attribute,
+    join_attribute,
     lattice_lowering,
-    operands,
-    sparse,
+    sparse_operand,
+    str_attribute,
 )
 from mlx_lattice.core.coords import SparseAlignment, build_sparse_alignment
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import triple
 
 type SparseJoin = Literal['inner', 'left', 'right', 'outer']
+type SparseBinaryMode = Literal['add', 'sub', 'mul', 'maximum', 'minimum']
 
 
 def sparse_collate(
@@ -123,7 +123,7 @@ def gather_aligned_features(
 def sparse_binary_op(
     lhs: SparseTensor,
     rhs: SparseTensor,
-    op: Literal['add', 'sub', 'mul', 'maximum', 'minimum'],
+    op: SparseBinaryMode,
     *,
     join: SparseJoin = 'outer',
     lhs_fill: float = 0.0,
@@ -158,7 +158,28 @@ def sparse_binary_op(
     )
 
 
-@lattice_lowering(op='sparse.add')
+@lattice_lowering(op=lattice_sparse_binary)
+def sparse_binary(
+    lhs: SparseTensor,
+    rhs: SparseTensor,
+    op: SparseBinaryMode,
+    *,
+    join: SparseJoin = 'outer',
+    lhs_fill: float = 0.0,
+    rhs_fill: float = 0.0,
+) -> SparseTensor:
+    """Apply a coordinate-aligned sparse binary operation."""
+
+    return sparse_binary_op(
+        lhs,
+        rhs,
+        op,
+        join=join,
+        lhs_fill=lhs_fill,
+        rhs_fill=rhs_fill,
+    )
+
+
 def sparse_add(
     lhs: SparseTensor,
     rhs: SparseTensor,
@@ -169,24 +190,25 @@ def sparse_add(
     return sparse_binary_op(lhs, rhs, 'add', join=join)
 
 
-@artifact_lowering(op=sparse_add)
-def sparse_add_from_artifact(
-    program,
-    operation,
-    values: dict[str, RuntimeValue],
+@artifact_lowering(op=sparse_binary)
+def sparse_binary_from_artifact(
+    lhs: Annotated[SparseTensor, sparse_operand(0)],
+    rhs: Annotated[SparseTensor, sparse_operand(1)],
+    *,
+    op: Annotated[str, str_attribute()],
+    join: Annotated[SparseJoin, join_attribute()],
+    lhs_fill: Annotated[float, float_attribute()],
+    rhs_fill: Annotated[float, float_attribute()],
 ) -> SparseTensor:
-    """Lower lattice.sparse.add artifact ops through ``sparse_binary_op``."""
+    """Lower lattice.sparse.binary artifact ops."""
 
-    del program
-    op_operands = operands(operation)
-    op_attrs = attrs(operation)
-    return sparse_binary_op(
-        sparse(values, op_operands[0]),
-        sparse(values, op_operands[1]),
-        'add',
-        join=join_attr(op_attrs, 'join'),
-        lhs_fill=float_attr(op_attrs, 'lhs_fill'),
-        rhs_fill=float_attr(op_attrs, 'rhs_fill'),
+    return sparse_binary(
+        lhs,
+        rhs,
+        _binary_mode(op),
+        join=join,
+        lhs_fill=lhs_fill,
+        rhs_fill=rhs_fill,
     )
 
 
@@ -318,18 +340,12 @@ def replace_feature(x: SparseTensor, feats: mx.array) -> SparseTensor:
 
 @artifact_lowering(op=replace_feature)
 def sparse_with_features_from_artifact(
-    program,
-    operation,
-    values: dict[str, RuntimeValue],
+    x: Annotated[SparseTensor, sparse_operand(0)],
+    feats: Annotated[mx.array, array_operand(1)],
 ) -> SparseTensor:
     """Lower lattice.sparse.with_features through ``replace_feature``."""
 
-    del program
-    op_operands = operands(operation)
-    return replace_feature(
-        sparse(values, op_operands[0]),
-        array(values, op_operands[1]),
-    )
+    return replace_feature(x, feats)
 
 
 def _apply_binary_op(lhs: mx.array, rhs: mx.array, op: str) -> mx.array:
@@ -344,6 +360,14 @@ def _apply_binary_op(lhs: mx.array, rhs: mx.array, op: str) -> mx.array:
     if op == 'minimum':
         return mx.minimum(lhs, rhs)
     raise ValueError(f'unknown sparse binary op: {op}.')
+
+
+def _binary_mode(value: str) -> SparseBinaryMode:
+    if value not in ('add', 'sub', 'mul', 'maximum', 'minimum'):
+        raise ValueError(
+            "op must be 'add', 'sub', 'mul', 'maximum', or 'minimum'."
+        )
+    return cast(SparseBinaryMode, value)
 
 
 def _require_compatible_sparse_tensors(

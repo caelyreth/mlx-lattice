@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
+
 #include "mlx/stream.h"
 
 namespace mlx_lattice::backend::metal::tensor_ops {
 
-enum class CapabilityTier {
+enum class CapabilityTier : std::uint8_t {
     unavailable,
     gpu,
     neural_accelerator,

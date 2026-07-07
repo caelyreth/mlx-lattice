@@ -1,0 +1,56 @@
+// Valid: sparse conv bias is an explicit optional bias weight operand.
+module attributes {
+  lattice.ir_version = 0,
+  lattice.weight_file = "weights.safetensors"
+} {
+  func.func @forward(
+    %coords: tensor<?x4xi32>,
+    %features: tensor<?x32xf16>,
+    %active: tensor<1xi32>
+  ) -> !lattice.sparse_tensor<rank = 3,
+                              coord = batch_x_y_z,
+                              feature = row_channel,
+                              dtype = f16> {
+    %input = lattice.sparse.make %coords, %features, %active
+      {stride = array<i64: 1, 1, 1>,
+       coord_order = #lattice.coord<batch_x_y_z>}
+      : (tensor<?x4xi32>, tensor<?x32xf16>, tensor<1xi32>)
+        -> !lattice.sparse_tensor<rank = 3,
+                                  coord = batch_x_y_z,
+                                  feature = row_channel,
+                                  dtype = f16>
+
+    %weight = lattice.weight @stem.weight
+      {storage_key = "stem.weight",
+       layout = #lattice.weight_layout<conv3d_o_zyx_i>,
+       packing = #lattice.packing<dense>}
+      : !lattice.weight<conv3d, f16>
+
+    %bias = lattice.weight @stem.bias
+      {storage_key = "stem.bias",
+       layout = #lattice.weight_layout<bias_c>,
+       packing = #lattice.packing<dense>}
+      : !lattice.weight<bias, f16>
+
+    %out = lattice.conv3d %input, %weight, %bias
+      {kernel_size = array<i64: 1, 1, 1>,
+       stride = array<i64: 1, 1, 1>,
+       padding = array<i64: 0, 0, 0>,
+       dilation = array<i64: 1, 1, 1>}
+      : (!lattice.sparse_tensor<rank = 3,
+                                coord = batch_x_y_z,
+                                feature = row_channel,
+                                dtype = f16>,
+         !lattice.weight<conv3d, f16>,
+         !lattice.weight<bias, f16>)
+        -> !lattice.sparse_tensor<rank = 3,
+                                  coord = batch_x_y_z,
+                                  feature = row_channel,
+                                  dtype = f16>
+
+    return %out : !lattice.sparse_tensor<rank = 3,
+                                        coord = batch_x_y_z,
+                                        feature = row_channel,
+                                        dtype = f16>
+  }
+}

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from lattice_contract.artifact import (
+    ARTIFACT_GRAPH_FILE,
+    ARTIFACT_WEIGHT_FILE,
+    CURRENT_DIALECT_VERSION,
+)
 from lattice_contract.dialect import LATTICE_DIALECT
 from lattice_contract.mlir import (
     MLIRModuleBuilder,
@@ -30,9 +35,10 @@ from lattice_contract.schema import (
 )
 
 __version__ = '0.2.2'
-CURRENT_DIALECT_VERSION = 0
 
 __all__ = [
+    'ARTIFACT_GRAPH_FILE',
+    'ARTIFACT_WEIGHT_FILE',
     'CURRENT_DIALECT_VERSION',
     'LATTICE_DIALECT',
     'AttrDef',

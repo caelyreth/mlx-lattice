@@ -4,6 +4,10 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from lattice_contract.artifact import (
+    ARTIFACT_WEIGHT_FILE,
+    CURRENT_DIALECT_VERSION,
+)
 from lattice_contract.dialect import (
     LATTICE_DIALECT,
     sparse_decompose,
@@ -216,8 +220,8 @@ class MLIRModuleBuilder:
         )
         return (
             'module attributes {\n'
-            '  lattice.ir_version = 0,\n'
-            '  lattice.weight_file = "weights.safetensors"\n'
+            f'  lattice.ir_version = {CURRENT_DIALECT_VERSION},\n'
+            f'  lattice.weight_file = "{ARTIFACT_WEIGHT_FILE}"\n'
             '} {\n'
             f'  func.func @{self.name}(\n'
             f'    {args}\n'
@@ -239,11 +243,11 @@ class MLIRModuleBuilder:
         return emit_generated_op
 
     def emit(
-        self, op: OpDef, **kwargs: Any
+        self, definition: OpDef, **kwargs: Any
     ) -> SSAValue | tuple[SSAValue, ...]:
         """Emit an operation declared by the annotated schema."""
 
-        return EMITTERS.emit(self, op, kwargs)
+        return EMITTERS.emit(self, definition, kwargs)
 
     def _result_value(
         self,
@@ -279,6 +283,7 @@ def functional_emitter(
         _require_value(kwargs, operand.name)
         for operand in op.operands
         if operand.kind == 'ssa'
+        and (not operand.optional or kwargs.get(operand.name) is not None)
     ]
     result_type = _require_any(kwargs, 'result_type')
     result = builder._result_value(op, _type(result_type), kwargs)
@@ -286,7 +291,8 @@ def functional_emitter(
     operand_refs = ', '.join(value.ref() for value in operands)
     operand_types = ', '.join(_mlir_type(value.type) for value in operands)
     builder._ops.append(
-        f'{result.ref()} = lattice.{op.name} {operand_refs} '
+        f'{result.ref()} = {LATTICE_DIALECT.qualified_op_name(op)} '
+        f'{operand_refs} '
         f'{attrs} : ({operand_types}) -> {_mlir_type(result.type)}'
     )
     return result
@@ -308,7 +314,8 @@ def weight_emitter(
     result_type = _require_type(kwargs, 'result_type', WeightType)
     result = builder._result_value(op, result_type, kwargs)
     builder._ops.append(
-        f'{result.ref()} = lattice.weight @{sym_name} '
+        f'{result.ref()} = {LATTICE_DIALECT.qualified_op_name(op)} '
+        f'@{sym_name} '
         f'{{storage_key = "{storage_key}", '
         f'layout = #lattice.weight_layout<{layout}>, '
         f'packing = {_packing(packing)}}} : {_mlir_type(result.type)}'
@@ -335,7 +342,8 @@ def sparse_decompose_emitter(
         _mlir_type(result.type) for result in results
     )
     builder._ops.append(
-        f'{refs} = lattice.sparse.decompose {input_value.ref()} : '
+        f'{refs} = {LATTICE_DIALECT.qualified_op_name(op)} '
+        f'{input_value.ref()} : '
         f'{_mlir_type(input_value.type)} -> ({result_type_text})'
     )
     return results
@@ -420,12 +428,28 @@ def _format_attr(kind: str, value: Any) -> str:
         return f'#lattice.weight_layout<{value}>'
     if kind == 'packing':
         return _packing(value)
+    if kind == 'activation':
+        return f'#lattice.activation<{value}>'
+    if kind == 'gelu_approx':
+        return f'#lattice.gelu_approx<{value}>'
     if kind == 'join':
         return f'#lattice.join<{value}>'
+    if kind == 'binary_op':
+        return f'#lattice.binary_op<{value}>'
+    if kind == 'pool_mode':
+        return f'#lattice.pool_mode<{value}>'
+    if kind == 'voxel_reduction':
+        return f'#lattice.voxel_reduction<{value}>'
+    if kind == 'point_interpolation':
+        return f'#lattice.point_interpolation<{value}>'
     if kind == 'i64_triple':
         return _triple(value)
+    if kind == 'f64_triple':
+        return _float_triple(value)
+    if kind == 'i64':
+        return str(int(value))
     if kind == 'f32':
-        return f'{float(value)} : f32'
+        return f'{_decimal_float(value)} : f32'
     if kind == 'str':
         return f'"{value}"'
     raise ValueError(f'unsupported MLIR attribute kind: {kind}')
@@ -441,6 +465,27 @@ def _triple(value: Any) -> str:
             'MLIR triple attributes require exactly 3 integers.'
         )
     return f'array<i64: {items[0]}, {items[1]}, {items[2]}>'
+
+
+def _float_triple(value: Any) -> str:
+    if isinstance(value, int | float):
+        items = (float(value), float(value), float(value))
+    else:
+        items = tuple(float(item) for item in value)
+    if len(items) != 3:
+        raise ValueError(
+            'MLIR float triple attributes require exactly 3 values.'
+        )
+    return f'array<f64: {items[0]}, {items[1]}, {items[2]}>'
+
+
+def _decimal_float(value: Any) -> str:
+    text = f'{float(value):.12f}'.rstrip('0').rstrip('.')
+    if text in ('', '-0'):
+        return '0.0'
+    if '.' not in text:
+        return f'{text}.0'
+    return text
 
 
 def _packing(value: Any) -> str:

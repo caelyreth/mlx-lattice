@@ -68,11 +68,59 @@ void WeightLayoutAttr::print(AsmPrinter& printer) const {
     printSingleStringAttr(printer, *this);
 }
 
+Attribute ActivationAttr::parse(AsmParser& parser, Type) {
+    return parseSingleStringAttr<ActivationAttr>(parser);
+}
+
+void ActivationAttr::print(AsmPrinter& printer) const {
+    printSingleStringAttr(printer, *this);
+}
+
+Attribute GeluApproxAttr::parse(AsmParser& parser, Type) {
+    return parseSingleStringAttr<GeluApproxAttr>(parser);
+}
+
+void GeluApproxAttr::print(AsmPrinter& printer) const {
+    printSingleStringAttr(printer, *this);
+}
+
 Attribute JoinAttr::parse(AsmParser& parser, Type) {
     return parseSingleStringAttr<JoinAttr>(parser);
 }
 
 void JoinAttr::print(AsmPrinter& printer) const {
+    printSingleStringAttr(printer, *this);
+}
+
+Attribute BinaryOpAttr::parse(AsmParser& parser, Type) {
+    return parseSingleStringAttr<BinaryOpAttr>(parser);
+}
+
+void BinaryOpAttr::print(AsmPrinter& printer) const {
+    printSingleStringAttr(printer, *this);
+}
+
+Attribute PoolModeAttr::parse(AsmParser& parser, Type) {
+    return parseSingleStringAttr<PoolModeAttr>(parser);
+}
+
+void PoolModeAttr::print(AsmPrinter& printer) const {
+    printSingleStringAttr(printer, *this);
+}
+
+Attribute VoxelReductionAttr::parse(AsmParser& parser, Type) {
+    return parseSingleStringAttr<VoxelReductionAttr>(parser);
+}
+
+void VoxelReductionAttr::print(AsmPrinter& printer) const {
+    printSingleStringAttr(printer, *this);
+}
+
+Attribute PointInterpolationAttr::parse(AsmParser& parser, Type) {
+    return parseSingleStringAttr<PointInterpolationAttr>(parser);
+}
+
+void PointInterpolationAttr::print(AsmPrinter& printer) const {
     printSingleStringAttr(printer, *this);
 }
 

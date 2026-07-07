@@ -140,7 +140,13 @@ def _validate_with_lattice_opt(graph: str, tool: Path) -> None:
         output = Path(root) / 'out.mlir'
         source.write_text(graph, encoding='utf-8')
         result = subprocess.run(
-            [str(tool), str(source), '-o', str(output)],
+            [
+                str(tool),
+                '--lattice-verify-artifact',
+                str(source),
+                '-o',
+                str(output),
+            ],
             check=False,
             capture_output=True,
             text=True,

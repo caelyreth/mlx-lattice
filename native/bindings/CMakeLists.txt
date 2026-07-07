@@ -29,7 +29,11 @@ if(MLX_LATTICE_ENABLE_MLIR)
     _ext
     PRIVATE
       ${PROJECT_SOURCE_DIR}/mlir/include
-      ${PROJECT_BINARY_DIR}/mlir/include
+      ${PROJECT_BINARY_DIR}/mlir/include)
+  target_include_directories(
+    _ext
+    SYSTEM
+    PRIVATE
       ${MLIR_INCLUDE_DIRS}
       ${LLVM_INCLUDE_DIRS})
 endif()

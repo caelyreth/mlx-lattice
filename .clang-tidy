@@ -3,5 +3,6 @@ Checks: >
   bugprone-*,
   performance-*
 WarningsAsErrors: "*"
-HeaderFilterRegex: "^native/"
+HeaderFilterRegex: "^(.*/)?(native|mlir)/"
+ExcludeHeaderFilterRegex: "^(.*/)?(\\.venv|build|dist|/opt/homebrew|/Users/[^/]+/\\.local/share/uv/python)/"
 FormatStyle: file

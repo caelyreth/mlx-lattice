@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import cast
 
 import mlx.core as mx
+from lattice_contract import ARTIFACT_GRAPH_FILE, ARTIFACT_WEIGHT_FILE
 
-_GRAPH_NAME = 'graph.mlir'
-_WEIGHTS_NAME = 'weights.safetensors'
+_GRAPH_NAME = ARTIFACT_GRAPH_FILE
+_WEIGHTS_NAME = ARTIFACT_WEIGHT_FILE
 
 
 @dataclass(frozen=True, slots=True)

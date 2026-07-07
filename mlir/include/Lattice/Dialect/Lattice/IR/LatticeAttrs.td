@@ -45,9 +45,41 @@ def Lattice_PackingAttr : Lattice_Attr<"Packing", "packing"> {
   );
 }
 
+def Lattice_ActivationAttr : Lattice_Attr<"Activation", "activation"> {
+  let summary = "Dense feature activation function";
+  let parameters = (ins StringRefParameter<"activation function">:$value);
+}
+
+def Lattice_GeluApproxAttr : Lattice_Attr<"GeluApprox", "gelu_approx"> {
+  let summary = "GELU approximation mode";
+  let parameters = (ins StringRefParameter<"GELU approximation mode">:$value);
+}
+
 def Lattice_JoinAttr : Lattice_Attr<"Join", "join"> {
   let summary = "Coordinate-aligned sparse algebra join mode";
   let parameters = (ins StringRefParameter<"join mode">:$value);
+}
+
+def Lattice_BinaryOpAttr : Lattice_Attr<"BinaryOp", "binary_op"> {
+  let summary = "Coordinate-aligned sparse binary operation";
+  let parameters = (ins StringRefParameter<"binary operation">:$value);
+}
+
+def Lattice_PoolModeAttr : Lattice_Attr<"PoolMode", "pool_mode"> {
+  let summary = "Sparse pooling reduction mode";
+  let parameters = (ins StringRefParameter<"pooling mode">:$value);
+}
+
+def Lattice_VoxelReductionAttr
+    : Lattice_Attr<"VoxelReduction", "voxel_reduction"> {
+  let summary = "Point-to-voxel feature aggregation reduction";
+  let parameters = (ins StringRefParameter<"voxel reduction mode">:$value);
+}
+
+def Lattice_PointInterpolationAttr
+    : Lattice_Attr<"PointInterpolation", "point_interpolation"> {
+  let summary = "Voxel-to-point interpolation mode";
+  let parameters = (ins StringRefParameter<"point interpolation mode">:$value);
 }
 
 #endif // LATTICE_DIALECT_LATTICE_IR_LATTICEATTRS_TD

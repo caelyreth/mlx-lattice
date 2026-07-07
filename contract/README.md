@@ -11,3 +11,7 @@ It intentionally does not import MLX, Torch, native extensions, or backend
 runtime objects. The exchange target is `graph.mlir + weights.safetensors`;
 shallow package metadata can be added later, but graph semantics belong in
 MLIR.
+
+The package exports the artifact ABI constants used by builders and importers:
+`CURRENT_DIALECT_VERSION`, `ARTIFACT_GRAPH_FILE`, and
+`ARTIFACT_WEIGHT_FILE`.
