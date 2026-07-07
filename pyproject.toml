@@ -51,6 +51,7 @@ sdist.include = [
   "contract/**/py.typed",
   "mlx_lattice/**/*.py",
   "mlx_lattice/py.typed",
+  "mlir/**",
   "native/**",
   "tests/**/*.py",
 ]

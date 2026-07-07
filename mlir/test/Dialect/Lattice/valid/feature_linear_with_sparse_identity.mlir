@@ -1,0 +1,56 @@
+// Valid: feature-only linear update preserves sparse identity explicitly.
+module attributes {
+  lattice.ir_version = 0,
+  lattice.weight_file = "weights.safetensors"
+} {
+  func.func @forward(
+    %coords: tensor<?x4xi32>,
+    %features: tensor<?x32xf16>,
+    %active: tensor<1xi32>
+  ) -> !lattice.sparse_tensor<rank = 3,
+                              coord = batch_x_y_z,
+                              feature = row_channel,
+                              dtype = f16> {
+    %input = lattice.sparse.make %coords, %features, %active
+      {stride = array<i64: 1, 1, 1>,
+       coord_order = #lattice.coord<batch_x_y_z>}
+      : (tensor<?x4xi32>, tensor<?x32xf16>, tensor<1xi32>)
+        -> !lattice.sparse_tensor<rank = 3,
+                                  coord = batch_x_y_z,
+                                  feature = row_channel,
+                                  dtype = f16>
+
+    %coords0, %features0, %active0 = lattice.sparse.decompose %input
+      : !lattice.sparse_tensor<rank = 3,
+                               coord = batch_x_y_z,
+                               feature = row_channel,
+                               dtype = f16>
+        -> (tensor<?x4xi32>, tensor<?x32xf16>, tensor<1xi32>)
+
+    %weight = lattice.weight @mlp.proj.weight
+      {storage_key = "mlp.proj.weight",
+       layout = #lattice.weight_layout<linear_o_i>,
+       packing = #lattice.packing<dense>}
+      : !lattice.weight<linear, f16>
+
+    %projected = lattice.linear %features0, %weight
+      : (tensor<?x32xf16>, !lattice.weight<linear, f16>)
+        -> tensor<?x64xf16>
+
+    %out = lattice.sparse.with_features %input, %projected
+      : (!lattice.sparse_tensor<rank = 3,
+                                coord = batch_x_y_z,
+                                feature = row_channel,
+                                dtype = f16>,
+         tensor<?x64xf16>)
+        -> !lattice.sparse_tensor<rank = 3,
+                                  coord = batch_x_y_z,
+                                  feature = row_channel,
+                                  dtype = f16>
+
+    return %out : !lattice.sparse_tensor<rank = 3,
+                                        coord = batch_x_y_z,
+                                        feature = row_channel,
+                                        dtype = f16>
+  }
+}

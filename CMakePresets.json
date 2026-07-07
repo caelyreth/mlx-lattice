@@ -22,6 +22,24 @@
         "SKBUILD_SABI_COMPONENT": "Development.SABIModule",
         "SKBUILD_SABI_VERSION": "3.12"
       }
+    },
+    {
+      "name": "clangd-mlir",
+      "displayName": "clangd-mlir",
+      "description": "Generate compile_commands.json for optional MLIR tooling.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clangd-mlir",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_OSX_SYSROOT": "macosx",
+        "MLX_LATTICE_ENABLE_MLIR": "ON",
+        "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
+        "SKBUILD": "ON",
+        "SKBUILD_PROJECT_VERSION": "0.2.2",
+        "SKBUILD_SABI_COMPONENT": "Development.SABIModule",
+        "SKBUILD_SABI_VERSION": "3.12"
+      }
     }
   ],
   "buildPresets": [
@@ -29,6 +47,11 @@
       "name": "clangd",
       "displayName": "clangd",
       "configurePreset": "clangd"
+    },
+    {
+      "name": "clangd-mlir",
+      "displayName": "clangd-mlir",
+      "configurePreset": "clangd-mlir"
     }
   ]
 }

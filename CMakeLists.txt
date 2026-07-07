@@ -72,3 +72,14 @@ find_package(MLX CONFIG REQUIRED PATHS "${MLX_DIR}" NO_DEFAULT_PATH)
 # MARK: - native
 
 add_subdirectory(native)
+
+# MARK: - optional MLIR dialect tooling
+
+option(
+  MLX_LATTICE_ENABLE_MLIR
+  "Build optional lattice MLIR dialect developer tooling."
+  OFF)
+
+if(MLX_LATTICE_ENABLE_MLIR)
+  add_subdirectory(mlir)
+endif()

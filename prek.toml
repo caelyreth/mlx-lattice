@@ -51,6 +51,27 @@ language = "system"
 pass_filenames = false
 
 [[repos.hooks]]
+id = "cmake-clangd-mlir"
+name = "cmake --preset clangd-mlir"
+entry = "cmake --preset clangd-mlir"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "cmake-build-clangd-mlir"
+name = "cmake --build --preset clangd-mlir"
+entry = "cmake --build --preset clangd-mlir --target lattice-opt"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "mlir-fixtures"
+name = "mlir fixtures"
+entry = "mlir/test/Dialect/Lattice/check_fixtures.sh"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
 id = "clang-format"
 name = "clang-format"
 entry = "clang-format -i"
@@ -58,8 +79,22 @@ language = "system"
 files = "^native/.*\\.(c|cc|cpp|cxx|h|hh|hpp|hxx|metal|cu|cuh)$"
 
 [[repos.hooks]]
+id = "clang-format-mlir"
+name = "clang-format mlir"
+entry = "clang-format -i"
+language = "system"
+files = "^mlir/.*\\.(cc|cpp|cxx|h|hh|hpp|hxx)$"
+
+[[repos.hooks]]
 id = "clang-tidy"
 name = "clang-tidy"
 entry = "clang-tidy -p build/clangd"
 language = "system"
 files = "^native/.*\\.(c|cc|cpp|cxx)$"
+
+[[repos.hooks]]
+id = "clang-tidy-mlir"
+name = "clang-tidy mlir"
+entry = "clang-tidy -p build/clangd-mlir"
+language = "system"
+files = "^mlir/.*\\.(cc|cpp|cxx)$"
