@@ -11,16 +11,16 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 
 > [!IMPORTANT]
 > Planned training/deployment direction: `mlx-lattice` is intended to remain
-> the MLX/Metal artifact consumer, while a future sibling `torch-lattice`
+> the MLX/Metal deployment package, while a future sibling `torch-lattice`
 > package can provide PyTorch/CUDA research and training ergonomics.
 >
-> ~~The bridge should be a stable sparse model IR: a validated manifest plus
-> tensor weights, not arbitrary generated Python or a TorchSparse compatibility
-> promise.~~ LLVM [MLIR](https://mlir.llvm.org/) is our current top choice.
-> We plan to validate this path and _may_ release support alongside v0.3.0.
+> The bridge is moving toward a lattice MLIR dialect plus tensor weights, not
+> generated Python or a TorchSparse compatibility promise. LLVM
+> [MLIR](https://mlir.llvm.org/) is the chosen contract direction.
 >
-> On the MLX side, the artifact should reconstruct an in-memory semantic graph
-> and dispatch through standard `mlx-lattice` operators.
+> The current artifact surface stores `graph.mlir` and `weights.safetensors`.
+> Executable import/lowering will be added through the MLIR path instead of a
+> separate hand-written graph format.
 
 > [!NOTE]
 > This codebase was heavily assisted by OpenAI GPT models, especially

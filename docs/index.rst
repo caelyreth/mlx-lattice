@@ -62,7 +62,7 @@ Navigation map
    * - Quantize inference weights
      - :doc:`reference/backend/quantization`
      - :doc:`api/core/quantized-weights`
-   * - Load a model artifact
+   * - Work with MLIR artifacts
      - :doc:`reference/concepts/model-ir`
      - :doc:`api/artifact`
    * - Diagnose dispatch

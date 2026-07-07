@@ -1,25 +1,35 @@
 IR API
 ======
 
-``lattice_contract`` contains the backend-neutral dataclasses and semantic
-operation contracts used by the legacy JSON artifact bridge. It does not import
-MLX, Torch, native kernels, or sparse runtime objects.
+``lattice_contract`` is now MLIR-first. Its public surface contains the
+annotation-backed lattice dialect schema plus a generated textual MLIR builder.
+It does not import MLX, Torch, native kernels, or sparse runtime objects.
 
 For the conceptual model, read :doc:`../reference/concepts/model-ir`.
 
-Manifest model
---------------
+Annotated dialect schema
+------------------------
 
-.. automodule:: lattice_contract.manifest
+The dialect schema is executable metadata: decorators register types,
+attributes, operations, operands, results, and operation attributes once. The
+builder consumes this schema directly, so exporter code can call the generated
+operation surface instead of carrying a parallel op-name registry.
+
+.. automodule:: lattice_contract.schema
    :members:
 
-Operation registry
-------------------
+.. automodule:: lattice_contract.dialect
+   :members:
 
-The registry exposes explicit semantic operation contracts. It no longer mirrors
-the full ``mlx_lattice.ops`` Python surface, and new cross-framework graph work
-should target the MLIR lattice dialect rather than adding broad JSON operation
-coverage.
+MLIR builder
+------------
 
-.. automodule:: lattice_contract.ops
+The builder emits textual lattice MLIR from the annotated schema. It is intended
+for exporters and tests; semantic verification remains the job of
+``lattice-opt`` and the MLIR dialect verifier.
+
+.. automodule:: lattice_contract.mlir
+   :members:
+
+.. automodule:: lattice_contract.mlir.builder
    :members:

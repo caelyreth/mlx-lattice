@@ -33,7 +33,7 @@ as stable:
 * relation execution views such as CSR views, implicit-GEMM views, and sorted
   implicit-GEMM views;
 * coordinate manager/key identity objects under ``mlx_lattice.core``;
-* legacy JSON artifact graph builders and operation registries;
+* MLIR artifact import/lowering internals before the importer is stabilized;
 * backend route names, Metal kernel names, TensorOps kernel variants, and
   diagnostic reference routes;
 * encoded byte streams from entropy helpers;

@@ -4,28 +4,8 @@ from typing import TYPE_CHECKING, cast
 
 import mlx.core as mx
 import mlx.nn as mxnn
-from lattice_contract import (
-    FEATURE_BATCH_NORM,
-    FEATURE_DROPOUT,
-    FEATURE_GELU,
-    FEATURE_LAYER_NORM,
-    FEATURE_LEAKY_RELU,
-    FEATURE_LINEAR,
-    FEATURE_RELU,
-    FEATURE_RMS_NORM,
-    FEATURE_SIGMOID,
-    FEATURE_SILU,
-    FEATURE_SOFTPLUS,
-    FEATURE_TANH,
-)
 
 from mlx_lattice.core import SparseTensor
-from mlx_lattice.nn._artifact import (
-    computed_attribute,
-    lattice_module,
-    module_parameter,
-    path_attribute,
-)
 from mlx_lattice.ops import feature as F
 from mlx_lattice.ops.feature import GeluApprox
 
@@ -48,7 +28,6 @@ if TYPE_CHECKING:
     from mlx_lattice.nn.quantized_feature import QuantizedLinear
 
 
-@lattice_module(FEATURE_LINEAR, parameters=('weight', 'bias'))
 class Linear(mxnn.Linear):
     """Sparse-feature linear projection module.
 
@@ -84,7 +63,6 @@ class Linear(mxnn.Linear):
         )
 
 
-@lattice_module(FEATURE_RELU)
 class ReLU(mxnn.ReLU):
     """Sparse-feature ReLU module preserving sparse coordinates."""
 
@@ -92,7 +70,6 @@ class ReLU(mxnn.ReLU):
         return F.relu(x)
 
 
-@lattice_module(FEATURE_SIGMOID)
 class Sigmoid(mxnn.Sigmoid):
     """Sparse-feature sigmoid module preserving sparse coordinates."""
 
@@ -100,10 +77,6 @@ class Sigmoid(mxnn.Sigmoid):
         return F.sigmoid(x)
 
 
-@lattice_module(
-    FEATURE_GELU,
-    attributes=(path_attribute('approximate', '_approx'),),
-)
 class GELU(mxnn.GELU):
     """Sparse-feature GELU module preserving sparse coordinates."""
 
@@ -111,7 +84,6 @@ class GELU(mxnn.GELU):
         return F.gelu(x, approximate=cast('GeluApprox', self._approx))
 
 
-@lattice_module(FEATURE_SILU)
 class SiLU(mxnn.SiLU):
     """Sparse-feature SiLU module preserving sparse coordinates."""
 
@@ -119,10 +91,6 @@ class SiLU(mxnn.SiLU):
         return F.silu(x)
 
 
-@lattice_module(
-    FEATURE_LEAKY_RELU,
-    attributes=(path_attribute('negative_slope', '_negative_slope'),),
-)
 class LeakyReLU(mxnn.LeakyReLU):
     """Sparse-feature leaky ReLU module preserving sparse coordinates."""
 
@@ -130,7 +98,6 @@ class LeakyReLU(mxnn.LeakyReLU):
         return F.leaky_relu(x, negative_slope=self._negative_slope)
 
 
-@lattice_module(FEATURE_TANH)
 class Tanh(mxnn.Tanh):
     """Sparse-feature tanh module preserving sparse coordinates."""
 
@@ -138,7 +105,6 @@ class Tanh(mxnn.Tanh):
         return F.tanh(x)
 
 
-@lattice_module(FEATURE_SOFTPLUS)
 class Softplus(mxnn.Softplus):
     """Sparse-feature softplus module preserving sparse coordinates."""
 
@@ -146,13 +112,6 @@ class Softplus(mxnn.Softplus):
         return F.softplus(x)
 
 
-@lattice_module(
-    FEATURE_DROPOUT,
-    attributes=(
-        computed_attribute('p', lambda module: 1 - module._p_1),
-        path_attribute('training', 'training'),
-    ),
-)
 class Dropout(mxnn.Dropout):
     """Sparse-feature dropout module preserving sparse coordinates."""
 
@@ -160,16 +119,6 @@ class Dropout(mxnn.Dropout):
         return F.dropout(x, p=1 - self._p_1, training=self.training)
 
 
-@lattice_module(
-    FEATURE_BATCH_NORM,
-    parameters=(
-        'weight',
-        'bias',
-        module_parameter('mean', 'running_mean'),
-        module_parameter('var', 'running_var'),
-    ),
-    attributes=(path_attribute('eps', 'eps'),),
-)
 class BatchNorm(mxnn.BatchNorm):
     """Sparse-feature batch normalization module.
 
@@ -197,11 +146,6 @@ class BatchNorm(mxnn.BatchNorm):
         )
 
 
-@lattice_module(
-    FEATURE_LAYER_NORM,
-    parameters=('weight', 'bias'),
-    attributes=(path_attribute('eps', 'eps'),),
-)
 class LayerNorm(mxnn.LayerNorm):
     """Sparse-feature layer normalization module preserving sparse coordinates."""
 
@@ -214,11 +158,6 @@ class LayerNorm(mxnn.LayerNorm):
         )
 
 
-@lattice_module(
-    FEATURE_RMS_NORM,
-    parameters=('weight',),
-    attributes=(path_attribute('eps', 'eps'),),
-)
 class RMSNorm(mxnn.RMSNorm):
     """Sparse-feature RMS normalization module preserving sparse coordinates."""
 

@@ -4,12 +4,6 @@ from collections.abc import Sequence
 
 import mlx.core as mx
 import mlx.nn as mxnn
-from lattice_contract import (
-    SPARSE_CONV3D,
-    SPARSE_CONV_TRANSPOSE3D,
-    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
-    SPARSE_SUBM_CONV3D,
-)
 
 from mlx_lattice.core import (
     CoordinateMapKey,
@@ -18,7 +12,6 @@ from mlx_lattice.core import (
     SparseTensor,
     quantize_weight,
 )
-from mlx_lattice.nn._artifact import kernel_spec_attributes, lattice_module
 from mlx_lattice.nn.conv import (
     Conv3d,
     ConvTranspose3d,
@@ -86,16 +79,6 @@ class _QuantizedConvBase(mxnn.Module):
         self.freeze()
 
 
-@lattice_module(
-    SPARSE_CONV3D,
-    parameters=('weight', 'bias'),
-    attributes=kernel_spec_attributes(
-        'kernel_size',
-        'stride',
-        'padding',
-        'dilation',
-    ),
-)
 class QuantizedConv3d(_QuantizedConvBase):
     """Affine weight-quantized sparse 3D convolution module.
 
@@ -174,11 +157,6 @@ class QuantizedConv3d(_QuantizedConvBase):
         return out
 
 
-@lattice_module(
-    SPARSE_SUBM_CONV3D,
-    parameters=('weight', 'bias'),
-    attributes=kernel_spec_attributes('kernel_size', 'dilation'),
-)
 class QuantizedSubmConv3d(_QuantizedConvBase):
     """Affine weight-quantized submanifold convolution module.
 
@@ -238,16 +216,6 @@ class QuantizedSubmConv3d(_QuantizedConvBase):
         return out
 
 
-@lattice_module(
-    SPARSE_CONV_TRANSPOSE3D,
-    parameters=('weight', 'bias'),
-    attributes=kernel_spec_attributes(
-        'kernel_size',
-        'stride',
-        'padding',
-        'dilation',
-    ),
-)
 class QuantizedConvTranspose3d(_QuantizedConvBase):
     """Affine weight-quantized sparse transpose-convolution module.
 
@@ -316,11 +284,6 @@ class QuantizedConvTranspose3d(_QuantizedConvBase):
         return out
 
 
-@lattice_module(
-    SPARSE_GENERATIVE_CONV_TRANSPOSE3D,
-    parameters=('weight', 'bias'),
-    attributes=kernel_spec_attributes('kernel_size', 'stride'),
-)
 class QuantizedGenerativeConvTranspose3d(_QuantizedConvBase):
     """Affine weight-quantized generative transpose-convolution module.
 

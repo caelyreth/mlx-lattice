@@ -29,13 +29,13 @@ The public surface is grouped by semantic feature:
      - ``mlx.nn.Module`` wrappers over sparse operations.
      - Mirrors the corresponding functional operation.
    * - :doc:`ir`
-     - Backend-neutral manifest dataclasses, schema validation, and annotated
-       IR operation registry from ``lattice_contract``.
-     - Defines the stable sparse model artifact contract without importing
-       the MLX artifact consumer.
+     - Annotation-backed MLIR dialect schema and generated textual builder
+       from ``lattice_contract``.
+     - Defines the backend-neutral sparse model exchange contract without
+       importing the MLX artifact consumer.
    * - :doc:`artifact`
-     - Lattice artifact loading/saving and in-memory graph execution.
-     - Reconstructs graph semantics and dispatches through public operations.
+     - MLIR artifact bundle loading/saving.
+     - Stores ``graph.mlir`` and ``weights.safetensors`` as exchange media.
    * - :doc:`native`
      - Stable backend diagnostics through ``mlx_lattice.backend_info``.
      - Does not mutate sparse tensors.
