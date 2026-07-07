@@ -5,6 +5,7 @@ from typing import Annotated, cast
 
 import pytest
 from lattice_contract import (
+    ARTIFACT_GRAPH_FILE,
     ARTIFACT_WEIGHT_FILE,
     CURRENT_DIALECT_VERSION,
     LATTICE_DIALECT,
@@ -60,10 +61,18 @@ def test_lattice_artifact_roundtrips_mlir_graph_and_weights(
     assert artifact.graph == graph
     assert set(artifact.weights) == {'stem.weight'}
     assert artifact.weights['stem.weight'].shape == (32, 3, 3, 3, 32)
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        ARTIFACT_GRAPH_FILE,
+        ARTIFACT_WEIGHT_FILE,
+    ]
 
 
 def test_lattice_artifact_requires_graph_mlir(tmp_path) -> None:
     mx.save_safetensors(str(tmp_path / 'weights.safetensors'), {})
+    (tmp_path / 'manifest.json').write_text(
+        '{"nodes": [{"op": "legacy.conv"}]}',
+        encoding='utf-8',
+    )
 
     try:
         load_lattice_artifact(tmp_path)
@@ -327,6 +336,18 @@ def test_runtime_plan_rejects_schema_attr_mismatch() -> None:
     cast(dict[str, object], first_op)['attrs'] = {'stride': [1, 1, 1]}
 
     with pytest.raises(ValueError, match='missing required attrs'):
+        RuntimePlan.from_native(raw)
+
+
+def test_runtime_plan_rejects_backend_route_attrs() -> None:
+    raw = _activation_plan(kind='relu')
+    ops = raw['ops']
+    assert isinstance(ops, list)
+    activation_op = cast(dict[str, object], ops[2])
+    attrs = cast(dict[str, object], activation_op['attrs'])
+    attrs['tensor_ops_route'] = 'm5_row_stationary'
+
+    with pytest.raises(ValueError, match='unknown attrs'):
         RuntimePlan.from_native(raw)
 
 

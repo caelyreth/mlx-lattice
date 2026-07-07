@@ -26,6 +26,50 @@ by ``lattice.weight`` operations.
 Package metadata can be added later as shallow manifest data, but graph
 semantics belong in MLIR.
 
+Project goals
+-------------
+
+The MLIR integration has a narrow deployment goal:
+
+.. code-block:: text
+
+   Torch/CUDA-side exporter or other producer
+     -> graph.mlir + weights.safetensors
+     -> native MLIR parser and lattice verifier
+     -> typed RuntimePlan
+     -> MLX/Metal runtime lowering through mlx_lattice.ops
+
+The project should optimize for these properties:
+
+- ``graph.mlir`` is the portable semantic graph contract.
+- ``weights.safetensors`` stores tensor payloads referenced by symbolic
+  ``lattice.weight`` operations.
+- native MLIR tooling parses and verifies graph structure before Python
+  lowering.
+- Python receives a typed ``RuntimePlan`` and rejects malformed importer
+  payloads at the boundary.
+- every accepted v0 dialect operation either has a complete MLX lowering or is
+  rejected by verification/import with a clear diagnostic.
+- backend-specific route selection, coordinate managers, relation caches,
+  TensorOps choices, and Metal/CUDA scheduling remain runtime implementation
+  details.
+
+Non-goals
+---------
+
+The MLIR artifact is not intended to become:
+
+- a Python MLIR parser implemented inside ``mlx-lattice``;
+- a JSON graph contract embedded inside MLIR attributes;
+- a serialized PyTorch module, MLX module, or sparse Python object;
+- a custom MLIR-to-Metal compiler pipeline;
+- an ahead-of-time device-specific executable artifact;
+- a persistence format for backend handles, rulebook buffers, TensorOps tile
+  masks, or path-selection thresholds.
+
+Those may be useful implementation details or future optimization layers, but
+they are not part of the stable portable model contract.
+
 Executable entry
 ----------------
 
