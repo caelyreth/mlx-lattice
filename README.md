@@ -6,8 +6,8 @@ coordinate management, sparse convolution, pooling, point/voxel conversion,
 coordinate-aligned sparse algebra, quantized inference weights, and
 `mlx.nn`-style modules for Apple Silicon workflows.
 
-[Documentation](https://mlx-lattice.iki.moe) | [Acknowledgements](#acknowledgements)
-| [Citation](#citation)
+[DOI](https://doi.org/10.5281/zenodo.21258875) | [Documentation](https://mlx-lattice.iki.moe)
+| [Acknowledgements](#acknowledgements) | [Citation](#citation)
 
 ### Install
 
