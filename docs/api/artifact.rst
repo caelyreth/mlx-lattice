@@ -1,9 +1,17 @@
 Artifact API
 ============
 
-``mlx_lattice.artifact`` handles MLIR-first exchange bundles. A bundle contains
-textual ``graph.mlir`` and ``weights.safetensors``. It does not execute the
-graph.
+``mlx_lattice.artifact`` handles the MLX-side consumer half of the portable
+model-artifact boundary. A bundle contains textual ``graph.mlir`` and
+``weights.safetensors``. The bundle itself is exchange media; execution starts
+only after ``load_lattice_program`` or ``compile_lattice_artifact`` validates
+and lowers the graph.
+
+The producer half belongs to training frameworks. For example, the Torch/CUDA
+side should expose model-to-artifact APIs such as
+``save_lattice_model_artifact``. Those APIs lower a framework model into
+``graph.mlir`` plus weights. They should not be confused with MLX raw artifact
+IO, which only saves, loads, validates, and compiles an already-formed bundle.
 
 Graph validation uses real MLIR infrastructure. MLIR-enabled native builds use
 an in-process parser/verifier registered with the ``lattice`` dialect.
@@ -29,6 +37,20 @@ metadata: type text and ABI role. ``SparseTensor`` shorthand binding uses the
 roles ``sparse_coords``, ``sparse_features``, and ``sparse_active`` on the first
 three entry arguments. It does not depend on textual MLIR SSA argument names,
 which are not a stable API contract.
+
+Programs can be invoked with one ``SparseTensor`` shorthand argument, positional
+ABI tensors, or keyword ABI tensors:
+
+.. code-block:: python
+
+   program(x)
+   program(x.coords, x.feats, x.active_rows)
+   program(coords=x.coords, features=x.feats, active=x.active_rows)
+
+These forms are intentionally strict. Sparse shorthand cannot be mixed with
+keyword inputs; missing, duplicate, unexpected, or non-MLX input values fail
+before any operation lowering runs. This makes producer/consumer drift visible
+at the artifact boundary instead of inside a Metal kernel or sparse operator.
 
 The raw native payload is frozen into ``RuntimePlan`` before execution.
 ``LatticeProgram`` consumes that typed plan object, not arbitrary dictionaries,
@@ -89,6 +111,8 @@ Dense weights are read from ``weights.safetensors`` using the exact
 ``<storage_key>.biases``. Bias parameters are regular dense
 ``lattice.weight`` values with family ``bias`` and layout ``bias_c``; they are
 passed as optional operands to convolution-family and linear operations.
+Missing dense weights, incomplete packed triplets, or packed scale dtype drift
+are runtime contract errors.
 
 Feature-only dialect operations operate on dense feature tensors. This includes
 ``lattice.linear``, ``lattice.activation``, ``lattice.batch_norm``,

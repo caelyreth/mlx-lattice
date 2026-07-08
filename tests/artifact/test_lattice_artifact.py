@@ -82,6 +82,21 @@ def test_lattice_artifact_requires_graph_mlir(tmp_path) -> None:
         raise AssertionError('expected missing graph.mlir to fail')
 
 
+def test_lattice_artifact_requires_directory(tmp_path) -> None:
+    path = tmp_path / 'artifact.lattice'
+    path.write_text('', encoding='utf-8')
+
+    with pytest.raises(ValueError, match='directory does not exist'):
+        load_lattice_artifact(path)
+
+
+def test_lattice_artifact_requires_weights_file(tmp_path) -> None:
+    (tmp_path / ARTIFACT_GRAPH_FILE).write_text(_graph(), encoding='utf-8')
+
+    with pytest.raises(ValueError, match=ARTIFACT_WEIGHT_FILE):
+        load_lattice_artifact(tmp_path)
+
+
 def test_artifact_runtime_lowerings_cover_dialect_schema_ops() -> None:
     assert set(ARTIFACT_LOWERINGS.functions) == {
         LATTICE_DIALECT.qualified_op_name(op)
@@ -617,6 +632,98 @@ def test_lattice_artifact_runtime_binds_stable_keyword_abi() -> None:
     assert bool(mx.allclose(actual.feats, expected.feats))
 
 
+def test_lattice_artifact_runtime_binds_positional_abi() -> None:
+    x = _input_tensor()
+
+    actual = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )(x.coords, x.feats, x.active_rows)
+    expected = relu(x)
+
+    assert isinstance(actual, SparseTensor)
+    mx.eval(actual.feats, expected.feats)
+    assert bool(mx.allclose(actual.feats, expected.feats))
+
+
+def test_lattice_artifact_runtime_rejects_missing_keyword_input() -> None:
+    x = _input_tensor()
+    program = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )
+
+    with pytest.raises(ValueError, match='missing artifact input: active'):
+        program(coords=x.coords, features=x.feats)
+
+
+def test_lattice_artifact_runtime_rejects_unexpected_keyword_input() -> (
+    None
+):
+    x = _input_tensor()
+    program = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )
+
+    with pytest.raises(
+        ValueError, match='unexpected artifact inputs: extra'
+    ):
+        program(
+            coords=x.coords,
+            features=x.feats,
+            active=x.active_rows,
+            extra=x.feats,
+        )
+
+
+def test_lattice_artifact_runtime_rejects_too_many_positional_inputs() -> (
+    None
+):
+    x = _input_tensor()
+    program = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )
+
+    with pytest.raises(ValueError, match='too many positional'):
+        program(x.coords, x.feats, x.active_rows, x.feats)
+
+
+def test_lattice_artifact_runtime_rejects_sparse_shorthand_with_kwargs() -> (
+    None
+):
+    x = _input_tensor()
+    program = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )
+
+    with pytest.raises(ValueError, match='cannot be combined'):
+        program(x, active=x.active_rows)
+
+
+def test_lattice_artifact_runtime_rejects_sparse_shorthand_role_drift() -> (
+    None
+):
+    raw = _activation_plan(kind='relu')
+    args = raw['args']
+    assert isinstance(args, list)
+    first_arg = cast(dict[str, object], args[0])
+    first_arg['role'] = 'tensor'
+    program = LatticeProgram(_runtime_plan(raw), {})
+
+    with pytest.raises(ValueError, match='SparseTensor shorthand requires'):
+        program(_input_tensor())
+
+
+def test_lattice_artifact_runtime_rejects_invalid_input_value_type() -> (
+    None
+):
+    x = _input_tensor()
+    program = LatticeProgram(
+        _runtime_plan(_activation_plan(kind='relu')), {}
+    )
+
+    with pytest.raises(TypeError, match='artifact inputs'):
+        program(coords=x.coords, features=x.feats, active=object())
+
+
 def test_lattice_artifact_runtime_lowers_norms_with_sparse_identity() -> (
     None
 ):
@@ -723,6 +830,49 @@ def test_lattice_artifact_runtime_resolves_quantized_linear_weights(
     assert bool(
         mx.allclose(actual.feats, expected.feats, rtol=2e-2, atol=5e-3)
     )
+
+
+def test_lattice_artifact_runtime_rejects_missing_dense_weight() -> None:
+    with pytest.raises(ValueError, match='artifact weight not found'):
+        LatticeProgram(
+            _runtime_plan(
+                _dense_linear_weight_plan(
+                    weight_key='head.weight',
+                    bias_key='head.bias',
+                )
+            ),
+            {},
+        )(_input_tensor())
+
+
+def test_lattice_artifact_runtime_rejects_incomplete_quantized_weight() -> (
+    None
+):
+    packed = quantize_weight(mx.ones((5, 3), dtype=mx.float16), bits=4)
+
+    with pytest.raises(
+        ValueError, match='quantized artifact weight requires'
+    ):
+        LatticeProgram(
+            _runtime_plan(_quantized_linear_plan(bits=4)),
+            {'head.qweight.weight': packed.weight},
+        )(_input_tensor())
+
+
+def test_lattice_artifact_runtime_rejects_quantized_scale_dtype_drift() -> (
+    None
+):
+    packed = quantize_weight(mx.ones((5, 3), dtype=mx.float16), bits=4)
+    weights = _packed_weights('head.qweight', packed)
+    weights['head.qweight.scales'] = weights['head.qweight.scales'].astype(
+        mx.float32
+    )
+
+    with pytest.raises(ValueError, match='scales dtype mismatch'):
+        LatticeProgram(
+            _runtime_plan(_quantized_linear_plan(bits=4)),
+            weights,
+        )(_input_tensor())
 
 
 def _graph() -> str:

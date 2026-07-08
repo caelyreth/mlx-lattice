@@ -128,7 +128,7 @@ def _sparse_input(
 
 
 def _assert_sparse_output_close(
-    output: SparseTensor,
+    output: object,
     expected: dict[str, mx.array],
     *,
     rtol: float,
