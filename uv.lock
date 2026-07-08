@@ -214,7 +214,7 @@ wheels = [
 
 [[package]]
 name = "lattice-contract"
-version = "0.2.3"
+version = "0.3.0"
 source = { editable = "contract" }
 
 [package.dev-dependencies]
@@ -323,7 +323,7 @@ wheels = [
 
 [[package]]
 name = "mlx-lattice"
-version = "0.2.3"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "lattice-contract" },
@@ -368,7 +368,7 @@ docs = [
 
 [[package]]
 name = "mlx-lattice-bench"
-version = "0.2.3"
+version = "0.3.0"
 source = { editable = "benchmarks" }
 dependencies = [
     { name = "mlx-lattice" },

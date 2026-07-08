@@ -196,7 +196,7 @@ Quantized weights reduce model storage and can improve selected inference
 routes. Benchmark quantized and floating paths on the same sparse support,
 channel count, and device before choosing a deployment configuration.
 
-### What 0.2.3 covers
+### What 0.3.0 covers
 
 - Sparse tensor container with coordinate identity metadata.
 - Coordinate management and cached sparse relations.
@@ -209,6 +209,9 @@ channel count, and device before choosing a deployment configuration.
 - Point-to-voxel and voxel-to-point conversion.
 - Packed int4/int8 inference weights for supported linear and convolution
   routes.
+- MLIR-first artifacts using `graph.mlir` plus `weights.safetensors`; native
+  artifact execution is available when the extension is built with MLIR
+  support.
 - CPU and Metal native backends behind the same Python API.
 - Benchmark suite for focused operator and backend measurement.
 
