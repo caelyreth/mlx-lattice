@@ -43,12 +43,7 @@ class LatticeProgram:
         """Compile a loaded artifact through the native MLIR importer."""
 
         _register_artifact_lowerings()
-        native = getattr(ext, 'lattice_mlir_plan', None)
-        if native is None:
-            raise RuntimeError(
-                'artifact execution requires an MLIR-enabled mlx-lattice '
-                'native extension.'
-            )
+        native = _require_native_artifact_execution()
         return cls(
             RuntimePlan.from_native(
                 cast(Mapping[str, Any], native(artifact.graph))
@@ -119,6 +114,24 @@ def load_lattice_program(path: str | Path) -> LatticeProgram:
     """Load an artifact directory and compile it into an MLX program."""
 
     return compile_lattice_artifact(load_lattice_artifact(path))
+
+
+def native_artifact_execution_available() -> bool:
+    """Return whether this install can execute MLIR artifacts natively."""
+
+    return callable(getattr(ext, 'lattice_mlir_plan', None))
+
+
+def _require_native_artifact_execution():
+    native = getattr(ext, 'lattice_mlir_plan', None)
+    if callable(native):
+        return native
+    raise RuntimeError(
+        'artifact execution requires an MLIR-enabled mlx-lattice native '
+        'extension. The MLIR artifact contract is still available for bundle '
+        'IO and validation, but this installed extension was built without '
+        'native artifact execution support.'
+    )
 
 
 def _register_artifact_lowerings() -> None:

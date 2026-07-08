@@ -34,8 +34,9 @@ The public surface is grouped by semantic feature:
      - Defines the backend-neutral sparse model exchange contract without
        importing the MLX artifact consumer.
    * - :doc:`artifact`
-     - MLIR artifact bundle loading/saving.
-     - Stores ``graph.mlir`` and ``weights.safetensors`` as exchange media.
+     - MLIR artifact bundle IO, validation, and optional native execution.
+     - Stores ``graph.mlir`` and ``weights.safetensors`` as the only artifact
+       graph contract.
    * - :doc:`native`
      - Stable backend diagnostics through ``mlx_lattice.backend_info``.
      - Does not mutate sparse tensors.

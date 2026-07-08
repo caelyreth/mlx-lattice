@@ -27,6 +27,7 @@ from mlx_lattice.artifact import (
     lattice_graph_operation_names,
     load_lattice_artifact,
     load_lattice_program,
+    native_artifact_execution_available,
     save_lattice_artifact,
     validate_lattice_artifact,
 )
@@ -136,6 +137,20 @@ def test_lattice_artifact_validates_with_mlir_tooling(tmp_path) -> None:
     status = lattice_artifact_status(tmp_path)
     assert status.valid
     assert status.diagnostics == ''
+
+
+def test_native_artifact_execution_capability_matches_extension() -> None:
+    assert native_artifact_execution_available() is callable(
+        getattr(ext, 'lattice_mlir_plan', None)
+    )
+
+
+def test_lattice_artifact_compile_requires_native_mlir_execution() -> None:
+    if native_artifact_execution_available():
+        pytest.skip('native MLIR artifact execution is available.')
+
+    with pytest.raises(RuntimeError, match='MLIR-enabled'):
+        compile_lattice_artifact(LatticeArtifact(_graph(), {}))
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ namespace mlx_lattice {
 struct Capabilities {
     bool cpu;
     bool metal;
+    bool mlir;
 };
 
 std::string_view version() noexcept;

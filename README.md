@@ -27,6 +27,14 @@ The Metal backend is the primary performance target. CPU routes are also
 provided for supported operators and are useful for correctness checks,
 development, and environments without the same Metal capability.
 
+### MLIR artifacts
+
+Portable model artifacts use `graph.mlir` plus `weights.safetensors`. MLIR is
+the only artifact graph contract; there is no legacy JSON artifact runtime.
+Builds without native MLIR bindings can still save, load, and externally
+validate artifact bundles, while MLIR-enabled builds can compile them into
+executable MLX programs.
+
 ### Sparse tensor model
 
 Sparse coordinates are integer rows with shape `(N, 4)` in

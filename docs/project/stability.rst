@@ -21,7 +21,13 @@ minor releases:
 * ``mlx_lattice.nn`` module wrappers over convolution, pooling, feature, and
   quantized inference operations;
 * packed affine weight quantization through ``QuantizedWeight``,
-  ``quantize_weight``, and ``dequantize_weight``.
+  ``quantize_weight``, and ``dequantize_weight``;
+* MLIR artifact package media: ``graph.mlir`` plus
+  ``weights.safetensors``;
+* MLX artifact bundle IO and capability discovery:
+  ``save_lattice_artifact``, ``load_lattice_artifact``,
+  ``validate_lattice_artifact``, and
+  ``native_artifact_execution_available``.
 
 Provisional or diagnostic surface
 ---------------------------------
@@ -33,7 +39,10 @@ as stable:
 * relation execution views such as CSR views, implicit-GEMM views, and sorted
   implicit-GEMM views;
 * coordinate manager/key identity objects under ``mlx_lattice.core``;
-* MLIR artifact import/lowering internals before the importer is stabilized;
+* exact MLIR dialect v0 operation/attribute details before the artifact ABI is
+  declared stable;
+* MLIR artifact runtime plan and lowering internals before the importer is
+  stabilized;
 * backend route names, Metal kernel names, TensorOps kernel variants, and
   diagnostic reference routes;
 * encoded byte streams from entropy helpers;

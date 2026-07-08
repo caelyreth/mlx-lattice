@@ -28,6 +28,38 @@ normal editable rebuild path rather than assuming Python import reload is
 enough. MLX extension loading happens at import time, and stale build artifacts
 can otherwise make a local run appear inconsistent with the source tree.
 
+MLIR artifact support
+---------------------
+
+``mlx-lattice`` uses MLIR as the only portable model-artifact graph contract.
+Every install can import ``lattice_contract`` and can use
+``mlx_lattice.artifact`` for bundle IO. Native in-process artifact execution is
+a compiled capability controlled by ``MLX_LATTICE_ENABLE_MLIR``.
+
+Default lightweight builds do not require a local LLVM/MLIR toolchain. They can
+still save and load ``graph.mlir`` plus ``weights.safetensors`` bundles, and
+they can validate with an external ``lattice-opt`` executable when one is
+provided. Calling ``load_lattice_program`` in such an install fails clearly
+because no native MLIR execution binding exists.
+
+Developer builds that need in-process artifact execution should configure the
+MLIR preset:
+
+.. code-block:: bash
+
+   cmake --preset clangd-mlir
+   cmake --build --preset clangd-mlir
+
+The diagnostic check is:
+
+.. code-block:: python
+
+   import mlx_lattice as lattice
+   from mlx_lattice.artifact import native_artifact_execution_available
+
+   print(lattice.backend_info()["capabilities"]["mlir"])
+   print(native_artifact_execution_available())
+
 Verifying the install
 ---------------------
 

@@ -11,5 +11,5 @@ def test_native_backend_info_contract() -> None:
 
     assert info['version'] == mlx_lattice.__version__
     assert capabilities['cpu'] is True
-    assert set(capabilities) == {'cpu', 'metal'}
+    assert set(capabilities) == {'cpu', 'metal', 'mlir'}
     assert all(isinstance(value, bool) for value in capabilities.values())

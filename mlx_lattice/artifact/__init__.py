@@ -15,6 +15,7 @@ from mlx_lattice.artifact.runtime import (
     LatticeProgram,
     compile_lattice_artifact,
     load_lattice_program,
+    native_artifact_execution_available,
 )
 from mlx_lattice.artifact.validation import (
     LatticeMLIRStatus,
@@ -39,6 +40,7 @@ __all__ = [
     'lattice_graph_status',
     'load_lattice_artifact',
     'load_lattice_program',
+    'native_artifact_execution_available',
     'save_lattice_artifact',
     'validate_lattice_artifact',
     'validate_lattice_graph',
