@@ -155,6 +155,17 @@ This keeps op names, result names, and attribute names centralized. Backend
 exporters should call the generated builder surface rather than manually
 formatting dialect strings or maintaining their own operation registries.
 
+Convolution identity
+--------------------
+
+The dialect distinguishes support-generating and support-preserving sparse
+convolution by operation identity, not by geometry inference. A producer should
+lower ``Conv3d`` to ``lattice.conv3d`` even when ``stride=(1, 1, 1)``.
+Submanifold convolution must be represented as an explicit
+``SubmConv3d``/``lattice.subm_conv3d`` operation. This keeps Torch/CUDA
+training graphs, MLX/Metal deployment graphs, and native relation builders on
+the same semantic contract.
+
 Quantization model
 ------------------
 
