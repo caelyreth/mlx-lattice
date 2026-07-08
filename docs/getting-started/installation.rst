@@ -33,22 +33,24 @@ MLIR artifact support
 
 ``mlx-lattice`` uses MLIR as the only portable model-artifact graph contract.
 Every install can import ``lattice_contract`` and can use
-``mlx_lattice.artifact`` for bundle IO. Native in-process artifact execution is
-a compiled capability controlled by ``MLX_LATTICE_ENABLE_MLIR``.
+``mlx_lattice.artifact`` for bundle IO. Published macOS wheels include native
+in-process artifact execution, so ``load_lattice_program`` can compile
+``graph.mlir`` bundles without requiring users to install LLVM/MLIR separately.
 
-Default lightweight builds do not require a local LLVM/MLIR toolchain. They can
-still save and load ``graph.mlir`` plus ``weights.safetensors`` bundles, and
-they can validate with an external ``lattice-opt`` executable when one is
-provided. Calling ``load_lattice_program`` in such an install fails clearly
-because no native MLIR execution binding exists.
+Source builds control native artifact execution with
+``MLX_LATTICE_ENABLE_MLIR``. Builds compiled without that option do not require
+a local LLVM/MLIR toolchain. They can still save and load ``graph.mlir`` plus
+``weights.safetensors`` bundles, and they can validate with an external
+``lattice-opt`` executable when one is provided. Calling
+``load_lattice_program`` in such an install fails clearly because no native
+MLIR execution binding exists.
 
-Developer builds that need in-process artifact execution should configure the
-MLIR preset:
+Developer builds that need in-process artifact execution should configure with
+MLIR enabled:
 
 .. code-block:: bash
 
-   cmake --preset clangd-mlir
-   cmake --build --preset clangd-mlir
+   uv build --config-setting=cmake.define.MLX_LATTICE_ENABLE_MLIR=ON
 
 The diagnostic check is:
 

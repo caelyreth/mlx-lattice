@@ -15,6 +15,7 @@ concurrency:
 env:
   UV_FROZEN: "1"
   UV_LINK_MODE: copy
+  LLVM_VERSION: "20.1.8"
   EXPECTED_CONTRACT_DISTRIBUTIONS: "2"
   EXPECTED_MLX_DISTRIBUTIONS: "4"
 
@@ -149,13 +150,27 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Set up LLVM/MLIR
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
+          cached: true
+
       - name: Check tag matches project version
         run: test "${GITHUB_REF_NAME#v}" = "$(uv version --short)"
 
       - name: Build wheel
-        run: uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist
+        run: |
+          uv build \
+            --wheel \
+            --python "${{ matrix.python-version }}" \
+            --out-dir dist \
+            --config-setting=cmake.define.MLX_LATTICE_ENABLE_MLIR=ON
         env:
+          CMAKE_PREFIX_PATH: ${{ env.LLVM_PATH }}
+          LLVM_DIR: ${{ env.LLVM_PATH }}/lib/cmake/llvm
           MACOSX_DEPLOYMENT_TARGET: "26.0"
+          MLIR_DIR: ${{ env.LLVM_PATH }}/lib/cmake/mlir
 
       - name: Smoke test wheel
         run: |
@@ -175,8 +190,17 @@ jobs:
           assert info["version"] == lattice.__version__
           assert set(capabilities) == {"cpu", "metal", "mlir"}
           assert all(isinstance(value, bool) for value in capabilities.values())
-          assert native_artifact_execution_available() is capabilities["mlir"]
+          assert capabilities["mlir"] is True
+          assert native_artifact_execution_available() is True
           PY
+
+      - name: Check wheel does not depend on external MLIR dylibs
+        run: |
+          wheel="$(ls dist/*.whl)"
+          python -m zipfile -e "$wheel" .wheel-linkage
+          extension="$(find .wheel-linkage -name '*.so' -o -name '*.dylib')"
+          otool -L "$extension"
+          ! otool -L "$extension" | grep -E '/(LLVM|MLIR)|lib(LLVM|MLIR).*\.dylib'
 
       - name: Upload wheel
         uses: actions/upload-artifact@v7

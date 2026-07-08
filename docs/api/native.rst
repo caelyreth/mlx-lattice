@@ -16,9 +16,10 @@ Capability keys are diagnostic booleans:
 
 ``mlir``
    The extension was built with native MLIR artifact execution bindings.
-   ``False`` does not mean the artifact contract is unavailable; it means this
-   install can save/load artifact bundles and may validate with ``lattice-opt``,
-   but cannot compile ``graph.mlir`` into a ``LatticeProgram`` in-process.
+   Published macOS wheels are expected to report ``True``. ``False`` does not
+   mean the artifact contract is unavailable; it means this install can
+   save/load artifact bundles and may validate with ``lattice-opt``, but cannot
+   compile ``graph.mlir`` into a ``LatticeProgram`` in-process.
 
 ``backend_info()`` does not select routes. Public operations still dispatch
 from the active MLX device, input dtype, relation metadata, shape predicates,

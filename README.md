@@ -31,9 +31,10 @@ development, and environments without the same Metal capability.
 
 Portable model artifacts use `graph.mlir` plus `weights.safetensors`. MLIR is
 the only artifact graph contract; there is no legacy JSON artifact runtime.
-Builds without native MLIR bindings can still save, load, and externally
-validate artifact bundles, while MLIR-enabled builds can compile them into
-executable MLX programs.
+Published macOS wheels include native MLIR bindings, so artifact bundles can be
+compiled into executable MLX programs after a normal package install. Source
+builds can opt out of those bindings when a local LLVM/MLIR toolchain is not
+available; those builds can still save, load, and externally validate bundles.
 
 ### Sparse tensor model
 
@@ -210,8 +211,7 @@ channel count, and device before choosing a deployment configuration.
 - Packed int4/int8 inference weights for supported linear and convolution
   routes.
 - MLIR-first artifacts using `graph.mlir` plus `weights.safetensors`; native
-  artifact execution is available when the extension is built with MLIR
-  support.
+  artifact execution is included in published macOS wheels.
 - CPU and Metal native backends behind the same Python API.
 - Benchmark suite for focused operator and backend measurement.
 

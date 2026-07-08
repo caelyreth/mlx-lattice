@@ -26,7 +26,7 @@
     {
       "name": "clangd-mlir",
       "displayName": "clangd-mlir",
-      "description": "Generate compile_commands.json for optional MLIR tooling.",
+      "description": "Generate compile_commands.json with native MLIR artifact execution enabled.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/clangd-mlir",
       "cacheVariables": {

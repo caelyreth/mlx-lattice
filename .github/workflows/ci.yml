@@ -14,6 +14,7 @@ concurrency:
 env:
   UV_FROZEN: 1
   UV_LINK_MODE: copy
+  LLVM_VERSION: "20.1.8"
 
 jobs:
   quality:
@@ -116,5 +117,40 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Set up LLVM/MLIR
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
+          cached: true
+
       - name: Build workspace distributions
-        run: uv build --all-packages
+        run: |
+          uv build --project contract
+          uv build --project benchmarks
+          uv build \
+            --config-setting=cmake.define.MLX_LATTICE_ENABLE_MLIR=ON
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.LLVM_PATH }}
+          LLVM_DIR: ${{ env.LLVM_PATH }}/lib/cmake/llvm
+          MLIR_DIR: ${{ env.LLVM_PATH }}/lib/cmake/mlir
+
+      - name: Smoke test MLIR-enabled wheel
+        run: |
+          python -m venv .wheel-smoke
+          .wheel-smoke/bin/python -m pip install ./contract dist/mlx_lattice-*.whl
+          .wheel-smoke/bin/python - <<'PY'
+          import mlx_lattice as lattice
+          from mlx_lattice.artifact import native_artifact_execution_available
+
+          capabilities = lattice.backend_info()["capabilities"]
+          assert capabilities["mlir"] is True
+          assert native_artifact_execution_available() is True
+          PY
+
+      - name: Check wheel does not depend on external MLIR dylibs
+        run: |
+          wheel="$(ls dist/mlx_lattice-*.whl)"
+          python -m zipfile -e "$wheel" .wheel-linkage
+          extension="$(find .wheel-linkage -name '*.so' -o -name '*.dylib')"
+          otool -L "$extension"
+          ! otool -L "$extension" | grep -E '/(LLVM|MLIR)|lib(LLVM|MLIR).*\.dylib'

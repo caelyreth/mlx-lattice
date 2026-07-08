@@ -13,13 +13,13 @@ side should expose model-to-artifact APIs such as
 ``graph.mlir`` plus weights. They should not be confused with MLX raw artifact
 IO, which only saves, loads, validates, and compiles an already-formed bundle.
 
-MLIR is the only artifact graph contract. A build may still lack native MLIR
-execution support when it was compiled without the optional MLIR bindings. In
-that case bundle IO remains available, validation can still run through
-``lattice-opt`` when provided, and ``native_artifact_execution_available()``
-returns ``False``. ``compile_lattice_artifact`` and ``load_lattice_program``
-then fail with a direct capability error instead of selecting another graph
-runtime.
+MLIR is the only artifact graph contract. Published macOS wheels include native
+MLIR execution support. A source build may still lack that support when it was
+compiled without ``MLX_LATTICE_ENABLE_MLIR``. In that case bundle IO remains
+available, validation can still run through ``lattice-opt`` when provided, and
+``native_artifact_execution_available()`` returns ``False``.
+``compile_lattice_artifact`` and ``load_lattice_program`` then fail with a
+direct capability error instead of selecting another graph runtime.
 
 Graph validation uses real MLIR infrastructure. MLIR-enabled native builds use
 an in-process parser/verifier registered with the ``lattice`` dialect.

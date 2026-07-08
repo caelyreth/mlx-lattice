@@ -69,11 +69,11 @@ if(NOT DEFINED MLX_DIR OR NOT EXISTS "${MLX_DIR}")
 endif()
 find_package(MLX CONFIG REQUIRED PATHS "${MLX_DIR}" NO_DEFAULT_PATH)
 
-# MARK: - optional MLIR dialect tooling
+# MARK: - native MLIR artifact execution
 
 option(
   MLX_LATTICE_ENABLE_MLIR
-  "Build optional lattice MLIR dialect developer tooling."
+  "Build native lattice MLIR artifact execution support."
   OFF)
 
 if(MLX_LATTICE_ENABLE_MLIR)
