@@ -819,5 +819,37 @@ LogicalResult SparseBinaryOp::verify() {
     return success();
 }
 
+LogicalResult SparseCatOp::verify() {
+    auto lhsType = getLhs().getType();
+    auto rhsType = getRhs().getType();
+    auto resultType = getResult().getType();
+    auto join = getJoin().getValue();
+
+    if (failed(verifySparseRank(getOperation(), lhsType)) ||
+        failed(verifySparseRank(getOperation(), rhsType)) ||
+        failed(verifySparseRank(getOperation(), resultType))) {
+        return failure();
+    }
+    if (lhsType.getCoord() != rhsType.getCoord() ||
+        lhsType.getFeature() != rhsType.getFeature() ||
+        lhsType.getDtype() != rhsType.getDtype()) {
+        return emitOpError(
+            "sparse cat operands must share sparse conventions and dtype"
+        );
+    }
+    if (resultType.getCoord() != lhsType.getCoord() ||
+        resultType.getFeature() != lhsType.getFeature() ||
+        resultType.getDtype() != lhsType.getDtype()) {
+        return emitOpError(
+            "sparse cat result must preserve sparse conventions and dtype"
+        );
+    }
+    if (join != "inner" && join != "left" && join != "right" &&
+        join != "outer") {
+        return emitOpError("join must be inner, left, right, or outer");
+    }
+    return success();
+}
+
 #define GET_OP_CLASSES
 #include "Lattice/Dialect/Lattice/IR/LatticeOps.cpp.inc"

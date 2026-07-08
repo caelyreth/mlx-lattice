@@ -4,7 +4,12 @@ from collections.abc import Sequence
 from typing import Annotated, Literal, cast
 
 import mlx.core as mx
-from lattice_contract.dialect import sparse_binary as lattice_sparse_binary
+from lattice_contract.dialect import (
+    sparse_binary as lattice_sparse_binary,
+)
+from lattice_contract.dialect import (
+    sparse_cat as lattice_sparse_cat,
+)
 
 from mlx_lattice.artifact.lowering import (
     array_operand,
@@ -210,6 +215,18 @@ def sparse_binary_from_artifact(
         lhs_fill=lhs_fill,
         rhs_fill=rhs_fill,
     )
+
+
+@artifact_lowering(op=lattice_sparse_cat)
+def sparse_cat_from_artifact(
+    lhs: Annotated[SparseTensor, sparse_operand(0)],
+    rhs: Annotated[SparseTensor, sparse_operand(1)],
+    *,
+    join: Annotated[SparseJoin, join_attribute()],
+) -> SparseTensor:
+    """Lower lattice.sparse.cat artifact ops."""
+
+    return sparse_cat_aligned(lhs, rhs, join=join)
 
 
 def sparse_sub(

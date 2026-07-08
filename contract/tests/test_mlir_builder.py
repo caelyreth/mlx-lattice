@@ -32,6 +32,7 @@ def test_lattice_dialect_schema_is_annotation_backed() -> None:
     assert 'layer_norm' in digest['ops']
     assert 'rms_norm' in digest['ops']
     assert 'sparse.binary' in digest['ops']
+    assert 'sparse.cat' in digest['ops']
     assert LATTICE_DIALECT.op_by_python_name('sparse_make').name == (
         'sparse.make'
     )
@@ -108,6 +109,7 @@ def test_mlir_builder_emits_sparse_binary_ops() -> None:
     assert 'lattice.sparse.binary' in graph
     assert 'op = #lattice.binary_op<maximum>' in graph
     assert 'join = #lattice.join<inner>' in graph
+    assert 'lattice.sparse.cat' in graph
 
 
 def test_mlir_builder_emits_dense_feature_ops_with_sparse_identity() -> (
@@ -409,7 +411,13 @@ def _sparse_binary_graph() -> str:
         rhs_fill=0.0,
         result_type=sparse,
     )
-    builder.return_(out)
+    cat = builder.sparse_cat(
+        lhs=out,
+        rhs=rhs,
+        join='inner',
+        result_type=sparse,
+    )
+    builder.return_(cat)
     return builder.to_mlir()
 
 

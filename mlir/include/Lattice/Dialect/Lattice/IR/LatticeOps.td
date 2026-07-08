@@ -318,4 +318,18 @@ def Lattice_SparseBinaryOp : Lattice_Op<"sparse.binary"> {
   }];
 }
 
+def Lattice_SparseCatOp : Lattice_Op<"sparse.cat"> {
+  let summary = "Coordinate-aligned sparse feature concatenation";
+  let arguments = (ins
+    Lattice_SparseTensorType:$lhs,
+    Lattice_SparseTensorType:$rhs,
+    Lattice_JoinAttr:$join
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 #endif // LATTICE_DIALECT_LATTICE_IR_LATTICEOPS_TD

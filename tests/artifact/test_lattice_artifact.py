@@ -41,6 +41,7 @@ from mlx_lattice.artifact.plan import RuntimePlan
 from mlx_lattice.core import dequantize_weight, quantize_weight
 from mlx_lattice.ops import (
     batch_norm,
+    cat,
     conv3d,
     layer_norm,
     linear,
@@ -608,6 +609,18 @@ def test_lattice_artifact_runtime_lowers_activation_with_sparse_identity() -> (
         _runtime_plan(_activation_plan(kind='relu')), {}
     )(x)
     expected = relu(x)
+
+    assert isinstance(actual, SparseTensor)
+    assert actual.coords.tolist() == expected.coords.tolist()
+    mx.eval(actual.feats, expected.feats)
+    assert bool(mx.allclose(actual.feats, expected.feats))
+
+
+def test_lattice_artifact_runtime_lowers_sparse_cat() -> None:
+    x = _input_tensor()
+
+    actual = LatticeProgram(_runtime_plan(_sparse_cat_plan()), {})(x)
+    expected = cat((x, x))
 
     assert isinstance(actual, SparseTensor)
     assert actual.coords.tolist() == expected.coords.tolist()
@@ -1279,6 +1292,29 @@ def _activation_plan(*, kind: str) -> dict[str, object]:
             },
         ],
         returns=['v5'],
+    )
+
+
+def _sparse_cat_plan() -> dict[str, object]:
+    return _plan_payload(
+        ops=[
+            {
+                'name': 'lattice.sparse.make',
+                'operands': ['arg0', 'arg1', 'arg2'],
+                'results': ['v0'],
+                'attrs': {
+                    'stride': [1, 1, 1],
+                    'coord_order': 'batch_x_y_z',
+                },
+            },
+            {
+                'name': 'lattice.sparse.cat',
+                'operands': ['v0', 'v0'],
+                'results': ['v1'],
+                'attrs': {'join': 'inner'},
+            },
+        ],
+        returns=['v1'],
     )
 
 

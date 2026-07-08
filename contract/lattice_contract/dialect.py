@@ -506,3 +506,18 @@ def rms_norm() -> None:
 )
 def sparse_binary() -> None:
     """Register lattice.sparse.binary."""
+
+
+@LATTICE_DIALECT.op(
+    'sparse.cat',
+    operands=(
+        operand('lhs', 'sparse_tensor'),
+        operand('rhs', 'sparse_tensor'),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(op_attr('join', 'join'),),
+    assembly='functional',
+    summary='Coordinate-aligned sparse feature concatenation',
+)
+def sparse_cat() -> None:
+    """Register lattice.sparse.cat."""

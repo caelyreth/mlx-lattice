@@ -1,7 +1,7 @@
 // Valid: sparse transpose convolution is explicit in the conv family.
 module attributes {
   lattice.ir_version = 0,
-  lattice.schema_digest = "81c8424987d97d0f6cd514b50d8db2307e467e55f32a6c30dfdf6e311d565443",
+  lattice.schema_digest = "314833e397548364385e5a24c1faf5ebcd4eadc3a0d750a0bed444e2c855c4a1",
   lattice.input_names = ["input0", "input1", "input2"],
   lattice.input_roles = ["tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],
