@@ -497,12 +497,9 @@ def _validate_feature_dtype(
         raise ValueError(
             'convolution supports float32 and float16 tensors.'
         )
-    weight_dtype = (
-        weight.scales.dtype
-        if isinstance(weight, QuantizedWeight)
-        else weight.dtype
-    )
-    if weight_dtype != feats.dtype:
+    if isinstance(weight, QuantizedWeight):
+        return
+    if weight.dtype != feats.dtype:
         raise ValueError('convolution weights must match feature dtype.')
 
 
@@ -585,7 +582,7 @@ def _with_bias(feats: mx.array, bias: mx.array | None) -> mx.array:
     if bias.shape[0] != feats.shape[1]:
         raise ValueError('bias channels must match output channels.')
     if bias.dtype != feats.dtype:
-        raise ValueError('bias dtype must match output features.')
+        bias = bias.astype(feats.dtype)
     return feats + bias
 
 

@@ -2,6 +2,10 @@
   "cases": [
     "sparse_classifier",
     "target_branch",
-    "point_voxel"
+    "point_voxel",
+    "quantized_classifier_int8",
+    "quantized_classifier_int4",
+    "transpose_convolution",
+    "generative_transpose_convolution"
   ]
 }

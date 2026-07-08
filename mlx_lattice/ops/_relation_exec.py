@@ -22,6 +22,10 @@ def sparse_quantized_conv_features_from_relation(
     relation: KernelRelation,
 ) -> mx.array:
     """Execute quantized sparse convolution over a prebuilt relation."""
+    if feats.dtype not in (mx.float16, mx.float32):
+        raise ValueError('features must be float16 or float32.')
+    output_dtype = feats.dtype
+    feats = feats.astype(weight.scales.dtype)
     if relation.n_out_capacity is None or relation.n_kernels is None:
         raise ValueError(
             'kernel relation is missing static shape metadata.'
@@ -38,7 +42,7 @@ def sparse_quantized_conv_features_from_relation(
         sorted_kv_out_in_map = view.sorted_kv_out_in_map
         reorder_rows = view.reorder_rows
         tile_masks = view.tile_masks
-    return ext.sparse_quantized_conv_features(
+    out = ext.sparse_quantized_conv_features(
         feats,
         weight.weight,
         weight.scales,
@@ -59,6 +63,7 @@ def sparse_quantized_conv_features_from_relation(
         weight.group_size,
         weight.bits,
     )
+    return out.astype(output_dtype)
 
 
 def _empty_i32() -> mx.array:

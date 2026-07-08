@@ -16,8 +16,10 @@ def quantized_matmul(
         raise ValueError(
             'features must have shape (N, quantized_weight.in_channels).'
         )
-    if feats.dtype != weight.scales.dtype:
-        raise ValueError('features must match quantized scale dtype.')
+    if feats.dtype not in (mx.float16, mx.float32):
+        raise ValueError('features must be float16 or float32.')
+    output_dtype = feats.dtype
+    feats = feats.astype(weight.scales.dtype)
     if weight.storage_in_channels != weight.in_channels:
         feats = mx.pad(
             feats,
@@ -26,7 +28,7 @@ def quantized_matmul(
                 (0, weight.storage_in_channels - weight.in_channels),
             ],
         )
-    return mx.quantized_matmul(
+    out = mx.quantized_matmul(
         feats,
         weight.weight[0],
         weight.scales[0],
@@ -36,3 +38,4 @@ def quantized_matmul(
         bits=weight.bits,
         mode='affine',
     )
+    return out.astype(output_dtype)
