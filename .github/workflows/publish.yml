@@ -46,6 +46,22 @@ jobs:
       - name: Build contract distributions
         run: uv build --project contract --out-dir dist/contract --no-create-gitignore
 
+      - name: Smoke test contract wheel
+        run: |
+          export EXPECTED_VERSION="${GITHUB_REF_NAME#v}"
+          python -m venv .contract-smoke
+          .contract-smoke/bin/python -m pip install dist/contract/*.whl
+          .contract-smoke/bin/python - <<'PY'
+          import os
+
+          import lattice_contract as contract
+
+          assert contract.__version__ == os.environ["EXPECTED_VERSION"]
+          assert contract.ARTIFACT_GRAPH_FILE == "graph.mlir"
+          assert contract.ARTIFACT_WEIGHT_FILE == "weights.safetensors"
+          assert contract.LATTICE_DIALECT.namespace == "lattice"
+          PY
+
       - name: Upload contract distributions
         uses: actions/upload-artifact@v7
         with:
@@ -140,6 +156,27 @@ jobs:
         run: uv build --wheel --python "${{ matrix.python-version }}" --out-dir dist
         env:
           MACOSX_DEPLOYMENT_TARGET: "26.0"
+
+      - name: Smoke test wheel
+        run: |
+          export EXPECTED_VERSION="${GITHUB_REF_NAME#v}"
+          python -m venv .wheel-smoke
+          .wheel-smoke/bin/python -m pip install ./contract dist/*.whl
+          .wheel-smoke/bin/python - <<'PY'
+          import os
+
+          import mlx_lattice as lattice
+          from mlx_lattice.artifact import native_artifact_execution_available
+
+          info = lattice.backend_info()
+          capabilities = info["capabilities"]
+
+          assert lattice.__version__ == os.environ["EXPECTED_VERSION"]
+          assert info["version"] == lattice.__version__
+          assert set(capabilities) == {"cpu", "metal", "mlir"}
+          assert all(isinstance(value, bool) for value in capabilities.values())
+          assert native_artifact_execution_available() is capabilities["mlir"]
+          PY
 
       - name: Upload wheel
         uses: actions/upload-artifact@v7
