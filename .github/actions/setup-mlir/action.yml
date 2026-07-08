@@ -1,0 +1,33 @@
+name: Set up MLIR
+description: Install LLVM/MLIR and export CMake package paths.
+
+inputs:
+  formula:
+    description: Homebrew LLVM formula that ships MLIR CMake packages.
+    required: false
+    default: llvm@20
+
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM/MLIR
+      shell: bash
+      run: |
+        brew install "${{ inputs.formula }}"
+
+        prefix="$(brew --prefix "${{ inputs.formula }}")"
+        llvm_dir="$prefix/lib/cmake/llvm"
+        mlir_dir="$prefix/lib/cmake/mlir"
+
+        test -d "$prefix"
+        test -f "$llvm_dir/LLVMConfig.cmake"
+        test -f "$mlir_dir/MLIRConfig.cmake"
+
+        {
+          echo "LLVM_PATH=$prefix"
+          echo "CMAKE_PREFIX_PATH=$prefix${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+          echo "LLVM_DIR=$llvm_dir"
+          echo "MLIR_DIR=$mlir_dir"
+        } >> "$GITHUB_ENV"
+
+        echo "$prefix/bin" >> "$GITHUB_PATH"

@@ -15,7 +15,7 @@ concurrency:
 env:
   UV_FROZEN: "1"
   UV_LINK_MODE: copy
-  LLVM_VERSION: "20.1.8"
+  LLVM_FORMULA: llvm@20
   EXPECTED_CONTRACT_DISTRIBUTIONS: "2"
   EXPECTED_MLX_DISTRIBUTIONS: "4"
 
@@ -151,10 +151,9 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Set up LLVM/MLIR
-        uses: KyleMayes/install-llvm-action@v2
+        uses: ./.github/actions/setup-mlir
         with:
-          version: ${{ env.LLVM_VERSION }}
-          cached: true
+          formula: ${{ env.LLVM_FORMULA }}
 
       - name: Check tag matches project version
         run: test "${GITHUB_REF_NAME#v}" = "$(uv version --short)"
@@ -165,12 +164,18 @@ jobs:
             --wheel \
             --python "${{ matrix.python-version }}" \
             --out-dir dist \
-            --config-setting=cmake.define.MLX_LATTICE_ENABLE_MLIR=ON
+            --config-setting=cmake.define.MLX_LATTICE_ENABLE_MLIR=ON \
+            --config-setting=cmake.define.LLVM_DIR="$LLVM_DIR" \
+            --config-setting=cmake.define.MLIR_DIR="$MLIR_DIR"
         env:
-          CMAKE_PREFIX_PATH: ${{ env.LLVM_PATH }}
-          LLVM_DIR: ${{ env.LLVM_PATH }}/lib/cmake/llvm
           MACOSX_DEPLOYMENT_TARGET: "26.0"
-          MLIR_DIR: ${{ env.LLVM_PATH }}/lib/cmake/mlir
+
+      - name: Repair wheel
+        run: |
+          uvx --from delocate delocate-wheel \
+            --ignore-missing-dependencies \
+            --require-archs arm64 \
+            dist/*.whl
 
       - name: Smoke test wheel
         run: |
@@ -198,9 +203,10 @@ jobs:
         run: |
           wheel="$(ls dist/*.whl)"
           python -m zipfile -e "$wheel" .wheel-linkage
-          extension="$(find .wheel-linkage -name '*.so' -o -name '*.dylib')"
+          extension="$(find .wheel-linkage/mlx_lattice -name '_ext*.so' -print -quit)"
           otool -L "$extension"
-          ! otool -L "$extension" | grep -E '/(LLVM|MLIR)|lib(LLVM|MLIR).*\.dylib'
+          ! otool -L "$extension" | grep -E '^[[:space:]]+/(opt/homebrew|usr/local|Users|private)/.*(LLVM|MLIR).*\.dylib'
+          ! otool -L "$extension" | grep -E '^[[:space:]]+@rpath/lib(LLVM|MLIR).*\.dylib'
 
       - name: Upload wheel
         uses: actions/upload-artifact@v7
