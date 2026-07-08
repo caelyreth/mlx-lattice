@@ -18,7 +18,7 @@ module attributes {
         -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                   feature = row_channel, dtype = f32>
     %out = lattice.global_pool %input
-      {mode = #lattice.pool_mode<sum>, batch_size = -1}
+      {mode = #lattice.pool_mode<sum>, batch_size = 2}
       : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                 feature = row_channel, dtype = f32>)
         -> tensor<?x32xf32>

@@ -559,7 +559,8 @@ LogicalResult GlobalPoolOp::verify() {
     if (failed(verifyPoolMode(getOperation(), getMode()))) {
         return failure();
     }
-    if (getBatchSize() < -1) {
+    auto batchSize = getBatchSizeAttr().getValue().getSExtValue();
+    if (batchSize < -1) {
         return emitOpError("batch_size must be -1 or non-negative");
     }
     if (resultType.getRank() != 2) {
