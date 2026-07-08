@@ -9,30 +9,6 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 [Documentation](https://mlx-lattice.iki.moe) | [Acknowledgements](#acknowledgements)
 | [Citation](#citation)
 
-> [!IMPORTANT]
-> Planned training/deployment direction: `mlx-lattice` is intended to remain
-> the MLX/Metal deployment package, while a future sibling `torch-lattice`
-> package can provide PyTorch/CUDA research and training ergonomics.
->
-> The bridge is moving toward a lattice MLIR dialect plus tensor weights, not
-> generated Python or a TorchSparse compatibility promise. LLVM
-> [MLIR](https://mlir.llvm.org/) is the chosen contract direction.
->
-> The current artifact surface stores `graph.mlir` and `weights.safetensors`.
-> Executable import/lowering will be added through the MLIR path instead of a
-> separate hand-written graph format.
-
-> [!NOTE]
-> This codebase was heavily assisted by OpenAI GPT models, especially
-> [GPT-5.5](https://openai.com/index/introducing-gpt-5-5), enabling practical
-> solo, part-time development.
->
-> It is tested and benchmarked, but sparse workloads are **shape-sensitive**.
-> Edge-case shapes or backend/device combinations may still expose issues.
->
-> Reproducible reports are welcome. If AI-assisted infrastructure is unsuitable
-> for your needs, consider another sparse library.
-
 ### Install
 
 `mlx-lattice` requires Python 3.12 or newer and MLX 0.31 or newer.
@@ -276,8 +252,8 @@ The full documentation is hosted at
 `mlx-lattice` builds on [MLX](https://github.com/ml-explore/mlx), Apple’s array
 framework for machine learning on Apple Silicon.
 
-Special thanks to [OpenAI GPT](https://openai.com/chatgpt) for assistance in
-codebase writing, implementation review, and documentation drafting.
+Special thanks to [OpenAI GPT](https://openai.com/chatgpt) model for assistance
+in codebase writing, implementation review, and documentation drafting.
 
 Special thanks to MIT HAN Lab’s
 [TorchSparse](https://github.com/mit-han-lab/torchsparse) for its influence on
