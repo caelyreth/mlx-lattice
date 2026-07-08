@@ -476,37 +476,29 @@ def _format_attrs(op: OpDef, kwargs: Mapping[str, Any]) -> str:
 
 
 def _format_attr(kind: str, value: Any) -> str:
-    if kind == 'coord':
-        return f'#lattice.coord<{value}>'
-    if kind == 'weight_layout':
-        return f'#lattice.weight_layout<{value}>'
     if kind == 'packing':
         return _packing(value)
-    if kind == 'activation':
-        return f'#lattice.activation<{value}>'
-    if kind == 'gelu_approx':
-        return f'#lattice.gelu_approx<{value}>'
-    if kind == 'join':
-        return f'#lattice.join<{value}>'
-    if kind == 'binary_op':
-        return f'#lattice.binary_op<{value}>'
-    if kind == 'pool_mode':
-        return f'#lattice.pool_mode<{value}>'
-    if kind == 'voxel_reduction':
-        return f'#lattice.voxel_reduction<{value}>'
-    if kind == 'point_interpolation':
-        return f'#lattice.point_interpolation<{value}>'
-    if kind == 'i64_triple':
-        return _triple(value)
-    if kind == 'f64_triple':
-        return _float_triple(value)
-    if kind == 'i64':
-        return str(int(value))
-    if kind == 'f32':
-        return f'{_decimal_float(value)} : f32'
-    if kind == 'str':
-        return f'"{value}"'
+    if kind in _ATTR_MNEMONICS:
+        return f'#lattice.{_ATTR_MNEMONICS[kind]}<{value}>'
+    formatter = _SCALAR_ATTR_FORMATTERS.get(kind)
+    if formatter is not None:
+        return formatter(value)
     raise ValueError(f'unsupported MLIR attribute kind: {kind}')
+
+
+_ATTR_MNEMONICS = {
+    definition.mnemonic: definition.mnemonic
+    for definition in LATTICE_DIALECT.attrs.values()
+    if definition.mnemonic != 'packing'
+}
+
+_SCALAR_ATTR_FORMATTERS: Mapping[str, Callable[[Any], str]] = {
+    'i64_triple': lambda value: _triple(value),
+    'f64_triple': lambda value: _float_triple(value),
+    'i64': lambda value: str(int(value)),
+    'f32': lambda value: f'{_decimal_float(value)} : f32',
+    'str': lambda value: f'"{value}"',
+}
 
 
 def _triple(value: Any) -> str:

@@ -226,27 +226,53 @@ def _validate_attr_value(
                 f'{op_name}.{attr_name} must be one of: {joined}.'
             )
         return
-    if kind == 'i64_triple':
-        _validate_triple(op_name, attr_name, value, integer=True)
-        return
-    if kind == 'f64_triple':
-        _validate_triple(op_name, attr_name, value, integer=False)
-        return
-    if kind == 'i64':
-        if not _is_int(value):
-            raise TypeError(f'{op_name}.{attr_name} must be an integer.')
-        return
-    if kind == 'f32':
-        if not _is_number(value):
-            raise TypeError(f'{op_name}.{attr_name} must be numeric.')
-        return
-    if kind == 'str':
-        if not isinstance(value, str):
-            raise TypeError(f'{op_name}.{attr_name} must be a string.')
+    validator = _ATTR_VALIDATORS.get(kind)
+    if validator is not None:
+        validator(op_name, attr_name, value)
         return
     raise ValueError(
         f'{op_name}.{attr_name} has unsupported attr kind {kind}.'
     )
+
+
+def _validate_i64_triple(
+    op_name: str,
+    attr_name: str,
+    value: Any,
+) -> None:
+    _validate_triple(op_name, attr_name, value, integer=True)
+
+
+def _validate_f64_triple(
+    op_name: str,
+    attr_name: str,
+    value: Any,
+) -> None:
+    _validate_triple(op_name, attr_name, value, integer=False)
+
+
+def _validate_i64(op_name: str, attr_name: str, value: Any) -> None:
+    if not _is_int(value):
+        raise TypeError(f'{op_name}.{attr_name} must be an integer.')
+
+
+def _validate_f32(op_name: str, attr_name: str, value: Any) -> None:
+    if not _is_number(value):
+        raise TypeError(f'{op_name}.{attr_name} must be numeric.')
+
+
+def _validate_str(op_name: str, attr_name: str, value: Any) -> None:
+    if not isinstance(value, str):
+        raise TypeError(f'{op_name}.{attr_name} must be a string.')
+
+
+_ATTR_VALIDATORS = {
+    'i64_triple': _validate_i64_triple,
+    'f64_triple': _validate_f64_triple,
+    'i64': _validate_i64,
+    'f32': _validate_f32,
+    'str': _validate_str,
+}
 
 
 def _validate_packing_attr(

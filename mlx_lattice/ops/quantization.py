@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Annotated, cast, overload
+from typing import cast, overload
 
 import mlx.core as mx
 from lattice_contract.dialect import (
@@ -12,13 +12,8 @@ from lattice_contract.dialect import (
 )
 
 from mlx_lattice.artifact.lowering import (
-    array_operand,
     artifact_lowering,
-    float_triple_attribute,
     lattice_lowering,
-    sparse_operand,
-    str_attribute,
-    triple_attribute,
 )
 from mlx_lattice.core.coords.quantization import (
     PointVoxelInterpolation,
@@ -116,24 +111,21 @@ def voxelize(
 
 @artifact_lowering(op=lattice_voxelize)
 def voxelize_from_artifact(
-    points: Annotated[mx.array, array_operand(0)],
-    feats: Annotated[mx.array, array_operand(1)],
-    batch_indices: Annotated[mx.array, array_operand(2)],
-    active_rows: Annotated[mx.array, array_operand(3)],
+    points: mx.array,
+    features: mx.array,
+    batch_indices: mx.array,
+    active_rows: mx.array,
     *,
-    voxel_size: Annotated[
-        tuple[float, float, float],
-        float_triple_attribute(),
-    ],
-    origin: Annotated[tuple[float, float, float], float_triple_attribute()],
-    reduction: Annotated[str, str_attribute()],
-    stride: Annotated[tuple[int, int, int], triple_attribute()],
+    voxel_size: tuple[float, float, float],
+    origin: tuple[float, float, float],
+    reduction: str,
+    stride: tuple[int, int, int],
 ) -> SparseTensor:
     """Lower lattice.voxelize artifact ops through ``voxelize``."""
 
     return voxelize(
         points,
-        feats,
+        features,
         voxel_size=voxel_size,
         batch_indices=batch_indices,
         active_rows=active_rows,
@@ -243,17 +235,14 @@ def devoxelize(
 
 @artifact_lowering(op=lattice_devoxelize)
 def devoxelize_from_artifact(
-    points: Annotated[mx.array, array_operand(0)],
-    voxels: Annotated[SparseTensor, sparse_operand(1)],
-    batch_indices: Annotated[mx.array, array_operand(2)],
-    point_active_rows: Annotated[mx.array, array_operand(3)],
+    points: mx.array,
+    voxels: SparseTensor,
+    batch_indices: mx.array,
+    point_active_rows: mx.array,
     *,
-    voxel_size: Annotated[
-        tuple[float, float, float],
-        float_triple_attribute(),
-    ],
-    origin: Annotated[tuple[float, float, float], float_triple_attribute()],
-    interpolation: Annotated[str, str_attribute()],
+    voxel_size: tuple[float, float, float],
+    origin: tuple[float, float, float],
+    interpolation: str,
 ) -> mx.array:
     """Lower lattice.devoxelize artifact ops through ``devoxelize``."""
 

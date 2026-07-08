@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Annotated, Literal, cast
+from typing import Literal, cast
 
 import mlx.core as mx
 from lattice_contract.dialect import (
@@ -12,13 +12,8 @@ from lattice_contract.dialect import (
 )
 
 from mlx_lattice.artifact.lowering import (
-    array_operand,
     artifact_lowering,
-    float_attribute,
-    join_attribute,
     lattice_lowering,
-    sparse_operand,
-    str_attribute,
 )
 from mlx_lattice.core.coords import SparseAlignment, build_sparse_alignment
 from mlx_lattice.core.tensor import SparseTensor
@@ -197,13 +192,13 @@ def sparse_add(
 
 @artifact_lowering(op=sparse_binary)
 def sparse_binary_from_artifact(
-    lhs: Annotated[SparseTensor, sparse_operand(0)],
-    rhs: Annotated[SparseTensor, sparse_operand(1)],
+    lhs: SparseTensor,
+    rhs: SparseTensor,
     *,
-    op: Annotated[str, str_attribute()],
-    join: Annotated[SparseJoin, join_attribute()],
-    lhs_fill: Annotated[float, float_attribute()],
-    rhs_fill: Annotated[float, float_attribute()],
+    op: str,
+    join: SparseJoin,
+    lhs_fill: float,
+    rhs_fill: float,
 ) -> SparseTensor:
     """Lower lattice.sparse.binary artifact ops."""
 
@@ -219,10 +214,10 @@ def sparse_binary_from_artifact(
 
 @artifact_lowering(op=lattice_sparse_cat)
 def sparse_cat_from_artifact(
-    lhs: Annotated[SparseTensor, sparse_operand(0)],
-    rhs: Annotated[SparseTensor, sparse_operand(1)],
+    lhs: SparseTensor,
+    rhs: SparseTensor,
     *,
-    join: Annotated[SparseJoin, join_attribute()],
+    join: SparseJoin,
 ) -> SparseTensor:
     """Lower lattice.sparse.cat artifact ops."""
 
@@ -357,12 +352,12 @@ def replace_feature(x: SparseTensor, feats: mx.array) -> SparseTensor:
 
 @artifact_lowering(op=replace_feature)
 def sparse_with_features_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
-    feats: Annotated[mx.array, array_operand(1)],
+    input: SparseTensor,
+    features: mx.array,
 ) -> SparseTensor:
     """Lower lattice.sparse.with_features through ``replace_feature``."""
 
-    return replace_feature(x, feats)
+    return replace_feature(input, features)
 
 
 def _apply_binary_op(lhs: mx.array, rhs: mx.array, op: str) -> mx.array:

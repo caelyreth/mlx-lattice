@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import cast
 
 import pytest
 from lattice_contract import (
@@ -16,7 +16,6 @@ from lattice_contract import (
     WeightType,
     dense_packing,
 )
-from lattice_contract.schema import schema_digest
 
 from mlx_lattice import SparseTensor
 from mlx_lattice import _ext as ext
@@ -34,8 +33,6 @@ from mlx_lattice.artifact import (
 from mlx_lattice.artifact.lowering import (
     ARTIFACT_LOWERINGS,
     _compile_artifact_lowering,
-    array_operand,
-    str_attribute,
 )
 from mlx_lattice.artifact.plan import RuntimePlan
 from mlx_lattice.core import dequantize_weight, quantize_weight
@@ -85,30 +82,24 @@ def test_lattice_artifact_requires_graph_mlir(tmp_path) -> None:
         raise AssertionError('expected missing graph.mlir to fail')
 
 
-def test_artifact_runtime_lowerings_cover_annotated_dialect_ops() -> None:
+def test_artifact_runtime_lowerings_cover_dialect_schema_ops() -> None:
     assert set(ARTIFACT_LOWERINGS.functions) == {
         LATTICE_DIALECT.qualified_op_name(op)
         for op in LATTICE_DIALECT.iter_ops()
     }
 
 
-def test_artifact_runtime_lowerings_are_annotation_bound() -> None:
-    for name, lowering in ARTIFACT_LOWERINGS.functions.items():
-        assert getattr(lowering, '__artifact_source__', None) is not None
-        bindings = getattr(lowering, '__artifact_bindings__', None)
-        assert bindings, name
-
-
 def test_artifact_lowering_bindings_validate_against_schema() -> None:
     def invalid_attr(
-        x: Annotated[mx.array, array_operand(0)],
+        input: mx.array,
         *,
-        missing: Annotated[str, str_attribute()],
+        missing: str,
     ) -> mx.array:
+        del input
         del missing
-        return x
+        return mx.array([])
 
-    with pytest.raises(ValueError, match='does not declare'):
+    with pytest.raises(ValueError, match='is not declared'):
         _compile_artifact_lowering(
             invalid_attr,
             LATTICE_DIALECT.resolve_op('activation'),
@@ -286,25 +277,6 @@ def test_native_lattice_mlir_plan_exposes_typed_abi_metadata() -> None:
             'role': 'sparse_tensor',
         }
     ]
-
-
-def test_native_lattice_mlir_schema_matches_python_contract() -> None:
-    if not hasattr(ext, 'lattice_mlir_schema'):
-        pytest.skip('MLIR-enabled native extension is not available.')
-
-    native = ext.lattice_mlir_schema()
-    digest = schema_digest(LATTICE_DIALECT)
-
-    assert native['schema_digest'] == DIALECT_SCHEMA_DIGEST
-    assert tuple(native['types']) == tuple(
-        item.mnemonic for item in LATTICE_DIALECT.types.values()
-    )
-    assert tuple(native['attrs']) == tuple(
-        item.mnemonic for item in LATTICE_DIALECT.attrs.values()
-    )
-    assert tuple(native['ops']) == tuple(
-        f'lattice.{name}' for name in digest['ops']
-    )
 
 
 def test_runtime_plan_freezes_native_payload() -> None:

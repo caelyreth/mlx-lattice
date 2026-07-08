@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Annotated
 
 import mlx.core as mx
 
 from mlx_lattice.artifact.lowering import (
     artifact_lowering,
-    conv_weight_operand,
+    conv_weight,
     lattice_lowering,
-    optional_array_operand,
-    sparse_operand,
-    triple_attribute,
 )
 from mlx_lattice.core import (
     CoordinateMapKey,
@@ -206,24 +202,23 @@ def generative_conv_transpose3d(
     )
 
 
-@artifact_lowering(op=conv3d)
+@artifact_lowering(
+    op=conv3d, weights={'weight': conv_weight(input='input')}
+)
 def conv3d_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
-    weight: Annotated[
-        mx.array | QuantizedWeight,
-        conv_weight_operand(1, input='x'),
-    ],
-    bias: Annotated[mx.array | None, optional_array_operand(2)],
+    input: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
     *,
-    kernel_size: Annotated[Triple, triple_attribute()],
-    stride: Annotated[Triple, triple_attribute()],
-    padding: Annotated[Triple, triple_attribute()],
-    dilation: Annotated[Triple, triple_attribute()],
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
 ) -> SparseTensor:
     """Lower lattice.conv3d artifact ops through ``conv3d``."""
 
     return conv3d(
-        x,
+        input,
         weight,
         bias,
         kernel_size=kernel_size,
@@ -233,22 +228,22 @@ def conv3d_from_artifact(
     )
 
 
-@artifact_lowering(op=subm_conv3d)
+@artifact_lowering(
+    op=subm_conv3d,
+    weights={'weight': conv_weight(input='input')},
+)
 def subm_conv3d_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
-    weight: Annotated[
-        mx.array | QuantizedWeight,
-        conv_weight_operand(1, input='x'),
-    ],
-    bias: Annotated[mx.array | None, optional_array_operand(2)],
+    input: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
     *,
-    kernel_size: Annotated[Triple, triple_attribute()],
-    dilation: Annotated[Triple, triple_attribute()],
+    kernel_size: Triple,
+    dilation: Triple,
 ) -> SparseTensor:
     """Lower lattice.subm_conv3d artifact ops through ``subm_conv3d``."""
 
     return subm_conv3d(
-        x,
+        input,
         weight,
         bias,
         kernel_size=kernel_size,
@@ -256,53 +251,54 @@ def subm_conv3d_from_artifact(
     )
 
 
-@artifact_lowering(op=conv3d, dialect_op='target_conv3d')
+@artifact_lowering(
+    op=conv3d,
+    dialect_op='target_conv3d',
+    weights={'weight': conv_weight(input='input')},
+)
 def target_conv3d_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
-    coordinates: Annotated[SparseTensor, sparse_operand(1)],
-    weight: Annotated[
-        mx.array | QuantizedWeight,
-        conv_weight_operand(2, input='x'),
-    ],
-    bias: Annotated[mx.array | None, optional_array_operand(3)],
+    input: SparseTensor,
+    target: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
     *,
-    kernel_size: Annotated[Triple, triple_attribute()],
-    stride: Annotated[Triple, triple_attribute()],
-    padding: Annotated[Triple, triple_attribute()],
-    dilation: Annotated[Triple, triple_attribute()],
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
 ) -> SparseTensor:
     """Lower lattice.target_conv3d artifact ops through ``conv3d``."""
 
     return conv3d(
-        x,
+        input,
         weight,
         bias,
         kernel_size=kernel_size,
         stride=stride,
         padding=padding,
         dilation=dilation,
-        coordinates=coordinates,
+        coordinates=target,
     )
 
 
-@artifact_lowering(op=conv_transpose3d)
+@artifact_lowering(
+    op=conv_transpose3d,
+    weights={'weight': conv_weight(input='input')},
+)
 def conv_transpose3d_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
-    weight: Annotated[
-        mx.array | QuantizedWeight,
-        conv_weight_operand(1, input='x'),
-    ],
-    bias: Annotated[mx.array | None, optional_array_operand(2)],
+    input: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
     *,
-    kernel_size: Annotated[Triple, triple_attribute()],
-    stride: Annotated[Triple, triple_attribute()],
-    padding: Annotated[Triple, triple_attribute()],
-    dilation: Annotated[Triple, triple_attribute()],
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
 ) -> SparseTensor:
     """Lower lattice.conv_transpose3d artifact ops."""
 
     return conv_transpose3d(
-        x,
+        input,
         weight,
         bias,
         kernel_size=kernel_size,
@@ -312,22 +308,22 @@ def conv_transpose3d_from_artifact(
     )
 
 
-@artifact_lowering(op=generative_conv_transpose3d)
+@artifact_lowering(
+    op=generative_conv_transpose3d,
+    weights={'weight': conv_weight(input='input')},
+)
 def generative_conv_transpose3d_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
-    weight: Annotated[
-        mx.array | QuantizedWeight,
-        conv_weight_operand(1, input='x'),
-    ],
-    bias: Annotated[mx.array | None, optional_array_operand(2)],
+    input: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
     *,
-    kernel_size: Annotated[Triple, triple_attribute()],
-    stride: Annotated[Triple, triple_attribute()],
+    kernel_size: Triple,
+    stride: Triple,
 ) -> SparseTensor:
     """Lower lattice.generative_conv_transpose3d artifact ops."""
 
     return generative_conv_transpose3d(
-        x,
+        input,
         weight,
         bias,
         kernel_size=kernel_size,

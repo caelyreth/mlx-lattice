@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, cast
+from typing import Literal, cast
 
 import mlx.core as mx
 
 from mlx_lattice.artifact.lowering import (
-    array_operand,
     artifact_lowering,
-    float_attribute,
     lattice_lowering,
-    linear_weight_operand,
-    optional_array_operand,
-    str_attribute,
+    linear_weight,
 )
 from mlx_lattice.core import QuantizedWeight, SparseTensor
 from mlx_lattice.ops._quantized import quantized_matmul
@@ -75,18 +71,18 @@ def linear(
     return x.replace(feats=linear_features(x.feats, weight, bias))
 
 
-@artifact_lowering(op=linear_features)
+@artifact_lowering(
+    op=linear_features,
+    weights={'weight': linear_weight(input='input')},
+)
 def linear_from_artifact(
-    input_value: Annotated[mx.array, array_operand(0)],
-    weight: Annotated[
-        mx.array | QuantizedWeight,
-        linear_weight_operand(1, input='input_value'),
-    ],
-    bias: Annotated[mx.array | None, optional_array_operand(2)],
+    input: mx.array,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
 ) -> mx.array:
     """Lower lattice.linear artifact ops through dense feature tensors."""
 
-    return linear_features(input_value, weight, bias)
+    return linear_features(input, weight, bias)
 
 
 ActivationKind = Literal[
@@ -143,18 +139,18 @@ def activation(
 
 @artifact_lowering(op=activation)
 def activation_from_artifact(
-    x: Annotated[mx.array, array_operand(0)],
+    input: mx.array,
     *,
-    kind: Annotated[str, str_attribute()],
-    approximate: Annotated[str, str_attribute()],
-    alpha: Annotated[float, float_attribute()],
-    beta: Annotated[float, float_attribute()],
-    threshold: Annotated[float, float_attribute()],
+    kind: str,
+    approximate: str,
+    alpha: float,
+    beta: float,
+    threshold: float,
 ) -> mx.array:
     """Lower lattice.activation artifact ops through ``activation``."""
 
     return activation(
-        x,
+        input,
         kind=_activation_kind(kind),
         approximate=_gelu_approx(approximate),
         alpha=alpha,
@@ -304,18 +300,18 @@ def batch_norm_features(
 
 @artifact_lowering(op=batch_norm_features)
 def batch_norm_from_artifact(
-    x: Annotated[mx.array, array_operand(0)],
-    scale: Annotated[mx.array, array_operand(1)],
-    bias: Annotated[mx.array, array_operand(2)],
-    mean: Annotated[mx.array, array_operand(3)],
-    var: Annotated[mx.array, array_operand(4)],
+    input: mx.array,
+    scale: mx.array,
+    bias: mx.array,
+    mean: mx.array,
+    var: mx.array,
     *,
-    eps: Annotated[float, float_attribute()],
+    eps: float,
 ) -> mx.array:
     """Lower lattice.batch_norm artifact ops through dense features."""
 
     return batch_norm_features(
-        x,
+        input,
         scale,
         bias,
         mean,
@@ -405,16 +401,16 @@ def layer_norm_features(
 
 @artifact_lowering(op=layer_norm_features)
 def layer_norm_from_artifact(
-    x: Annotated[mx.array, array_operand(0)],
-    scale: Annotated[mx.array, array_operand(1)],
-    bias: Annotated[mx.array, array_operand(2)],
+    input: mx.array,
+    scale: mx.array,
+    bias: mx.array,
     *,
-    eps: Annotated[float, float_attribute()],
+    eps: float,
 ) -> mx.array:
     """Lower lattice.layer_norm artifact ops through dense features."""
 
     return layer_norm_features(
-        x,
+        input,
         scale,
         bias,
         eps=eps,
@@ -464,14 +460,14 @@ def rms_norm_features(
 
 @artifact_lowering(op=rms_norm_features)
 def rms_norm_from_artifact(
-    x: Annotated[mx.array, array_operand(0)],
-    scale: Annotated[mx.array, array_operand(1)],
+    input: mx.array,
+    scale: mx.array,
     *,
-    eps: Annotated[float, float_attribute()],
+    eps: float,
 ) -> mx.array:
     """Lower lattice.rms_norm artifact ops through dense features."""
 
-    return rms_norm_features(x, scale, eps=eps)
+    return rms_norm_features(input, scale, eps=eps)
 
 
 def rms_norm(

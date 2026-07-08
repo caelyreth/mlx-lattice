@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Annotated, Literal, cast
+from typing import Literal, cast
 
 import mlx.core as mx
 
 from mlx_lattice.artifact.lowering import (
     artifact_lowering,
-    int_attribute,
     lattice_lowering,
-    sparse_operand,
-    str_attribute,
-    triple_attribute,
 )
 from mlx_lattice.core import KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
@@ -66,18 +62,18 @@ def pool3d(
 
 @artifact_lowering(op=pool3d)
 def pool3d_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
+    input: SparseTensor,
     *,
-    mode: Annotated[str, str_attribute()],
-    kernel_size: Annotated[Triple, triple_attribute()],
-    stride: Annotated[Triple, triple_attribute()],
-    padding: Annotated[Triple, triple_attribute()],
-    dilation: Annotated[Triple, triple_attribute()],
+    mode: str,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
 ) -> SparseTensor:
     """Lower lattice.pool3d artifact ops through ``pool3d``."""
 
     return pool3d(
-        x,
+        input,
         mode=_pool_mode(mode),
         kernel_size=kernel_size,
         stride=stride,
@@ -178,15 +174,15 @@ def global_pool(
 
 @artifact_lowering(op=global_pool)
 def global_pool_from_artifact(
-    x: Annotated[SparseTensor, sparse_operand(0)],
+    input: SparseTensor,
     *,
-    mode: Annotated[str, str_attribute()],
-    batch_size: Annotated[int, int_attribute()],
+    mode: str,
+    batch_size: int,
 ) -> mx.array:
     """Lower lattice.global_pool artifact ops through ``global_pool``."""
 
     return global_pool(
-        x,
+        input,
         mode=_pool_mode(mode),
         batch_size=None if batch_size < 0 else batch_size,
     )

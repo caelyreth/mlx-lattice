@@ -109,8 +109,8 @@ The module must also carry artifact metadata:
      ...
    }
 
-``lattice.schema_digest`` is a SHA-256 fingerprint of the annotation-backed
-dialect schema. It closes the gap where two producers both claim
+``lattice.schema_digest`` is a SHA-256 fingerprint of the contract dialect
+schema. It closes the gap where two producers both claim
 ``ir_version = 0`` but disagree on the operation, attribute, or type surface.
 The native verifier and Python ``RuntimePlan`` both reject mismatched digests.
 
@@ -130,13 +130,13 @@ is accepted only when the entry ABI exposes ``sparse_coords``,
 ABI names, not by generated runtime labels.
 
 Python freezes the native payload into ``RuntimePlan`` before execution.
-Lowering annotations receive typed plan operations rather than raw dictionaries;
+Runtime lowerings receive typed plan operations rather than raw dictionaries;
 the dictionary shape is only the native binding transport, not a second runtime
-IR. This freeze step resolves each operation through the annotated
-``lattice-contract`` schema and validates operation arity plus required
-attributes before any framework lowering runs. It also checks runtime
-use/definition order, rejects duplicate value labels, and rejects returns that
-do not refer to defined values.
+IR. This freeze step resolves each operation through the ``lattice-contract``
+schema and validates operation arity plus required attributes before any
+framework lowering runs. It also checks runtime use/definition order, rejects
+duplicate value labels, and rejects returns that do not refer to defined
+values.
 
 Annotation-backed contract
 --------------------------

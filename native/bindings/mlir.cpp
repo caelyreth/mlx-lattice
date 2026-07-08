@@ -229,58 +229,6 @@ module_string_array(mlir::ModuleOp module, llvm::StringRef name) {
     return out;
 }
 
-nb::list strings_to_list(std::vector<std::string> const& values) {
-    nb::list out;
-    for (auto const& value : values) {
-        out.append(nb::str(value.c_str()));
-    }
-    return out;
-}
-
-nb::dict lattice_mlir_schema() {
-    nb::dict out;
-    out["types"] = strings_to_list({
-        lattice::SparseTensorType::getMnemonic().str(),
-        lattice::WeightType::getMnemonic().str(),
-    });
-    out["attrs"] = strings_to_list({
-        lattice::CoordAttr::getMnemonic().str(),
-        lattice::FeatureLayoutAttr::getMnemonic().str(),
-        lattice::WeightLayoutAttr::getMnemonic().str(),
-        lattice::PackingAttr::getMnemonic().str(),
-        lattice::ActivationAttr::getMnemonic().str(),
-        lattice::GeluApproxAttr::getMnemonic().str(),
-        lattice::JoinAttr::getMnemonic().str(),
-        lattice::BinaryOpAttr::getMnemonic().str(),
-        lattice::PoolModeAttr::getMnemonic().str(),
-        lattice::VoxelReductionAttr::getMnemonic().str(),
-        lattice::PointInterpolationAttr::getMnemonic().str(),
-    });
-    out["ops"] = strings_to_list({
-        lattice::WeightOp::getOperationName().str(),
-        lattice::SparseMakeOp::getOperationName().str(),
-        lattice::SparseDecomposeOp::getOperationName().str(),
-        lattice::SparseWithFeaturesOp::getOperationName().str(),
-        lattice::Conv3DOp::getOperationName().str(),
-        lattice::SubmConv3DOp::getOperationName().str(),
-        lattice::TargetConv3DOp::getOperationName().str(),
-        lattice::ConvTranspose3DOp::getOperationName().str(),
-        lattice::GenerativeConvTranspose3DOp::getOperationName().str(),
-        lattice::Pool3DOp::getOperationName().str(),
-        lattice::GlobalPoolOp::getOperationName().str(),
-        lattice::VoxelizeOp::getOperationName().str(),
-        lattice::DevoxelizeOp::getOperationName().str(),
-        lattice::LinearOp::getOperationName().str(),
-        lattice::ActivationOp::getOperationName().str(),
-        lattice::BatchNormOp::getOperationName().str(),
-        lattice::LayerNormOp::getOperationName().str(),
-        lattice::RMSNormOp::getOperationName().str(),
-        lattice::SparseBinaryOp::getOperationName().str(),
-    });
-    out["schema_digest"] = lattice::kArtifactSchemaDigest.str();
-    return out;
-}
-
 nb::dict lattice_mlir_plan(std::string const& graph) {
     return with_verified_module(graph, [](mlir::ModuleOp module) {
         auto functions = module.getOps<mlir::func::FuncOp>();
@@ -411,12 +359,6 @@ void register_mlir(nb::module_& module) {
         &lattice_mlir_operation_names,
         nb::sig("def lattice_mlir_operation_names(graph: str) -> list[str]"),
         "Return lattice operation names from a parsed and verified MLIR graph."
-    );
-    module.def(
-        "lattice_mlir_schema",
-        &lattice_mlir_schema,
-        nb::sig("def lattice_mlir_schema() -> dict[str, object]"),
-        "Return native MLIR lattice dialect surface metadata."
     );
     module.def(
         "lattice_mlir_plan",

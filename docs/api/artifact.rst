@@ -36,7 +36,7 @@ so malformed importer payloads fail before any MLX operation lowering runs.
 Plan freezing is schema-aware and ABI-aware: the plan must carry
 ``ir_version`` and ``weight_file`` values matching the verified module-level
 contract, operation names must resolve through ``lattice-contract``, SSA
-operand/result counts must match the annotated op definition, required
+operand/result counts must match the contract op definition, required
 attributes must be present, enum attributes and structured packing metadata
 must use valid v0 values, triple/numeric/string attributes must have the
 expected payload shape, runtime value labels must be defined before use, and
@@ -52,33 +52,29 @@ feature normalization, and sparse binary algebra. Unsupported dialect
 operations should fail during lowering instead of being interpreted from
 ad-hoc JSON or Python-side string switches.
 
-Runtime lowerings are annotation-bound. A lowering declares each parameter with
-``typing.Annotated`` metadata such as ``sparse_operand(0)``,
-``array_operand(1)``, ``conv_weight_operand(1, input="x")``, or
-``triple_attribute("kernel_size")``. The decorator compiles those annotations
-into the registry entry, so operation modules do not manually inspect
-``PlanOperation.operands`` or ``PlanOperation.attrs``. Binding metadata is
-validated against the annotated dialect schema when the lowering is registered:
-operand indexes must fit the declared SSA operands, attribute names must be
-declared by the operation, and dependent bindings such as packed-weight
-resolution must reference existing lowering parameters. The intended lowering
-shape is a small semantic bridge:
+Runtime lowerings are schema-bound. A lowering names parameters after lattice
+operands and attributes, and ``artifact_lowering`` binds those parameters from
+the dialect schema. Operation modules do not manually inspect
+``PlanOperation.operands`` or ``PlanOperation.attrs``. Extra metadata is only
+needed for semantic cases that the raw MLIR type cannot express by itself, such
+as resolving a packed convolution weight with the input channel count. The
+intended lowering shape is a small semantic bridge:
 
 .. code-block:: python
 
-   @artifact_lowering(op=conv3d)
+   @artifact_lowering(op=conv3d, weights={"weight": conv_weight(input="input")})
    def conv3d_from_artifact(
-       x: Annotated[SparseTensor, sparse_operand(0)],
-       weight: Annotated[mx.array | QuantizedWeight, conv_weight_operand(1, input="x")],
-       bias: Annotated[mx.array | None, optional_array_operand(2)],
+       input: SparseTensor,
+       weight: mx.array | QuantizedWeight,
+       bias: mx.array | None = None,
        *,
-       kernel_size: Annotated[Triple, triple_attribute()],
-       stride: Annotated[Triple, triple_attribute()],
-       padding: Annotated[Triple, triple_attribute()],
-       dilation: Annotated[Triple, triple_attribute()],
+       kernel_size: Triple,
+       stride: Triple,
+       padding: Triple,
+       dilation: Triple,
    ) -> SparseTensor:
        return conv3d(
-           x,
+           input,
            weight,
            bias,
            kernel_size=kernel_size,

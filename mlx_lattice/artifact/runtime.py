@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Any, cast
 
 import mlx.core as mx
 from lattice_contract.dialect import sparse_decompose, sparse_make, weight
@@ -18,16 +18,10 @@ from .lowering import (
     LoweringProgram,
     PackedWeightPayload,
     RuntimeValue,
-    array_operand,
     artifact_lowering,
     int_attr,
     packing_kind,
-    program_param,
-    raw_attr,
     results,
-    sparse_operand,
-    str_attribute,
-    triple_attribute,
 )
 from .plan import PlanArgument, PlanOperation, RuntimePlan
 
@@ -142,10 +136,10 @@ def _register_artifact_lowerings() -> None:
 
 @artifact_lowering(op=weight)
 def weight_from_artifact(
-    program: Annotated[LoweringProgram, program_param()],
-    storage_key: Annotated[str, str_attribute()],
-    layout: Annotated[str, str_attribute()],
-    packing: Annotated[Mapping[str, Any], raw_attr()],
+    program: LoweringProgram,
+    storage_key: str,
+    layout: str,
+    packing: Mapping[str, Any],
 ) -> mx.array | PackedWeightPayload:
     if not isinstance(packing, Mapping):
         raise TypeError('weight packing must be a mapping.')
@@ -186,12 +180,12 @@ def weight_from_artifact(
 
 @artifact_lowering(op=sparse_make)
 def sparse_make_from_artifact(
-    coords: Annotated[mx.array, array_operand(0)],
-    features: Annotated[mx.array, array_operand(1)],
-    active: Annotated[mx.array, array_operand(2)],
+    coords: mx.array,
+    features: mx.array,
+    active: mx.array,
     *,
-    stride: Annotated[tuple[int, int, int], triple_attribute()],
-    coord_order: Annotated[str, str_attribute()],
+    stride: tuple[int, int, int],
+    coord_order: str,
 ) -> SparseTensor:
     if coord_order != 'batch_x_y_z':
         raise ValueError(
@@ -207,9 +201,9 @@ def sparse_make_from_artifact(
 
 @artifact_lowering(op=sparse_decompose)
 def sparse_decompose_from_artifact(
-    value: Annotated[SparseTensor, sparse_operand(0)],
+    input: SparseTensor,
 ) -> tuple[mx.array, mx.array, mx.array]:
-    return (value.coords, value.feats, value.active_rows)
+    return (input.coords, input.feats, input.active_rows)
 
 
 def _store_results(
