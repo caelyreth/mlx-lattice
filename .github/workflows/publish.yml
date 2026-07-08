@@ -180,9 +180,12 @@ jobs:
       - name: Smoke test wheel
         run: |
           export EXPECTED_VERSION="${GITHUB_REF_NAME#v}"
-          python -m venv .wheel-smoke
-          .wheel-smoke/bin/python -m pip install ./contract dist/*.whl
-          .wheel-smoke/bin/python - <<'PY'
+          python -m venv "$RUNNER_TEMP/wheel-smoke"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install \
+            "$GITHUB_WORKSPACE/contract" \
+            "$GITHUB_WORKSPACE"/dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" - <<'PY'
           import os
 
           import mlx_lattice as lattice

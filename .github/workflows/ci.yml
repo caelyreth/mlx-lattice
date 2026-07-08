@@ -140,9 +140,12 @@ jobs:
 
       - name: Smoke test MLIR-enabled wheel
         run: |
-          python -m venv .wheel-smoke
-          .wheel-smoke/bin/python -m pip install ./contract dist/mlx_lattice-*.whl
-          .wheel-smoke/bin/python - <<'PY'
+          python -m venv "$RUNNER_TEMP/wheel-smoke"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install \
+            "$GITHUB_WORKSPACE/contract" \
+            "$GITHUB_WORKSPACE"/dist/mlx_lattice-*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" - <<'PY'
           import mlx_lattice as lattice
           from mlx_lattice.artifact import native_artifact_execution_available
 
