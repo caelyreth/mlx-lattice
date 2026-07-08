@@ -235,8 +235,13 @@ class MLIRModuleBuilder:
             f'{value.ref()}: {_mlir_type(value.type)}'
             for value in self._args
         )
-        result_types = ', '.join(
+        result_types_text = ', '.join(
             _mlir_type(value.type) for value in returns
+        )
+        result_types = (
+            result_types_text
+            if len(returns) == 1
+            else f'({result_types_text})'
         )
         return_names = self._return_names or tuple(
             value.name for value in returns

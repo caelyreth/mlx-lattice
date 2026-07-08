@@ -1,0 +1,7 @@
+{
+  "cases": [
+    "sparse_classifier",
+    "target_branch",
+    "point_voxel"
+  ]
+}

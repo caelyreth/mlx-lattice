@@ -11,7 +11,7 @@ endif()
 project(
   mlx_lattice
   VERSION ${SKBUILD_PROJECT_VERSION}
-  LANGUAGES CXX)
+  LANGUAGES C CXX)
 
 # MARK: - language
 
