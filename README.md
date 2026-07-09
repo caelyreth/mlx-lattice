@@ -41,10 +41,8 @@ development, and environments without the same Metal capability.
 - Point-to-voxel and voxel-to-point conversion.
 - Packed int4/int8 inference weights for supported linear and convolution
   routes.
-- MLIR-first artifacts using `graph.mlir` plus `weights.safetensors`; native
-  artifact execution is included in published macOS wheels.
+- MLIR-first artifacts using `graph.mlir` plus `weights.safetensors`
 - CPU and Metal native backends behind the same Python API.
-- Benchmark suite for focused operator and backend measurement.
 
 See the [getting started guide](https://mlx-lattice.iki.moe/getting-started/)
 and [API reference](https://mlx-lattice.iki.moe/api/) for the full surface.
