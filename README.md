@@ -8,6 +8,7 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 
 [DOI](https://doi.org/10.5281/zenodo.21258875) | [Documentation](https://mlx-lattice.iki.moe)
 | [PyPI](https://pypi.org/project/mlx-lattice/)
+| [Torch Lattice](https://github.com/caelyreth/torch-lattice)
 | [Acknowledgements](#acknowledgements) | [Citation](#citation)
 
 ### Install
@@ -199,6 +200,11 @@ Published macOS wheels include native MLIR bindings, so artifact bundles can be
 compiled into executable MLX programs after a normal package install. Source
 builds can opt out of those bindings when a local LLVM/MLIR toolchain is not
 available; those builds can still save, load, and externally validate bundles.
+
+The CUDA training-side sibling is
+[torch-lattice](https://github.com/caelyreth/torch-lattice). It is the intended
+route for exporting Torch/CUDA sparse models into the same MLIR artifact
+contract that `mlx-lattice` loads for MLX/Metal deployment.
 
 ### Quantized inference weights
 
