@@ -47,6 +47,17 @@ development, and environments without the same Metal capability.
 See the [getting started guide](https://mlx-lattice.iki.moe/getting-started/)
 and [API reference](https://mlx-lattice.iki.moe/api/) for the full surface.
 
+### Documentation
+
+The full documentation is hosted at
+[mlx-lattice.iki.moe](https://mlx-lattice.iki.moe):
+
+- [Installation](https://mlx-lattice.iki.moe/getting-started/installation.html)
+- [Quickstart](https://mlx-lattice.iki.moe/getting-started/quickstart.html)
+- [Concept references](https://mlx-lattice.iki.moe/reference/concepts/)
+- [Backend references](https://mlx-lattice.iki.moe/reference/backend/)
+- [API reference](https://mlx-lattice.iki.moe/api/)
+
 ### Sparse tensor model
 
 Sparse coordinates are integer rows with shape `(N, 4)` in
@@ -247,17 +258,6 @@ uv run bench --group conv --dtype int8
 Benchmark results depend on active rows, coordinate distribution, channel
 count, dtype, backend device, and compilation state. Keep these dimensions
 explicit when comparing changes.
-
-### Documentation
-
-The full documentation is hosted at
-[mlx-lattice.iki.moe](https://mlx-lattice.iki.moe):
-
-- [Installation](https://mlx-lattice.iki.moe/getting-started/installation.html)
-- [Quickstart](https://mlx-lattice.iki.moe/getting-started/quickstart.html)
-- [Concept references](https://mlx-lattice.iki.moe/reference/concepts/)
-- [Backend references](https://mlx-lattice.iki.moe/reference/backend/)
-- [API reference](https://mlx-lattice.iki.moe/api/)
 
 ### Acknowledgements
 
