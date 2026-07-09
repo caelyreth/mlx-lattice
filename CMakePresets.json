@@ -18,7 +18,7 @@
         "CMAKE_OSX_SYSROOT": "macosx",
         "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
         "SKBUILD": "ON",
-        "SKBUILD_PROJECT_VERSION": "0.3.0",
+        "SKBUILD_PROJECT_VERSION": "0.3.1",
         "SKBUILD_SABI_COMPONENT": "Development.SABIModule",
         "SKBUILD_SABI_VERSION": "3.12"
       }
@@ -36,7 +36,7 @@
         "MLX_LATTICE_ENABLE_MLIR": "ON",
         "Python_EXECUTABLE": "${sourceDir}/.venv/bin/python",
         "SKBUILD": "ON",
-        "SKBUILD_PROJECT_VERSION": "0.3.0",
+        "SKBUILD_PROJECT_VERSION": "0.3.1",
         "SKBUILD_SABI_COMPONENT": "Development.SABIModule",
         "SKBUILD_SABI_VERSION": "3.12"
       }

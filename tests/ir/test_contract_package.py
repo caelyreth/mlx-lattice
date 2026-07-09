@@ -18,7 +18,7 @@ def test_lattice_contract_imports_without_mlx_lattice_runtime() -> None:
     assert contract.ARTIFACT_WEIGHT_FILE == 'weights.safetensors'
     assert contract.CURRENT_DIALECT_VERSION == 0
     assert contract.LATTICE_DIALECT.namespace == 'lattice'
-    assert contract.__version__ == '0.3.0'
+    assert contract.__version__ == '0.3.1'
     assert 'mlx_lattice' not in sys.modules
 
 
