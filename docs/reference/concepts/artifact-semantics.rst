@@ -75,7 +75,7 @@ p99, and max values for both absolute and relative error:
 
 .. code-block:: bash
 
-   uv run --all-packages lattice-conformance replay fixtures.tar.gz \
+   uv run conformance replay fixtures.tar.gz \
      --report report.json
 
 For sparse outputs, coordinate equality is mandatory before feature tolerances

@@ -3,29 +3,29 @@
 This workspace package benchmarks the public Python surface of `mlx-lattice`.
 It intentionally does not call private native bindings or backend helpers.
 
-Run from the repository root:
+Run from the repository root after `uv sync --all-packages`:
 
 ```bash
-uv run --all-packages mlx-lattice-bench --preset smoke
+uv run bench --preset smoke
 ```
 
 Useful variants:
 
 ```bash
-uv run --all-packages mlx-lattice-bench --device all
-uv run --all-packages mlx-lattice-bench --group conv --group pool
-uv run --all-packages mlx-lattice-bench --mode compiled_hot
-uv run --all-packages mlx-lattice-bench --mode backward
-uv run --all-packages mlx-lattice-bench --size 1000 --size 5000
-uv run --all-packages mlx-lattice-bench --group conv --dtype int4
-uv run --all-packages mlx-lattice-bench --group conv --dtype int8
-uv run --all-packages mlx-lattice-bench --output smoke.json
+uv run bench --device all
+uv run bench --group conv --group pool
+uv run bench --mode compiled_hot
+uv run bench --mode backward
+uv run bench --size 1000 --size 5000
+uv run bench --group conv --dtype int4
+uv run bench --group conv --dtype int8
+uv run bench --output smoke.json
 ```
 
-After `uv sync --all-packages`, the shorter form also works:
+The script is a workspace entry point, so keep the workspace synced before use:
 
 ```bash
-uv run mlx-lattice-bench --device all
+uv sync --all-packages
 ```
 
 ## Measurement Contract

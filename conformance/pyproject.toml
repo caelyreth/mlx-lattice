@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = ["mlx-lattice", "lattice-contract"]
 
 [project.scripts]
-lattice-conformance = "lattice_conformance.cli:main"
+conformance = "lattice_conformance.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.28"]

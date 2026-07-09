@@ -87,7 +87,6 @@ def main() -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog='mlx-lattice-bench',
         description='Benchmark mlx-lattice public Python operator surfaces.',
     )
     parser.add_argument(

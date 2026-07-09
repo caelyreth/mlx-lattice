@@ -237,11 +237,13 @@ uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
 Run the benchmark suite:
 
+After `uv sync --all-packages`, use the workspace script:
+
 ```bash
-uv run --all-packages mlx-lattice-bench --preset smoke
-uv run --all-packages mlx-lattice-bench --group conv --device metal
-uv run --all-packages mlx-lattice-bench --group conv --dtype int4
-uv run --all-packages mlx-lattice-bench --group conv --dtype int8
+uv run bench --preset smoke
+uv run bench --group conv --device metal
+uv run bench --group conv --dtype int4
+uv run bench --group conv --dtype int8
 ```
 
 Benchmark results depend on active rows, coordinate distribution, channel

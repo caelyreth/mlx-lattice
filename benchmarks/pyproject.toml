@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = ["mlx-lattice>=0.3.1,<0.4"]
 
 [project.scripts]
-mlx-lattice-bench = "mlx_lattice_bench.run:main"
+bench = "mlx_lattice_bench.run:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]
