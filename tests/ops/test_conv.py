@@ -41,6 +41,47 @@ def test_conv3d_pointwise_matches_dense_linear_contract() -> None:
     assert_same_sparse_identity(out, x)
 
 
+def test_conv3d_pointwise_uses_precise_small_fp32_projection(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('small fp32 projection precision is Metal-specific')
+    coords = mx.array([[0, row, 0, 0] for row in range(6)], dtype=mx.int32)
+    feats = mx.array(
+        [
+            [-0.18668198585510254, -0.07669853419065475],
+            [1.0137652158737183, 0.40206432342529297],
+            [0.7205407619476318, -0.8937806487083435],
+            [-0.4324185848236084, 0.710955023765564],
+            [0.11673124879598618, 0.2444327175617218],
+            [-0.6306809186935425, -0.34102120995521545],
+        ],
+        dtype=mx.float32,
+    )
+    weight = mx.array(
+        [
+            [-0.6301173567771912, 0.5361918807029724],
+            [-0.6141055226325989, 0.4619714915752411],
+            [-0.40786921977996826, 0.07362017035484314],
+        ],
+        dtype=mx.float32,
+    ).reshape(3, 1, 1, 1, 2)
+    bias = mx.array(
+        [0.17754632234573364, -0.08261620253324509, -0.397258996963501],
+        dtype=mx.float32,
+    )
+    previous_device = mx.default_device()
+    mx.set_default_device(mx.cpu)
+    expected = feats @ weight[:, 0, 0, 0, :].T + bias
+    mx.eval(expected)
+    mx.set_default_device(previous_device)
+
+    out = conv3d(SparseTensor(coords, feats), weight, bias, kernel_size=1)
+    mx.eval(out.feats)
+
+    assert mx.allclose(out.feats, expected, rtol=1e-7, atol=1e-7).item()
+
+
 def test_conv3d_generic_matches_fused_native_reference() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],

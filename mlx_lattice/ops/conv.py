@@ -16,6 +16,7 @@ from mlx_lattice.core import (
     SparseTensor,
 )
 from mlx_lattice.core.types import Triple
+from mlx_lattice.ops._projection import feature_projection
 from mlx_lattice.ops._quantized import quantized_matmul
 from mlx_lattice.ops._relation_exec import (
     sparse_conv_features_from_relation,
@@ -472,7 +473,7 @@ def _pointwise_features(
     if isinstance(weight, QuantizedWeight):
         return quantized_matmul(x.feats, weight)
     matrix = _pointwise_weight_matrix(x, weight)
-    return x.feats @ matrix.T
+    return feature_projection(x.feats, matrix)
 
 
 def _target_weight(

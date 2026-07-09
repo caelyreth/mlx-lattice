@@ -10,6 +10,7 @@ from mlx_lattice.artifact.lowering import (
     linear_weight,
 )
 from mlx_lattice.core import QuantizedWeight, SparseTensor
+from mlx_lattice.ops._projection import feature_projection
 from mlx_lattice.ops._quantized import quantized_matmul
 
 GeluApprox = Literal['none', 'precise', 'tanh', 'fast']
@@ -54,7 +55,7 @@ def linear_features(
     _require_2d_weight(weight)
     if weight.shape[1] != x.shape[1]:
         raise ValueError('weight input channels must match x.shape[1].')
-    return _with_bias(x @ weight.T, bias)
+    return _with_bias(feature_projection(x, weight), bias)
 
 
 def linear(
