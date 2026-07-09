@@ -13,6 +13,7 @@ specialized kernels where useful.
    coordinates-relations
    algebra
    model-ir
+   artifact-semantics
 
 Design center
 -------------
@@ -59,3 +60,6 @@ Concept-to-API map
    * - Sparse model IR
      - :doc:`../../api/ir`
      - :doc:`model-ir`
+   * - Cross-runtime artifacts
+     - :doc:`../../api/artifact`
+     - :doc:`artifact-semantics`
