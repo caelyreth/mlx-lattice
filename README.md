@@ -28,14 +28,26 @@ The Metal backend is the primary performance target. CPU routes are also
 provided for supported operators and are useful for correctness checks,
 development, and environments without the same Metal capability.
 
-### MLIR artifacts
+### What 0.3.1 covers
 
-Portable model artifacts use `graph.mlir` plus `weights.safetensors`. MLIR is
-the only artifact graph contract; there is no legacy JSON artifact runtime.
-Published macOS wheels include native MLIR bindings, so artifact bundles can be
-compiled into executable MLX programs after a normal package install. Source
-builds can opt out of those bindings when a local LLVM/MLIR toolchain is not
-available; those builds can still save, load, and externally validate bundles.
+- Sparse tensor container with coordinate identity metadata.
+- Coordinate management and cached sparse relations.
+- Forward, submanifold, target, transposed, and generative sparse convolution.
+- Local and global sparse pooling.
+- Feature operations such as linear, normalization, dropout, and activations.
+- Coordinate utilities including union, intersection, lookup, ordering, and
+  sparse quantization.
+- Coordinate-aligned sparse algebra and branch merging.
+- Point-to-voxel and voxel-to-point conversion.
+- Packed int4/int8 inference weights for supported linear and convolution
+  routes.
+- MLIR-first artifacts using `graph.mlir` plus `weights.safetensors`; native
+  artifact execution is included in published macOS wheels.
+- CPU and Metal native backends behind the same Python API.
+- Benchmark suite for focused operator and backend measurement.
+
+See the [getting started guide](https://mlx-lattice.iki.moe/getting-started/)
+and [API reference](https://mlx-lattice.iki.moe/api/) for the full surface.
 
 ### Sparse tensor model
 
@@ -170,6 +182,15 @@ point_feats_again = devoxelize(points, voxels, voxel_size=0.1)
 The lower-level point/voxel map APIs are available when assignments are reused
 across multiple feature tensors.
 
+### MLIR artifacts
+
+Portable model artifacts use `graph.mlir` plus `weights.safetensors`. MLIR is
+the only artifact graph contract; there is no legacy JSON artifact runtime.
+Published macOS wheels include native MLIR bindings, so artifact bundles can be
+compiled into executable MLX programs after a normal package install. Source
+builds can opt out of those bindings when a local LLVM/MLIR toolchain is not
+available; those builds can still save, load, and externally validate bundles.
+
 ### Quantized inference weights
 
 `mlx-lattice` supports packed affine int4 and int8 weights for supported linear
@@ -197,27 +218,6 @@ packed_weight = quantize_weight(
 Quantized weights reduce model storage and can improve selected inference
 routes. Benchmark quantized and floating paths on the same sparse support,
 channel count, and device before choosing a deployment configuration.
-
-### What 0.3.1 covers
-
-- Sparse tensor container with coordinate identity metadata.
-- Coordinate management and cached sparse relations.
-- Forward, submanifold, target, transposed, and generative sparse convolution.
-- Local and global sparse pooling.
-- Feature operations such as linear, normalization, dropout, and activations.
-- Coordinate utilities including union, intersection, lookup, ordering, and
-  sparse quantization.
-- Coordinate-aligned sparse algebra and branch merging.
-- Point-to-voxel and voxel-to-point conversion.
-- Packed int4/int8 inference weights for supported linear and convolution
-  routes.
-- MLIR-first artifacts using `graph.mlir` plus `weights.safetensors`; native
-  artifact execution is included in published macOS wheels.
-- CPU and Metal native backends behind the same Python API.
-- Benchmark suite for focused operator and backend measurement.
-
-See the [getting started guide](https://mlx-lattice.iki.moe/getting-started/)
-and [API reference](https://mlx-lattice.iki.moe/api/) for the full surface.
 
 ### Development
 
