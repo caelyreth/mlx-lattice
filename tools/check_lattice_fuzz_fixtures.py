@@ -5,7 +5,7 @@ import json
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import mlx.core as mx
 
@@ -71,17 +71,24 @@ def _fixture_root(path: Path) -> Path:
 
 def _check_case(case: Path, metadata: dict[str, Any]) -> None:
     program = load_lattice_program(case)
-    inputs = mx.load(str(case / 'inputs.safetensors'))
-    expected = mx.load(str(case / 'expected.safetensors'))
+    inputs = cast(
+        dict[str, mx.array], mx.load(str(case / 'inputs.safetensors'))
+    )
+    expected = cast(
+        dict[str, mx.array], mx.load(str(case / 'expected.safetensors'))
+    )
     output = program(**inputs)
     rtol = float(metadata.get('rtol', 2e-3))
     atol = float(metadata.get('atol', 2e-3))
     if metadata['output_kind'] == 'sparse':
         _assert_sparse_close(output, expected, rtol=rtol, atol=atol)
         return
+    dense_output = cast(mx.array, output)
     expected_dense = expected['output']
-    mx.eval(output, expected_dense)
-    if not mx.allclose(output, expected_dense, rtol=rtol, atol=atol).item():
+    mx.eval(dense_output, expected_dense)
+    if not mx.allclose(
+        dense_output, expected_dense, rtol=rtol, atol=atol
+    ).item():
         raise AssertionError('dense output mismatch')
 
 

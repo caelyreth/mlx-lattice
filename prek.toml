@@ -37,6 +37,13 @@ language = "system"
 types_or = ["python", "pyi"]
 
 [[repos.hooks]]
+id = "ty-check"
+name = "ty check"
+entry = "uv run ty check"
+language = "system"
+pass_filenames = false
+
+[[repos.hooks]]
 id = "pytest"
 name = "pytest"
 entry = "uv run pytest"
