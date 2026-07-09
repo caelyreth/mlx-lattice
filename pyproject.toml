@@ -23,7 +23,7 @@ build-backend = "scikit_build_core.build"
 # MARK: - deps
 
 [tool.uv.workspace]
-members = ["benchmarks", "contract"]
+members = ["benchmarks", "conformance", "contract"]
 
 [tool.uv.sources]
 lattice-contract = { workspace = true }
@@ -94,7 +94,7 @@ unused-ignore-comment = "warn"
 redundant-cast = "warn"
 
 [tool.ty.environment]
-extra-paths = ["benchmarks"]
+extra-paths = ["benchmarks", "conformance"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

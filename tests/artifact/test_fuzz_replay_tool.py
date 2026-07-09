@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from tools.check_lattice_fuzz_fixtures import _distribution
+from lattice_conformance.metrics import distribution
 
 
 def test_fuzz_replay_distribution_reports_common_accuracy_quantiles() -> (
     None
 ):
-    stats = _distribution([0.0, 1.0, 2.0, 3.0, 4.0])
+    stats = distribution([0.0, 1.0, 2.0, 3.0, 4.0])
 
     assert stats == {
         'avg': 2.0,
@@ -18,7 +18,7 @@ def test_fuzz_replay_distribution_reports_common_accuracy_quantiles() -> (
 
 
 def test_fuzz_replay_distribution_handles_empty_input() -> None:
-    assert _distribution([]) == {
+    assert distribution([]) == {
         'avg': 0.0,
         'median': 0.0,
         'p95': 0.0,

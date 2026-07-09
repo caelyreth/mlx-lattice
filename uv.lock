@@ -12,6 +12,7 @@ members = [
     "lattice-contract",
     "mlx-lattice",
     "mlx-lattice-bench",
+    "mlx-lattice-conformance",
 ]
 
 [[package]]
@@ -376,6 +377,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "mlx-lattice", editable = "." }]
+
+[[package]]
+name = "mlx-lattice-conformance"
+version = "0.3.1"
+source = { editable = "conformance" }
+dependencies = [
+    { name = "lattice-contract" },
+    { name = "mlx-lattice" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lattice-contract", editable = "contract" },
+    { name = "mlx-lattice", editable = "." },
+]
 
 [[package]]
 name = "mlx-metal"

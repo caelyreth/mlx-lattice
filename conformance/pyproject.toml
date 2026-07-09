@@ -1,0 +1,20 @@
+[project]
+name = "mlx-lattice-conformance"
+version = "0.3.1"
+description = "Cross-runtime conformance replay tools for mlx-lattice"
+requires-python = ">=3.12"
+dependencies = ["mlx-lattice", "lattice-contract"]
+
+[project.scripts]
+lattice-conformance = "lattice_conformance.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.28"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+mlx-lattice = { workspace = true }
+lattice-contract = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["lattice_conformance"]
