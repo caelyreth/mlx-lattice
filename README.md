@@ -7,6 +7,7 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 `mlx.nn`-style modules for Apple Silicon workflows.
 
 [DOI](https://doi.org/10.5281/zenodo.21258875) | [Documentation](https://mlx-lattice.iki.moe)
+| [PyPI](https://pypi.org/project/mlx-lattice/)
 | [Acknowledgements](#acknowledgements) | [Citation](#citation)
 
 ### Install
