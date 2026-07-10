@@ -16,6 +16,7 @@ from mlx_lattice.ops import (
     pool3d,
     pool_transpose3d,
     sum_pool3d,
+    trilinear_upsample3d,
 )
 
 PoolMode = Literal['sum', 'max', 'avg']
@@ -29,6 +30,7 @@ __all__ = [
     'Pool3d',
     'PoolTranspose3d',
     'SumPool3d',
+    'TrilinearUpsample3d',
 ]
 
 
@@ -188,6 +190,21 @@ class PoolTranspose3d(mxnn.Module):
             padding=self.spec.padding,
             dilation=self.spec.dilation,
         )
+
+
+class TrilinearUpsample3d(mxnn.Module):
+    """Normalized trilinear upsampling on generated or target support."""
+
+    def __init__(self, *, stride: int | Sequence[int] = 2) -> None:
+        super().__init__()
+        self.stride = KernelSpec(size=1, stride=stride).stride
+
+    def __call__(
+        self,
+        x: SparseTensor,
+        target: SparseTensor | None = None,
+    ) -> SparseTensor:
+        return trilinear_upsample3d(x, target, stride=self.stride)
 
 
 class GlobalSumPool(mxnn.Module):

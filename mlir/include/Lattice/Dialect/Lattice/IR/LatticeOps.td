@@ -287,6 +287,19 @@ def Lattice_PoolTranspose3DOp : Lattice_Op<"pool_transpose3d"> {
   }];
 }
 
+def Lattice_TrilinearUpsample3DOp : Lattice_Op<"trilinear_upsample3d"> {
+  let summary = "Normalized trilinear sparse 3D upsampling";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Optional<Lattice_SparseTensorType>:$target,
+    DenseI64ArrayAttr:$stride
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input (`,` $target^)? attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def Lattice_GlobalPoolOp : Lattice_Op<"global_pool", [Pure]> {
   let summary = "Batch-wise global sparse pooling";
   let arguments = (ins

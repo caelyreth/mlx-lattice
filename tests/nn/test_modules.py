@@ -621,6 +621,24 @@ def test_pool_transpose_module_accepts_explicit_target() -> None:
     assert active_feats(out).tolist() == [[2.0], [2.0]]
 
 
+def test_trilinear_upsample_module_accepts_target() -> None:
+    coarse = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0], [6.0]], dtype=mx.float32),
+        stride=(2, 1, 1),
+    )
+    target = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]], dtype=mx.int32
+        ),
+        mx.zeros((3, 1), dtype=mx.float32),
+    )
+
+    out = lnn.TrilinearUpsample3d(stride=(2, 1, 1))(coarse, target)
+
+    assert active_feats(out).tolist() == [[2.0], [4.0], [6.0]]
+
+
 def test_global_pool_modules_return_dense_batch_features() -> None:
     x = sparse_collate(
         [

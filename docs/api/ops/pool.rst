@@ -20,6 +20,10 @@ over a transposed kernel relation. Without a target it generates fine support;
 with a target tensor it preserves that tensor's coordinates and emits zeros for
 target rows with no contributors.
 
+``trilinear_upsample3d`` performs normalized separable interpolation instead of
+uniform averaging. Its optional target follows the same support contract as
+pooling transpose.
+
 Related pages
 -------------
 

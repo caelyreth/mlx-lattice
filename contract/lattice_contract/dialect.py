@@ -454,6 +454,21 @@ def pool_transpose3d() -> None:
 
 
 @LATTICE_DIALECT.op(
+    'trilinear_upsample3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('target', 'sparse_tensor', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(op_attr('stride', 'i64_triple'),),
+    assembly='functional',
+    summary='Normalized trilinear sparse 3D upsampling',
+)
+def trilinear_upsample3d() -> None:
+    """Register lattice.trilinear_upsample3d."""
+
+
+@LATTICE_DIALECT.op(
     'global_pool',
     operands=(operand('input', 'sparse_tensor'),),
     results=(result('result', 'tensor'),),

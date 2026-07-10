@@ -50,6 +50,15 @@ This is the MLX equivalent of MinkowskiEngine
 ``MinkowskiPoolingTranspose``. ``expand_coordinates=True`` maps to the generated
 route; passing ``coordinates=target`` maps to the explicit-target route.
 
+Trilinear upsampling
+--------------------
+
+``trilinear_upsample3d`` derives kernel extent and padding from sparse stride.
+For stride two, its separable one-dimensional weights are
+``[0.5, 1.0, 0.5]``. It divides the weighted feature sum by the sum of weights
+present on sparse support, so missing neighbors do not attenuate boundary rows.
+It can generate fine support or consume exact target support.
+
 Backend routes
 --------------
 
@@ -78,6 +87,9 @@ Backend routes
    * - Target pooling transpose
      - Explicit fine support supplied
      - Cached native target-transposed implicit-GEMM view and averaged gathers.
+   * - Trilinear upsampling
+     - Generated or explicit fine support
+     - Cached target-transposed view and normalized separable linear weights.
    * - Global pooling
      - ``batch_counts`` metadata present
      - MLX dense reductions or scatter reductions over batch ids.

@@ -3,6 +3,8 @@ Pooling modules
 
 Pooling modules wrap local relation pooling and batch-wise global pooling.
 Local pooling returns sparse tensors; global pooling returns dense batch rows.
+``TrilinearUpsample3d`` provides parameter-free normalized interpolation on
+generated or explicit target support.
 
 Related pages
 -------------
@@ -30,6 +32,9 @@ Module summary
      - ``SparseTensor``
    * - ``PoolTranspose3d``
      - Contributor average on generated or explicit target support.
+     - ``SparseTensor``
+   * - ``TrilinearUpsample3d``
+     - Normalized separable linear interpolation.
      - ``SparseTensor``
    * - ``GlobalSumPool`` / ``GlobalAvgPool`` / ``GlobalMaxPool``
      - Batch-wise dense reduction.

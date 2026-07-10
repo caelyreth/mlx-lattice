@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from itertools import product
 from typing import Literal, cast
 
 import mlx.core as mx
@@ -9,7 +10,7 @@ from mlx_lattice.artifact.lowering import (
     artifact_lowering,
     lattice_lowering,
 )
-from mlx_lattice.core import KernelSpec, SparseTensor
+from mlx_lattice.core import CoordinateMapKey, KernelSpec, SparseTensor
 from mlx_lattice.core.types import Triple
 from mlx_lattice.ops._relation_exec import (
     sparse_pool_features_from_relation,
@@ -27,6 +28,7 @@ __all__ = [
     'pool3d',
     'pool_transpose3d',
     'sum_pool3d',
+    'trilinear_upsample3d',
 ]
 
 
@@ -196,18 +198,7 @@ def pool_transpose3d(
             active_rows=relation.out_count,
         )
 
-    if target.stride != output_stride:
-        raise ValueError(
-            f'target stride {target.stride} does not match transposed output '
-            f'stride {output_stride}.'
-        )
-    target_key = (
-        target.coord_key
-        if target.coord_manager is x.coord_manager
-        else x.coord_manager.insert_coords(
-            target.coords, target.stride, target.active_rows
-        )
-    )
+    target_key = _target_key(x, target, output_stride)
     view = x.coord_manager.target_transposed_view(
         x.coord_key,
         target_key,
@@ -245,6 +236,70 @@ def pool_transpose3d_from_artifact(
         padding=padding,
         dilation=dilation,
     )
+
+
+@lattice_lowering
+def trilinear_upsample3d(
+    x: SparseTensor,
+    target: SparseTensor | None = None,
+    *,
+    stride: int | Sequence[int] = 2,
+) -> SparseTensor:
+    """Upsample sparse features with normalized trilinear interpolation."""
+    _validate_pool_dtype(x.feats)
+    step = KernelSpec(size=1, stride=stride).stride
+    spec = KernelSpec(
+        size=tuple(2 * value - 1 for value in step),
+        stride=step,
+        padding=tuple(value - 1 for value in step),
+    )
+    output_stride = _div_stride(x.stride, step)
+    if target is None:
+        relation = x.coord_manager.transposed_kernel_relation(
+            x.coord_key,
+            kernel_size=spec.size,
+            stride=spec.stride,
+            padding=spec.padding,
+        )
+        if relation.out_coords is None:
+            raise ValueError(
+                'transposed relation is missing output coordinates.'
+            )
+        target_key = x.coord_manager.insert_coords(
+            relation.out_coords, output_stride, relation.out_count
+        )
+    else:
+        target_key = _target_key(x, target, output_stride)
+    view = x.coord_manager.target_transposed_view(
+        x.coord_key,
+        target_key,
+        kernel_size=spec.size,
+        stride=spec.stride,
+        padding=spec.padding,
+    )
+    feats = _weighted_average_from_out_in_map(
+        x.feats,
+        view.out_in_map,
+        _trilinear_weights(step, x.feats.dtype),
+    )
+    return SparseTensor(
+        x.coord_manager.coords(target_key),
+        feats,
+        stride=output_stride,
+        coord_manager=x.coord_manager,
+        active_rows=x.coord_manager.active_rows(target_key),
+    )
+
+
+@artifact_lowering(op=trilinear_upsample3d)
+def trilinear_upsample3d_from_artifact(
+    input: SparseTensor,
+    target: SparseTensor | None = None,
+    *,
+    stride: Triple,
+) -> SparseTensor:
+    """Lower lattice.trilinear_upsample3d artifacts."""
+    return trilinear_upsample3d(input, target, stride=stride)
 
 
 @lattice_lowering
@@ -536,6 +591,52 @@ def _average_from_out_in_map(
     summed = mx.sum(gathered * mask, axis=1)
     counts = mx.sum(mask, axis=1)
     return mx.where(counts > 0, summed / mx.maximum(counts, 1), summed)
+
+
+def _weighted_average_from_out_in_map(
+    feats: mx.array,
+    out_in_map: mx.array,
+    weights: mx.array,
+) -> mx.array:
+    valid = out_in_map >= 0
+    gathered = mx.take(feats, mx.maximum(out_in_map, 0), axis=0)
+    coefficients = valid.astype(feats.dtype) * weights[None, :]
+    summed = mx.sum(gathered * coefficients[..., None], axis=1)
+    denominator = mx.sum(coefficients, axis=1, keepdims=True)
+    return mx.where(
+        denominator > 0,
+        summed
+        / mx.maximum(denominator, mx.array(1e-12, dtype=feats.dtype)),
+        summed,
+    )
+
+
+def _trilinear_weights(stride: Triple, dtype: mx.Dtype) -> mx.array:
+    axes = tuple(
+        tuple(
+            1.0 - abs(offset - (step - 1)) / step
+            for offset in range(2 * step - 1)
+        )
+        for step in stride
+    )
+    return mx.array([x * y * z for x, y, z in product(*axes)], dtype=dtype)
+
+
+def _target_key(
+    x: SparseTensor,
+    target: SparseTensor,
+    output_stride: Triple,
+) -> CoordinateMapKey:
+    if target.stride != output_stride:
+        raise ValueError(
+            f'target stride {target.stride} does not match transposed output '
+            f'stride {output_stride}.'
+        )
+    if target.coord_manager is x.coord_manager:
+        return target.coord_key
+    return x.coord_manager.insert_coords(
+        target.coords, target.stride, target.active_rows
+    )
 
 
 def _mul_stride(lhs: Triple, rhs: Triple) -> Triple:

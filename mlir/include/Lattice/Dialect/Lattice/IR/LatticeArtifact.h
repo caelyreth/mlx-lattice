@@ -7,7 +7,7 @@ namespace lattice {
 
 inline constexpr int kCurrentArtifactIRVersion = 0;
 inline constexpr llvm::StringLiteral kArtifactSchemaDigest =
-    "e48cb610f907d8c7afbe66c197f2e01ab7ba3519a3f3d452b9643768f5c476c9";
+    "545fd43029e2fbebc18404babc0ec463730a13056a18f51280d8f1a272a3369c";
 inline constexpr llvm::StringLiteral kArtifactWeightFile =
     "weights.safetensors";
 

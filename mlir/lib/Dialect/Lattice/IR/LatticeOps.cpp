@@ -706,6 +706,20 @@ LogicalResult PoolTranspose3DOp::verify() {
     );
 }
 
+LogicalResult TrilinearUpsample3DOp::verify() {
+    if (failed(verifySparseRank(getOperation(), getInput().getType())) ||
+        failed(verifySparseRank(getOperation(), getResult().getType()))) {
+        return failure();
+    }
+    if (getTarget() &&
+        failed(verifySparseRank(getOperation(), getTarget().getType()))) {
+        return failure();
+    }
+    return verifyTriple(
+        getOperation(), getStride(), "stride", /*strictlyPositive=*/true
+    );
+}
+
 LogicalResult GlobalPoolOp::verify() {
     auto inputType = getInput().getType();
     auto resultType = cast<RankedTensorType>(getResult().getType());

@@ -14,6 +14,7 @@ from mlx_lattice.ops import (
     max_pool3d,
     pool_transpose3d,
     sum_pool3d,
+    trilinear_upsample3d,
 )
 
 from mlx_lattice_bench.cases.common import benchmark_n, param_grid
@@ -29,6 +30,8 @@ type PoolKind = Literal[
     'global_avg',
     'transpose_generated',
     'transpose_target',
+    'trilinear_generated',
+    'trilinear_target',
 ]
 
 
@@ -61,6 +64,8 @@ def cases(
             ('global_avg_pool', 'global_avg'),
             ('pool_transpose3d_generated', 'transpose_generated'),
             ('pool_transpose3d_target', 'transpose_target'),
+            ('trilinear_upsample3d_generated', 'trilinear_generated'),
+            ('trilinear_upsample3d_target', 'trilinear_target'),
         )
     )
 
@@ -117,6 +122,18 @@ def _run(
         if coarse is None:
             raise ValueError('pooling transpose requires a coarse input.')
         return pool_transpose3d(coarse, x, kernel_size=2, stride=2)
+    if kind == 'trilinear_generated':
+        if coarse is None:
+            raise ValueError(
+                'trilinear upsampling requires a coarse input.'
+            )
+        return trilinear_upsample3d(coarse, stride=2)
+    if kind == 'trilinear_target':
+        if coarse is None:
+            raise ValueError(
+                'trilinear upsampling requires a coarse input.'
+            )
+        return trilinear_upsample3d(coarse, x, stride=2)
     return global_avg_pool(x)
 
 

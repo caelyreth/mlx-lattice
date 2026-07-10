@@ -1,7 +1,7 @@
 // Invalid: point tensor must have trailing xyz dimension 3.
 module attributes {
   lattice.ir_version = 0,
-  lattice.schema_digest = "e48cb610f907d8c7afbe66c197f2e01ab7ba3519a3f3d452b9643768f5c476c9",
+  lattice.schema_digest = "545fd43029e2fbebc18404babc0ec463730a13056a18f51280d8f1a272a3369c",
   lattice.input_names = ["input0", "input1", "input2", "input3"],
   lattice.input_roles = ["tensor", "tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],

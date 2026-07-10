@@ -69,6 +69,7 @@ from mlx_lattice.ops.pool import (
     pool3d,
     pool_transpose3d,
     sum_pool3d,
+    trilinear_upsample3d,
 )
 from mlx_lattice.ops.quantization import (
     build_point_voxel_map,
@@ -211,6 +212,7 @@ __all__ = [
     'target_kernel_relation',
     'topk_rows',
     'transposed_kernel_relation',
+    'trilinear_upsample3d',
     'union_coords',
     'voxelize',
     'voxelize_with_quantization',

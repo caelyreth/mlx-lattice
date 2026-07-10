@@ -30,6 +30,7 @@ def test_lattice_dialect_schema_is_annotation_backed() -> None:
     assert 'normalized_generative_conv_transpose3d' in digest['ops']
     assert 'pool3d' in digest['ops']
     assert 'pool_transpose3d' in digest['ops']
+    assert 'trilinear_upsample3d' in digest['ops']
     assert 'global_pool' in digest['ops']
     assert 'voxelize' in digest['ops']
     assert 'devoxelize' in digest['ops']
@@ -146,6 +147,22 @@ def test_mlir_builder_emits_pooling_ops() -> None:
     assert 'mode = #lattice.pool_mode<avg>' in graph
     assert 'lattice.global_pool' in graph
     assert 'batch_size = -1' in graph
+
+
+def test_mlir_builder_emits_trilinear_upsample() -> None:
+    sparse = SparseTensorType(dtype='f32')
+    builder = MLIRModuleBuilder()
+    source = builder.argument('source', sparse)
+    target = builder.argument('target', sparse)
+    out = builder.trilinear_upsample3d(
+        input=source,
+        target=target,
+        stride=(2, 2, 2),
+        result_type=sparse,
+    )
+    builder.return_(out)
+
+    assert 'lattice.trilinear_upsample3d' in builder.to_mlir()
 
 
 def test_mlir_builder_emits_point_voxel_ops() -> None:

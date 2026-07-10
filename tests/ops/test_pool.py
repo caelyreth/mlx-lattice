@@ -15,6 +15,7 @@ from mlx_lattice.ops import (
     pool_transpose3d,
     sparse_collate,
     sum_pool3d,
+    trilinear_upsample3d,
 )
 from tests.support import (
     active_coords,
@@ -189,6 +190,47 @@ def test_pool_transpose_targets_support_and_averages_contributors() -> None:
     assert active_coords(out) == target.coords.tolist()
     assert active_feats(out).tolist() == [[2.0], [4.0], [6.0]]
     assert out.stride == (1, 1, 1)
+
+
+def test_trilinear_upsample_targets_support_with_linear_weights() -> None:
+    coarse = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0], [6.0]], dtype=mx.float32),
+        stride=(2, 1, 1),
+    )
+    target = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.zeros((4, 1), dtype=mx.float32),
+    )
+
+    out = trilinear_upsample3d(coarse, target, stride=(2, 1, 1))
+
+    assert active_coords(out) == target.coords.tolist()
+    assert active_feats(out).tolist() == [[2.0], [4.0], [6.0], [6.0]]
+
+
+def test_trilinear_upsample_is_autogradable() -> None:
+    coords = mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32)
+    target = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]], dtype=mx.int32
+        ),
+        mx.zeros((3, 1), dtype=mx.float32),
+    )
+
+    def loss(feats: mx.array) -> mx.array:
+        coarse = SparseTensor(coords, feats, stride=(2, 1, 1))
+        return mx.sum(
+            trilinear_upsample3d(coarse, target, stride=(2, 1, 1)).feats
+        )
+
+    gradient = mx.grad(loss)(mx.array([[2.0], [6.0]], dtype=mx.float32))
+
+    assert gradient.shape == (2, 1)
+    assert bool(mx.all(gradient > 0).item())
 
 
 def test_pool_transpose_generates_support_without_target() -> None:

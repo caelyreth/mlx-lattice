@@ -32,6 +32,7 @@ from mlx_lattice.nn.pool import (
     Pool3d,
     PoolTranspose3d,
     SumPool3d,
+    TrilinearUpsample3d,
 )
 from mlx_lattice.nn.quantized_conv import (
     QuantizedConv3d,
@@ -74,4 +75,5 @@ __all__ = [
     'SubmConv3d',
     'SumPool3d',
     'Tanh',
+    'TrilinearUpsample3d',
 ]
