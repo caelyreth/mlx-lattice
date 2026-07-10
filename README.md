@@ -30,7 +30,7 @@ The Metal backend is the primary performance target. CPU routes are also
 provided for supported operators and are useful for correctness checks,
 development, and environments without the same Metal capability.
 
-### What 0.3.1 covers
+### What 0.4.0 covers
 
 - Sparse tensor container with coordinate identity metadata.
 - Coordinate management and cached sparse relations.
