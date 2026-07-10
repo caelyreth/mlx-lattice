@@ -11,11 +11,16 @@ from mlx_lattice.core.coords.builders import (
     build_kernel_relation,
     build_submanifold_kernel_relation,
     build_target_kernel_relation,
+    build_target_transposed_implicit_gemm_view,
     build_transposed_kernel_relation,
 )
 from mlx_lattice.core.coords.set_ops import inverse_map
 from mlx_lattice.core.coords.validation import validate_coords
-from mlx_lattice.core.relations import KernelRelation, KernelSpec
+from mlx_lattice.core.relations import (
+    KernelRelation,
+    KernelSpec,
+    RelationImplicitGemmView,
+)
 from mlx_lattice.core.types import Triple, triple
 
 _manager_ids = count()
@@ -66,6 +71,10 @@ class CoordinateManager:
     _kernel_relations: dict[
         tuple[CoordinateMapKey, CoordinateMapKey | None, KernelSpec, str],
         KernelRelation,
+    ] = field(default_factory=dict)
+    _target_transposed_views: dict[
+        tuple[CoordinateMapKey, CoordinateMapKey, KernelSpec],
+        RelationImplicitGemmView,
     ] = field(default_factory=dict)
 
     def insert_coords(
@@ -303,3 +312,40 @@ class CoordinateManager:
                 )
             )
         return self._kernel_relations[cache_key]
+
+    def target_transposed_view(
+        self,
+        key: CoordinateMapKey,
+        target_key: CoordinateMapKey,
+        *,
+        kernel_size: int | Sequence[int] = 2,
+        stride: int | Sequence[int] = 2,
+        padding: int | Sequence[int] = 0,
+        dilation: int | Sequence[int] = 1,
+    ) -> RelationImplicitGemmView:
+        """Build or reuse a transposed relation to explicit target support."""
+        if not self.owns(key) or not self.owns(target_key):
+            raise ValueError(
+                'input and target coordinate keys must belong to this manager.'
+            )
+        spec = KernelSpec(
+            size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+        )
+        cache_key = (key, target_key, spec)
+        if cache_key not in self._target_transposed_views:
+            self._target_transposed_views[cache_key] = (
+                build_target_transposed_implicit_gemm_view(
+                    self.coords(key),
+                    self.coords(target_key),
+                    source_active_rows=self.active_rows(key),
+                    target_active_rows=self.active_rows(target_key),
+                    kernel_size=spec.size,
+                    stride=spec.stride,
+                    padding=spec.padding,
+                    dilation=spec.dilation,
+                )
+            )
+        return self._target_transposed_views[cache_key]

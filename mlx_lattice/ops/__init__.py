@@ -67,6 +67,7 @@ from mlx_lattice.ops.pool import (
     global_sum_pool,
     max_pool3d,
     pool3d,
+    pool_transpose3d,
     sum_pool3d,
 )
 from mlx_lattice.ops.quantization import (
@@ -176,6 +177,7 @@ __all__ = [
     'occupancy_downsample',
     'occupancy_expand',
     'pool3d',
+    'pool_transpose3d',
     'prune',
     'prune_mask',
     'radius_relation',

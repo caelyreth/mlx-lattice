@@ -14,6 +14,7 @@ from mlx_lattice.ops import (
     global_sum_pool,
     max_pool3d,
     pool3d,
+    pool_transpose3d,
     sum_pool3d,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     'GlobalSumPool',
     'MaxPool3d',
     'Pool3d',
+    'PoolTranspose3d',
     'SumPool3d',
 ]
 
@@ -147,6 +149,40 @@ class AvgPool3d(Pool3d):
     def __call__(self, x: SparseTensor) -> SparseTensor:
         return avg_pool3d(
             x,
+            kernel_size=self.spec.size,
+            stride=self.spec.stride,
+            padding=self.spec.padding,
+            dilation=self.spec.dilation,
+        )
+
+
+class PoolTranspose3d(mxnn.Module):
+    """Average-pooling transpose onto generated or explicit target support."""
+
+    def __init__(
+        self,
+        *,
+        kernel_size: int | Sequence[int] = 2,
+        stride: int | Sequence[int] = 2,
+        padding: int | Sequence[int] = 0,
+        dilation: int | Sequence[int] = 1,
+    ) -> None:
+        super().__init__()
+        self.spec = KernelSpec(
+            size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+        )
+
+    def __call__(
+        self,
+        x: SparseTensor,
+        target: SparseTensor | None = None,
+    ) -> SparseTensor:
+        return pool_transpose3d(
+            x,
+            target,
             kernel_size=self.spec.size,
             stride=self.spec.stride,
             padding=self.spec.padding,

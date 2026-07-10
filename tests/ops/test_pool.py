@@ -12,6 +12,7 @@ from mlx_lattice.ops import (
     global_sum_pool,
     max_pool3d,
     pool3d,
+    pool_transpose3d,
     sparse_collate,
     sum_pool3d,
 )
@@ -161,6 +162,46 @@ def test_strided_pooling_updates_output_stride_and_manager_context() -> (
     assert out.coord_manager is x.coord_manager
     assert out.coord_key != x.coord_key
     assert out.coord_manager.owns(out.coord_key)
+
+
+def test_pool_transpose_targets_support_and_averages_contributors() -> None:
+    coarse = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0], [6.0]], dtype=mx.float32),
+        stride=2,
+    )
+    target = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.zeros((3, 1), dtype=mx.float32),
+    )
+
+    out = pool_transpose3d(
+        coarse,
+        target,
+        kernel_size=(3, 1, 1),
+        stride=2,
+        padding=(1, 0, 0),
+    )
+
+    assert active_coords(out) == target.coords.tolist()
+    assert active_feats(out).tolist() == [[2.0], [4.0], [6.0]]
+    assert out.stride == (1, 1, 1)
+
+
+def test_pool_transpose_generates_support_without_target() -> None:
+    coarse = SparseTensor(
+        mx.array([[0, 0, 0, 0]], dtype=mx.int32),
+        mx.array([[3.0]], dtype=mx.float32),
+        stride=2,
+    )
+
+    out = pool_transpose3d(coarse, kernel_size=(2, 1, 1), stride=2)
+
+    assert active_coords(out) == [[0, 0, 0, 0], [0, 1, 0, 0]]
+    assert active_feats(out).tolist() == [[3.0], [3.0]]
 
 
 def test_global_pooling_reduces_each_batch_independently() -> None:

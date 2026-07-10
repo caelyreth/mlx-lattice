@@ -30,6 +30,7 @@ from mlx_lattice.nn.pool import (
     GlobalSumPool,
     MaxPool3d,
     Pool3d,
+    PoolTranspose3d,
     SumPool3d,
 )
 from mlx_lattice.nn.quantized_conv import (
@@ -59,6 +60,7 @@ __all__ = [
     'NormalizedGenerativeConvTranspose3d',
     'NormalizedSubmConv3d',
     'Pool3d',
+    'PoolTranspose3d',
     'QuantizedConv3d',
     'QuantizedConvTranspose3d',
     'QuantizedGenerativeConvTranspose3d',

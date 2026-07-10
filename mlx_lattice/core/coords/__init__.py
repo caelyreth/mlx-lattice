@@ -11,6 +11,7 @@ from mlx_lattice.core.coords.builders import (
     build_radius_relation,
     build_submanifold_kernel_relation,
     build_target_kernel_relation,
+    build_target_transposed_implicit_gemm_view,
     build_transposed_kernel_relation,
     kernel_offsets,
 )
@@ -67,6 +68,7 @@ __all__ = [
     'build_sparse_alignment',
     'build_submanifold_kernel_relation',
     'build_target_kernel_relation',
+    'build_target_transposed_implicit_gemm_view',
     'build_transposed_kernel_relation',
     'child_coords_from_indices',
     'contains_coords',

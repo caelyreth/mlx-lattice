@@ -602,7 +602,7 @@ NativeKernelRelation make_generative_relation(
     Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
     Triple stride
 ) {
-    auto offsets = kernel_offsets(kernel_size);
+    auto offsets = indexed_kernel_offsets(kernel_size);
     auto offset_values = make_offsets_array(offsets);
     auto rows = coords.shape(0);
     auto kernel_count = int(offsets.size());
@@ -636,7 +636,7 @@ NativeKernelRelation make_transposed_kernel_relation(
     Triple padding, // NOLINT(bugprone-easily-swappable-parameters)
     Triple dilation
 ) {
-    auto offsets = kernel_offsets(kernel_size, dilation);
+    auto offsets = indexed_kernel_offsets(kernel_size, dilation);
     auto offset_values = make_offsets_array(offsets);
     auto rows = coords.shape(0);
     auto kernel_count = int(offsets.size());

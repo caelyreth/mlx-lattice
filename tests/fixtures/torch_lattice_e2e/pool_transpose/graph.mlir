@@ -1,0 +1,23 @@
+module attributes {
+  lattice.ir_version = 0,
+  lattice.schema_digest = "33a97d62e5b150b98940c62284f42b326e879cc4aca2747cdbc0d77c851f66c7",
+  lattice.input_names = ["source_coords", "source_features", "source_active", "target_coords", "target_features", "target_active"],
+  lattice.input_roles = ["sparse_coords", "sparse_features", "sparse_active", "sparse_coords", "sparse_features", "sparse_active"],
+  lattice.output_names = ["output"],
+  lattice.output_roles = ["sparse_tensor"],
+  lattice.weight_file = "weights.safetensors"
+} {
+  func.func @forward(
+    %source_coords: tensor<?x4xi32>,
+    %source_features: tensor<?x2xf32>,
+    %source_active: tensor<1xi32>,
+    %target_coords: tensor<?x4xi32>,
+    %target_features: tensor<?x1xf32>,
+    %target_active: tensor<1xi32>
+  ) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32> {
+    %source = lattice.sparse.make %source_coords, %source_features, %source_active {stride = array<i64: 2, 1, 1>, coord_order = #lattice.coord<batch_x_y_z>} : (tensor<?x4xi32>, tensor<?x2xf32>, tensor<1xi32>) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
+    %target = lattice.sparse.make %target_coords, %target_features, %target_active {stride = array<i64: 1, 1, 1>, coord_order = #lattice.coord<batch_x_y_z>} : (tensor<?x4xi32>, tensor<?x1xf32>, tensor<1xi32>) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
+    %up = lattice.pool_transpose3d %source, %target {kernel_size = array<i64: 3, 1, 1>, stride = array<i64: 2, 1, 1>, padding = array<i64: 1, 0, 0>, dilation = array<i64: 1, 1, 1>} : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>, !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
+    return %up : !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
+  }
+}

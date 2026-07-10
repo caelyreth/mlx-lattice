@@ -599,6 +599,44 @@ void register_coords(nb::module_& module) {
         "Build a direct implicit-GEMM relation view."
     );
     module.def(
+        "build_target_transposed_implicit_gemm_view",
+        [](nb::handle source_coords,
+           nb::handle source_active_rows,
+           nb::handle target_coords,
+           nb::handle target_active_rows,
+           nb::handle offsets,
+           Triple stride,
+           Triple padding) {
+            return implicit_gemm_view_tuple(build_relation_implicit_gemm_view(
+                array_arg(source_coords, "source_coords"),
+                array_arg(source_active_rows, "source_active_rows"),
+                array_arg(target_coords, "target_coords"),
+                array_arg(target_active_rows, "target_active_rows"),
+                array_arg(offsets, "offsets"),
+                CoordRelationOp::Transposed,
+                stride,
+                padding
+            ));
+        },
+        "source_coords"_a,
+        "source_active_rows"_a,
+        "target_coords"_a,
+        "target_active_rows"_a,
+        "offsets"_a,
+        "stride"_a,
+        "padding"_a,
+        nb::sig(
+            "def build_target_transposed_implicit_gemm_view(source_coords: "
+            "mlx.core.array, source_active_rows: mlx.core.array, "
+            "target_coords: mlx.core.array, target_active_rows: "
+            "mlx.core.array, offsets: mlx.core.array, "
+            "stride: collections.abc.Sequence[int], "
+            "padding: collections.abc.Sequence[int]) -> "
+            "tuple[mlx.core.array, mlx.core.array]"
+        ),
+        "Build an explicit-target transposed implicit-GEMM relation view."
+    );
+    module.def(
         "build_knn_relation",
         [](nb::handle source_coords,
            nb::handle source_active_rows,

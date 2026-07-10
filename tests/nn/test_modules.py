@@ -572,6 +572,24 @@ def test_transpose_and_pool_modules_wrap_sparse_policies() -> None:
     assert active_feats(pooled).tolist() == active_feats(out).tolist()
 
 
+def test_pool_transpose_module_accepts_explicit_target() -> None:
+    coarse = SparseTensor(
+        mx.array([[0, 0, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0]], dtype=mx.float32),
+        stride=2,
+    )
+    target = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32),
+        mx.zeros((2, 1), dtype=mx.float32),
+    )
+
+    out = lnn.PoolTranspose3d(kernel_size=(2, 1, 1), stride=2)(
+        coarse, target
+    )
+
+    assert active_feats(out).tolist() == [[2.0], [2.0]]
+
+
 def test_global_pool_modules_return_dense_batch_features() -> None:
     x = sparse_collate(
         [

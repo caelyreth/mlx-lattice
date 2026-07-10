@@ -44,4 +44,28 @@ std::vector<Triple> kernel_offsets(
     return out;
 }
 
+std::vector<Triple> indexed_kernel_offsets(
+    Triple kernel_size, // NOLINT(bugprone-easily-swappable-parameters)
+    Triple dilation
+) {
+    validate_positive(kernel_size, "kernel_size");
+    validate_positive(dilation, "dilation");
+
+    std::vector<Triple> out;
+    out.reserve(
+        static_cast<std::size_t>(kernel_size[0]) * kernel_size[1] *
+        kernel_size[2]
+    );
+    for (int x = 0; x < kernel_size[0]; ++x) {
+        for (int y = 0; y < kernel_size[1]; ++y) {
+            for (int z = 0; z < kernel_size[2]; ++z) {
+                out.push_back(
+                    {x * dilation[0], y * dilation[1], z * dilation[2]}
+                );
+            }
+        }
+    }
+    return out;
+}
+
 } // namespace mlx_lattice

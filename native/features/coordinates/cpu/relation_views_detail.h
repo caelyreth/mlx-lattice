@@ -143,12 +143,25 @@ void write_relation_implicit_gemm_view(
     for (int out_row = 0; out_row < output_active; ++out_row) {
         auto out_coord = output_values[static_cast<std::size_t>(out_row)];
         for (int kernel = 0; kernel < shape.kernel_count; ++kernel) {
+            auto offset = offsets[static_cast<std::size_t>(kernel)];
             auto candidate = kernel_input_coord(
-                out_coord,
-                offsets[static_cast<std::size_t>(kernel)],
-                shape.stride,
-                shape.padding
+                out_coord, offset, shape.stride, shape.padding
             );
+            if (shape.op == CoordRelationOp::Transposed) {
+                auto x = out_coord[1] + shape.padding[0] - offset[0];
+                auto y = out_coord[2] + shape.padding[1] - offset[1];
+                auto z = out_coord[3] + shape.padding[2] - offset[2];
+                if (x % shape.stride[0] != 0 || y % shape.stride[1] != 0 ||
+                    z % shape.stride[2] != 0) {
+                    continue;
+                }
+                candidate = {
+                    out_coord[0],
+                    x / shape.stride[0],
+                    y / shape.stride[1],
+                    z / shape.stride[2],
+                };
+            }
             auto found = source_rows.find(candidate);
             if (found == source_rows.end() || found->second >= source_active) {
                 continue;

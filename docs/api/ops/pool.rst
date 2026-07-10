@@ -15,6 +15,11 @@ requires at least one contributing row for every output row. Global pooling
 uses ``batch_counts`` metadata from the input sparse tensor and returns a dense
 ``(B, C)`` MLX array.
 
+``pool_transpose3d`` reverses sparse resolution by averaging each coarse row
+over a transposed kernel relation. Without a target it generates fine support;
+with a target tensor it preserves that tensor's coordinates and emits zeros for
+target rows with no contributors.
+
 Related pages
 -------------
 

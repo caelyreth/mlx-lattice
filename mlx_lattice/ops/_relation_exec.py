@@ -141,7 +141,7 @@ def sparse_conv_features_sorted_from_relation(
     view = relation.require_sorted_implicit_gemm()
     return ext.sparse_conv_features_sorted_implicit_gemm(
         feats,
-        _mapped_weight(weight),
+        mapped_conv_weight(weight),
         view.sorted_out_in_map,
         view.sorted_kv_out_in_map,
         view.reorder_rows,
@@ -181,7 +181,7 @@ def sparse_conv_features_sorted_direct_reference_from_relation(
     view = relation.require_sorted_implicit_gemm()
     return ext.sparse_conv_features_sorted_direct_reference(
         feats,
-        _mapped_weight(weight),
+        mapped_conv_weight(weight),
         view.sorted_out_in_map,
         view.reorder_rows,
         view.tile_masks,
@@ -219,7 +219,7 @@ def _can_use_sorted_implicit_gemm(
     )
 
 
-def _mapped_weight(weight: mx.array) -> mx.array:
+def mapped_conv_weight(weight: mx.array) -> mx.array:
     if weight.ndim == 3:
         return weight
     cache_key = id(weight)
@@ -233,9 +233,12 @@ def _mapped_weight(weight: mx.array) -> mx.array:
             and cached_dtype == weight.dtype
         ):
             return cached_weight
-    channels = int(weight.shape[0])
+    out_channels = int(weight.shape[0])
+    in_channels = int(weight.shape[4])
     packed = mx.contiguous(
-        weight.transpose(1, 2, 3, 4, 0).reshape((-1, channels, channels))
+        weight.transpose(1, 2, 3, 4, 0).reshape(
+            (-1, in_channels, out_channels)
+        )
     )
 
     def clear_cached_weight(

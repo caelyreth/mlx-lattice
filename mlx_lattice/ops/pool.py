@@ -25,6 +25,7 @@ __all__ = [
     'global_sum_pool',
     'max_pool3d',
     'pool3d',
+    'pool_transpose3d',
     'sum_pool3d',
 ]
 
@@ -144,6 +145,101 @@ def avg_pool3d(
     return pool3d(
         x,
         mode='avg',
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+    )
+
+
+@lattice_lowering
+def pool_transpose3d(
+    x: SparseTensor,
+    target: SparseTensor | None = None,
+    *,
+    kernel_size: int | Sequence[int] = 2,
+    stride: int | Sequence[int] = 2,
+    padding: int | Sequence[int] = 0,
+    dilation: int | Sequence[int] = 1,
+) -> SparseTensor:
+    """Average coarse features onto generated or explicit fine support."""
+    spec = KernelSpec(
+        size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+    )
+    output_stride = _div_stride(x.stride, spec.stride)
+    if target is None:
+        relation = x.coord_manager.transposed_kernel_relation(
+            x.coord_key,
+            kernel_size=spec.size,
+            stride=spec.stride,
+            padding=spec.padding,
+            dilation=spec.dilation,
+        )
+        if relation.out_coords is None:
+            raise ValueError(
+                'transposed relation is missing output coordinates.'
+            )
+        feats = sparse_pool_features_from_relation(
+            x.feats,
+            relation,
+            input_exclusive=False,
+            mode='avg',
+        )
+        return SparseTensor(
+            relation.out_coords,
+            feats,
+            stride=output_stride,
+            coord_manager=x.coord_manager,
+            active_rows=relation.out_count,
+        )
+
+    if target.stride != output_stride:
+        raise ValueError(
+            f'target stride {target.stride} does not match transposed output '
+            f'stride {output_stride}.'
+        )
+    target_key = (
+        target.coord_key
+        if target.coord_manager is x.coord_manager
+        else x.coord_manager.insert_coords(
+            target.coords, target.stride, target.active_rows
+        )
+    )
+    view = x.coord_manager.target_transposed_view(
+        x.coord_key,
+        target_key,
+        kernel_size=spec.size,
+        stride=spec.stride,
+        padding=spec.padding,
+        dilation=spec.dilation,
+    )
+    feats = _average_from_out_in_map(x.feats, view.out_in_map)
+    return SparseTensor(
+        x.coord_manager.coords(target_key),
+        feats,
+        stride=output_stride,
+        coord_manager=x.coord_manager,
+        active_rows=x.coord_manager.active_rows(target_key),
+    )
+
+
+@artifact_lowering(op=pool_transpose3d)
+def pool_transpose3d_from_artifact(
+    input: SparseTensor,
+    target: SparseTensor | None = None,
+    *,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+) -> SparseTensor:
+    """Lower lattice.pool_transpose3d artifacts."""
+    return pool_transpose3d(
+        input,
+        target,
         kernel_size=kernel_size,
         stride=stride,
         padding=padding,
@@ -429,8 +525,30 @@ def _input_exclusive(spec: KernelSpec) -> bool:
     )
 
 
+def _average_from_out_in_map(
+    feats: mx.array,
+    out_in_map: mx.array,
+) -> mx.array:
+    valid = out_in_map >= 0
+    rows = mx.maximum(out_in_map, 0)
+    gathered = mx.take(feats, rows, axis=0)
+    mask = valid[..., None].astype(feats.dtype)
+    summed = mx.sum(gathered * mask, axis=1)
+    counts = mx.sum(mask, axis=1)
+    return mx.where(counts > 0, summed / mx.maximum(counts, 1), summed)
+
+
 def _mul_stride(lhs: Triple, rhs: Triple) -> Triple:
     return (lhs[0] * rhs[0], lhs[1] * rhs[1], lhs[2] * rhs[2])
+
+
+def _div_stride(lhs: Triple, rhs: Triple) -> Triple:
+    values = []
+    for left, right in zip(lhs, rhs, strict=True):
+        if left % right:
+            raise ValueError('transpose stride must divide input stride.')
+        values.append(left // right)
+    return (values[0], values[1], values[2])
 
 
 def _pool_mode(value: str) -> PoolMode:

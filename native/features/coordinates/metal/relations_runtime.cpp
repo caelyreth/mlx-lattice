@@ -554,6 +554,8 @@ void eval_relation_implicit_gemm_view(
     encoder.set_bytes(shape.mask_words, 12);
     bind_triple_bytes(encoder, shape.stride, 13);
     bind_triple_bytes(encoder, shape.padding, 16);
+    auto transposed = int(shape.op == CoordRelationOp::Transposed);
+    encoder.set_bytes(transposed, 19);
     dispatch_1d(encoder, build, static_cast<size_t>(total_slots));
 #else
     (void)shape;

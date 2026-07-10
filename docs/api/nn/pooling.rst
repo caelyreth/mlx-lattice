@@ -28,6 +28,9 @@ Module summary
    * - ``SumPool3d`` / ``MaxPool3d`` / ``AvgPool3d``
      - Fixed local reduction mode.
      - ``SparseTensor``
+   * - ``PoolTranspose3d``
+     - Contributor average on generated or explicit target support.
+     - ``SparseTensor``
    * - ``GlobalSumPool`` / ``GlobalAvgPool`` / ``GlobalMaxPool``
      - Batch-wise dense reduction.
      - MLX array

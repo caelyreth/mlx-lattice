@@ -28,6 +28,28 @@ The denominator in average pooling is the sparse neighbor count for the output
 row. It is not the dense kernel volume unless every dense kernel position is
 active.
 
+Pooling transpose
+-----------------
+
+Pooling transpose applies the inverse coordinate relation and averages the
+coarse rows that reach each fine output row. For source coordinate :math:`s`
+and kernel offset :math:`k`, generated coordinates satisfy
+
+.. math::
+
+   t = s \odot \operatorname{stride}
+       + k \odot \operatorname{dilation} - \operatorname{padding}.
+
+The generated route deduplicates this support. The explicit-target route keeps
+the target's row order and support exactly, using a cached native implicit-GEMM
+``(N_{out}, K)`` relation view. Both routes divide by the number of valid source
+contributors; an unmatched target row receives zero. The target sparse stride
+must equal the source stride divided component-wise by the operation stride.
+
+This is the MLX equivalent of MinkowskiEngine
+``MinkowskiPoolingTranspose``. ``expand_coordinates=True`` maps to the generated
+route; passing ``coordinates=target`` maps to the explicit-target route.
+
 Backend routes
 --------------
 
@@ -50,6 +72,12 @@ Backend routes
    * - Local pooling JVP
      - Forward-mode transform
      - ``sparse_pool_relation_jvp_f32_i32``.
+   * - Generated pooling transpose
+     - No target support supplied
+     - Native transposed kernel relation and average reduction.
+   * - Target pooling transpose
+     - Explicit fine support supplied
+     - Cached native target-transposed implicit-GEMM view and averaged gathers.
    * - Global pooling
      - ``batch_counts`` metadata present
      - MLX dense reductions or scatter reductions over batch ids.

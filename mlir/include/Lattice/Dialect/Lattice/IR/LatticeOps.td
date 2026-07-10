@@ -229,6 +229,23 @@ def Lattice_Pool3DOp : Lattice_Op<"pool3d"> {
   }];
 }
 
+def Lattice_PoolTranspose3DOp : Lattice_Op<"pool_transpose3d"> {
+  let summary = "Sparse average-pooling transpose";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Optional<Lattice_SparseTensorType>:$target,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    DenseI64ArrayAttr:$padding,
+    DenseI64ArrayAttr:$dilation
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input (`,` $target^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 def Lattice_GlobalPoolOp : Lattice_Op<"global_pool", [Pure]> {
   let summary = "Batch-wise global sparse pooling";
   let arguments = (ins

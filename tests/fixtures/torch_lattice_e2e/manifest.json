@@ -7,6 +7,7 @@
     "quantized_classifier_int4",
     "transpose_convolution",
     "generative_transpose_convolution",
-    "normalized_convolution"
+    "normalized_convolution",
+    "pool_transpose"
   ]
 }

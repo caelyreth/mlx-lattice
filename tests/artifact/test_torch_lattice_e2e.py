@@ -93,6 +93,29 @@ def test_torch_lattice_point_voxel_artifact_runs_on_mlx() -> None:
     assert mx.allclose(output, expected, rtol=1e-4, atol=1e-4).item()
 
 
+def test_torch_lattice_pool_transpose_artifact_runs_on_mlx() -> None:
+    case = FIXTURE_ROOT / 'pool_transpose'
+    program = load_lattice_program(case)
+    inputs = mx.load(str(case / 'inputs.safetensors'))
+    expected = mx.load(str(case / 'expected.safetensors'))
+
+    output = program(
+        source=_sparse_input(
+            inputs,
+            prefix='source_',
+            batch_counts=(2,),
+            stride=(2, 1, 1),
+        ),
+        target=_sparse_input(
+            inputs,
+            prefix='target_',
+            batch_counts=(4,),
+        ),
+    )
+
+    _assert_sparse_output_close(output, expected, rtol=1e-5, atol=1e-6)
+
+
 @pytest.mark.parametrize(
     ('case_name', 'batch_counts', 'input_prefix'),
     [
@@ -127,12 +150,14 @@ def _sparse_input(
     *,
     batch_counts: tuple[int, ...],
     prefix: str = '',
+    stride: int | tuple[int, int, int] = 1,
 ) -> SparseTensor:
     return SparseTensor(
         inputs[f'{prefix}coords'],
         inputs[f'{prefix}features'],
         active_rows=inputs[f'{prefix}active'],
         batch_counts=batch_counts,
+        stride=stride,
     )
 
 

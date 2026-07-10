@@ -79,6 +79,42 @@ def build_relation_implicit_gemm_view(
     return RelationImplicitGemmView(out_in_map, row_masks=row_masks)
 
 
+def build_target_transposed_implicit_gemm_view(
+    source_coords: mx.array,
+    target_coords: mx.array,
+    *,
+    source_active_rows: mx.array,
+    target_active_rows: mx.array,
+    kernel_size: int | Sequence[int] = 2,
+    stride: int | Sequence[int] = 2,
+    padding: int | Sequence[int] = 0,
+    dilation: int | Sequence[int] = 1,
+) -> RelationImplicitGemmView:
+    """Build a target-row by kernel map for transposed sparse geometry."""
+    validate_coords(source_coords)
+    validate_coords(target_coords)
+    _require_matching_coord_dtype(source_coords, target_coords)
+    spec = KernelSpec(
+        size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+    )
+    offsets = _offset_array(
+        _indexed_kernel_offsets(spec.size, spec.dilation)
+    )
+    out_in_map, row_masks = ext.build_target_transposed_implicit_gemm_view(
+        source_coords,
+        source_active_rows,
+        target_coords,
+        target_active_rows,
+        offsets,
+        spec.stride,
+        spec.padding,
+    )
+    return RelationImplicitGemmView(out_in_map, row_masks=row_masks)
+
+
 def build_target_kernel_relation(
     coords: mx.array,
     target_coords: mx.array,
@@ -150,6 +186,22 @@ def kernel_offsets(
         for x in axes[0]
         for y in axes[1]
         for z in axes[2]
+    )
+
+
+def _indexed_kernel_offsets(
+    kernel_size: int | Sequence[int],
+    dilation: int | Sequence[int] = 1,
+) -> tuple[Triple, ...]:
+    kernel = triple(kernel_size, name='kernel_size')
+    rate = triple(dilation, name='dilation')
+    _require_positive(kernel, 'kernel_size')
+    _require_positive(rate, 'dilation')
+    return tuple(
+        (x * rate[0], y * rate[1], z * rate[2])
+        for x in range(kernel[0])
+        for y in range(kernel[1])
+        for z in range(kernel[2])
     )
 
 
@@ -246,7 +298,7 @@ def build_generative_relation(
     _require_positive(kernel, 'kernel_size')
     _require_positive(step, 'stride')
 
-    offsets = kernel_offsets(kernel)
+    offsets = _indexed_kernel_offsets(kernel)
     source_active = _active_rows(active_rows, coords)
     native = ext.build_generative_relation(
         coords,
@@ -284,7 +336,7 @@ def build_transposed_kernel_relation(
     _require_nonnegative(pad, 'padding')
     _require_positive(rate, 'dilation')
 
-    offsets = kernel_offsets(kernel, rate)
+    offsets = _indexed_kernel_offsets(kernel, rate)
     source_active = _active_rows(active_rows, coords)
     native = ext.build_transposed_kernel_relation(
         coords,

@@ -640,6 +640,26 @@ LogicalResult Pool3DOp::verify() {
     );
 }
 
+LogicalResult PoolTranspose3DOp::verify() {
+    if (failed(verifySparseRank(getOperation(), getInput().getType())) ||
+        failed(verifySparseRank(getOperation(), getResult().getType()))) {
+        return failure();
+    }
+    if (getTarget() &&
+        failed(verifySparseRank(getOperation(), getTarget().getType()))) {
+        return failure();
+    }
+    return verifyConvTriples(
+        getOperation(),
+        ConvTriples{
+            .kernelSize = getKernelSize(),
+            .stride = getStride(),
+            .padding = getPadding(),
+            .dilation = getDilation(),
+        }
+    );
+}
+
 LogicalResult GlobalPoolOp::verify() {
     auto inputType = getInput().getType();
     auto resultType = cast<RankedTensorType>(getResult().getType());

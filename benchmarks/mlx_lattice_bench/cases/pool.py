@@ -12,6 +12,7 @@ from mlx_lattice.ops import (
     global_max_pool,
     global_sum_pool,
     max_pool3d,
+    pool_transpose3d,
     sum_pool3d,
 )
 
@@ -26,12 +27,15 @@ type PoolKind = Literal[
     'global_sum',
     'global_max',
     'global_avg',
+    'transpose_generated',
+    'transpose_target',
 ]
 
 
 @dataclass(frozen=True, slots=True)
 class PoolInputs:
     x: SparseTensor
+    coarse: SparseTensor
 
 
 def cases(
@@ -55,6 +59,8 @@ def cases(
             ('global_sum_pool', 'global_sum'),
             ('global_max_pool', 'global_max'),
             ('global_avg_pool', 'global_avg'),
+            ('pool_transpose3d_generated', 'transpose_generated'),
+            ('pool_transpose3d_target', 'transpose_target'),
         )
     )
 
@@ -70,7 +76,7 @@ def _case(
         params=params,
         setup=_setup,
         prepare=_prepare,
-        run=lambda inputs: _run(kind, inputs.x),
+        run=lambda inputs: _run(kind, inputs.x, inputs.coarse),
         compiled=_compiled(kind),
         backward=_backward(kind),
         units=('elements', 'n_in', 'n_out'),
@@ -86,10 +92,13 @@ def _setup(params: Mapping[str, Any]) -> SparseArrays:
 
 
 def _prepare(fixture: SparseArrays) -> PoolInputs:
-    return PoolInputs(fixture.tensor())
+    x = fixture.tensor()
+    return PoolInputs(x, sum_pool3d(x, kernel_size=2, stride=2))
 
 
-def _run(kind: PoolKind, x: SparseTensor) -> Any:
+def _run(
+    kind: PoolKind, x: SparseTensor, coarse: SparseTensor | None = None
+) -> Any:
     if kind == 'sum':
         return sum_pool3d(x, kernel_size=2, stride=2)
     if kind == 'max':
@@ -100,6 +109,14 @@ def _run(kind: PoolKind, x: SparseTensor) -> Any:
         return global_sum_pool(x)
     if kind == 'global_max':
         return global_max_pool(x)
+    if kind == 'transpose_generated':
+        if coarse is None:
+            raise ValueError('pooling transpose requires a coarse input.')
+        return pool_transpose3d(coarse, kernel_size=2, stride=2)
+    if kind == 'transpose_target':
+        if coarse is None:
+            raise ValueError('pooling transpose requires a coarse input.')
+        return pool_transpose3d(coarse, x, kernel_size=2, stride=2)
     return global_avg_pool(x)
 
 
@@ -108,14 +125,15 @@ def _compiled(
 ) -> Callable[[SparseArrays], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: SparseArrays) -> tuple[Any, tuple[Any, ...]]:
         base = fixture.tensor()
+        coarse = sum_pool3d(base, kernel_size=2, stride=2)
 
         def fn(feats: mx.array) -> Any:
             x = base.replace(feats=feats)
-            return (
-                _run(kind, x).feats
-                if kind in ('sum', 'max', 'avg')
-                else _run(kind, x)
+            current_coarse = coarse.replace(
+                feats=sum_pool3d(x, kernel_size=2, stride=2).feats
             )
+            out = _run(kind, x, current_coarse)
+            return out.feats if isinstance(out, SparseTensor) else out
 
         return fn, (fixture.feats,)
 
@@ -127,11 +145,15 @@ def _backward(
 ) -> Callable[[SparseArrays], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: SparseArrays) -> tuple[Any, tuple[Any, ...]]:
         base = fixture.tensor()
+        coarse = sum_pool3d(base, kernel_size=2, stride=2)
 
         def loss(feats: mx.array) -> mx.array:
             x = base.replace(feats=feats)
-            out = _run(kind, x)
-            values = out.feats if kind in ('sum', 'max', 'avg') else out
+            current_coarse = coarse.replace(
+                feats=sum_pool3d(x, kernel_size=2, stride=2).feats
+            )
+            out = _run(kind, x, current_coarse)
+            values = out.feats if isinstance(out, SparseTensor) else out
             return mx.sum(values)
 
         return mx.grad(loss), (fixture.feats,)

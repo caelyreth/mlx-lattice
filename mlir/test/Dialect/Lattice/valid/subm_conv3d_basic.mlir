@@ -1,7 +1,7 @@
 // Valid: submanifold convolution preserves sparse support.
 module attributes {
   lattice.ir_version = 0,
-  lattice.schema_digest = "8a5ace10e29b47304594c1b66608ab64318c68568a69f4dcbc1ed8c570d73088",
+  lattice.schema_digest = "33a97d62e5b150b98940c62284f42b326e879cc4aca2747cdbc0d77c851f66c7",
   lattice.input_names = ["input0", "input1", "input2"],
   lattice.input_roles = ["tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],

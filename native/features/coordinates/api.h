@@ -8,6 +8,8 @@ namespace mlx_lattice {
 
 std::vector<Triple> kernel_offsets(Triple kernel_size);
 std::vector<Triple> kernel_offsets(Triple kernel_size, Triple dilation);
+std::vector<Triple>
+indexed_kernel_offsets(Triple kernel_size, Triple dilation = {1, 1, 1});
 
 NativeCoordSet downsample_coords(const mx::array& coords, Triple stride);
 NativeCoordSet union_coords(const mx::array& lhs, const mx::array& rhs);

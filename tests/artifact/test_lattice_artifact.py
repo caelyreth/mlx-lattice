@@ -264,6 +264,7 @@ def test_native_lattice_mlir_plan_exposes_typed_abi_metadata() -> None:
         pytest.skip('MLIR-enabled native extension is not available.')
 
     plan = ext.lattice_mlir_plan(_pointwise_graph())
+    plan_ops = cast(list[dict[str, object]], plan['ops'])
 
     assert plan['ir_version'] == CURRENT_DIALECT_VERSION
     assert plan['schema_digest'] == DIALECT_SCHEMA_DIGEST
@@ -288,13 +289,13 @@ def test_native_lattice_mlir_plan_exposes_typed_abi_metadata() -> None:
             'role': 'sparse_active',
         },
     ]
-    assert plan['ops'][0]['name'] == 'lattice.sparse.make'
-    assert plan['ops'][0]['operand_types'] == [
+    assert plan_ops[0]['name'] == 'lattice.sparse.make'
+    assert plan_ops[0]['operand_types'] == [
         'tensor<?x4xi32>',
         'tensor<?x3xf16>',
         'tensor<1xi32>',
     ]
-    assert plan['ops'][0]['result_types'] == [
+    assert plan_ops[0]['result_types'] == [
         '!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, '
         'feature = row_channel, dtype = f16>'
     ]

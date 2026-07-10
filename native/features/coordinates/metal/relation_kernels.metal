@@ -790,6 +790,7 @@ using namespace metal;
     constant const int& pad_x [[buffer(16)]],
     constant const int& pad_y [[buffer(17)]],
     constant const int& pad_z [[buffer(18)]],
+    constant const int& transposed [[buffer(19)]],
     uint elem [[thread_position_in_grid]]
 ) {
     int total = output_rows * kernel_count;
@@ -806,15 +807,29 @@ using namespace metal;
 
     int out_base = out_row * 4;
     int offset_base = kernel_id * 3;
-    int candidate[4] = {
-        output_coords[out_base],
-        output_coords[out_base + 1] * stride_x + kernel_offsets[offset_base] -
-            pad_x,
-        output_coords[out_base + 2] * stride_y +
-            kernel_offsets[offset_base + 1] - pad_y,
-        output_coords[out_base + 3] * stride_z +
-            kernel_offsets[offset_base + 2] - pad_z,
-    };
+    int candidate[4];
+    candidate[0] = output_coords[out_base];
+    if (transposed != 0) {
+        int x =
+            output_coords[out_base + 1] + pad_x - kernel_offsets[offset_base];
+        int y = output_coords[out_base + 2] + pad_y -
+                kernel_offsets[offset_base + 1];
+        int z = output_coords[out_base + 3] + pad_z -
+                kernel_offsets[offset_base + 2];
+        if (x % stride_x != 0 || y % stride_y != 0 || z % stride_z != 0) {
+            return;
+        }
+        candidate[1] = x / stride_x;
+        candidate[2] = y / stride_y;
+        candidate[3] = z / stride_z;
+    } else {
+        candidate[1] = output_coords[out_base + 1] * stride_x +
+                       kernel_offsets[offset_base] - pad_x;
+        candidate[2] = output_coords[out_base + 2] * stride_y +
+                       kernel_offsets[offset_base + 1] - pad_y;
+        candidate[3] = output_coords[out_base + 3] * stride_z +
+                       kernel_offsets[offset_base + 2] - pad_z;
+    }
     int in_row = lookup_coord_row_hash(
         source_coords, table_rows, table_capacity, candidate
     );

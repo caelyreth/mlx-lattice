@@ -405,6 +405,21 @@ def pool3d() -> None:
 
 
 @LATTICE_DIALECT.op(
+    'pool_transpose3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('target', 'sparse_tensor', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=_CONV_ATTRS,
+    assembly='functional',
+    summary='Sparse average-pooling transpose',
+)
+def pool_transpose3d() -> None:
+    """Register lattice.pool_transpose3d."""
+
+
+@LATTICE_DIALECT.op(
     'global_pool',
     operands=(operand('input', 'sparse_tensor'),),
     results=(result('result', 'tensor'),),

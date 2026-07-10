@@ -272,11 +272,6 @@ NativeRelationImplicitGemmView build_relation_implicit_gemm_view(
             "offsets must have shape (K, 3) and int32 dtype."
         );
     }
-    if (op != CoordRelationOp::Forward) {
-        throw std::invalid_argument(
-            "implicit GEMM view currently supports forward-style relations."
-        );
-    }
     return make_relation_implicit_gemm_view(
         source_coords,
         source_active_rows,

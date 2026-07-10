@@ -27,6 +27,7 @@ def test_lattice_dialect_schema_is_annotation_backed() -> None:
     assert 'normalized_conv_transpose3d' in digest['ops']
     assert 'normalized_generative_conv_transpose3d' in digest['ops']
     assert 'pool3d' in digest['ops']
+    assert 'pool_transpose3d' in digest['ops']
     assert 'global_pool' in digest['ops']
     assert 'voxelize' in digest['ops']
     assert 'devoxelize' in digest['ops']
