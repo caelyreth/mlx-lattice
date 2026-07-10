@@ -31,6 +31,7 @@ def test_kernel_spec_normalizes_and_classifies_common_paths() -> None:
     assert pointwise.is_centered_submanifold
     assert subm.volume == 27
     assert subm.is_centered_submanifold
+    assert KernelSpec(size=3, dilation=2).is_centered_submanifold
     assert not KernelSpec(size=2).is_centered_submanifold
 
 

@@ -2,6 +2,7 @@
 
 #include "bindings/array_arg.h"
 
+#include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
 
 #include <stdexcept>
@@ -14,64 +15,6 @@ namespace mlx_lattice::bindings {
 using namespace nb::literals;
 
 namespace {
-
-int int_from_python(PyObject* item, const char* name) {
-    (void)name;
-    long value = PyLong_AsLong(item);
-    if (PyErr_Occurred() != nullptr) {
-        throw nb::python_error();
-    }
-    return static_cast<int>(value);
-}
-
-float float_from_python(PyObject* item, const char* name) {
-    (void)name;
-    double value = PyFloat_AsDouble(item);
-    if (PyErr_Occurred() != nullptr) {
-        throw nb::python_error();
-    }
-    return static_cast<float>(value);
-}
-
-Triple triple_from_values(nb::handle values, const char* name) {
-    auto sequence = nb::steal<nb::object>(PySequence_Fast(
-        values.ptr(), (std::string(name) + " must be a sequence.").c_str()
-    ));
-    if (!sequence.is_valid()) {
-        throw nb::python_error();
-    }
-    if (PySequence_Fast_GET_SIZE(sequence.ptr()) != 3) {
-        throw std::invalid_argument(
-            std::string(name) + " must contain exactly 3 values."
-        );
-    }
-    auto** items = PySequence_Fast_ITEMS(sequence.ptr());
-    return {
-        int_from_python(items[0], name),
-        int_from_python(items[1], name),
-        int_from_python(items[2], name),
-    };
-}
-
-FloatTriple float_triple_from_values(nb::handle values, const char* name) {
-    auto sequence = nb::steal<nb::object>(PySequence_Fast(
-        values.ptr(), (std::string(name) + " must be a sequence.").c_str()
-    ));
-    if (!sequence.is_valid()) {
-        throw nb::python_error();
-    }
-    if (PySequence_Fast_GET_SIZE(sequence.ptr()) != 3) {
-        throw std::invalid_argument(
-            std::string(name) + " must contain exactly 3 values."
-        );
-    }
-    auto** items = PySequence_Fast_ITEMS(sequence.ptr());
-    return {
-        float_from_python(items[0], name),
-        float_from_python(items[1], name),
-        float_from_python(items[2], name),
-    };
-}
 
 VoxelReduceOp voxel_reduce_from_name(const std::string& name) {
     if (name == "sum") {
@@ -168,11 +111,10 @@ nb::tuple sparse_alignment_tuple(const NativeSparseAlignment& result) {
 void register_coords(nb::module_& module) {
     module.def(
         "downsample_coords",
-        [](nb::handle coords, nb::handle stride) {
-            return coord_set_tuple(downsample_coords(
-                array_arg(coords, "coords"),
-                triple_from_values(stride, "stride")
-            ));
+        [](nb::handle coords, Triple stride) {
+            return coord_set_tuple(
+                downsample_coords(array_arg(coords, "coords"), stride)
+            );
         },
         "coords"_a,
         "stride"_a,
@@ -333,16 +275,13 @@ void register_coords(nb::module_& module) {
         [](nb::handle points,
            nb::handle batch_indices,
            nb::handle active_rows,
-           nb::handle voxel_size,
-           nb::handle origin) {
+           FloatTriple voxel_size,
+           FloatTriple origin) {
             return quantization_tuple(sparse_quantize(
                 array_arg(points, "points"),
                 array_arg(batch_indices, "batch_indices"),
                 array_arg(active_rows, "active_rows"),
-                QuantizationSpec{
-                    float_triple_from_values(voxel_size, "voxel_size"),
-                    float_triple_from_values(origin, "origin"),
-                }
+                QuantizationSpec{voxel_size, origin}
             ));
         },
         "points"_a,
@@ -394,8 +333,8 @@ void register_coords(nb::module_& module) {
            nb::handle point_active_rows,
            nb::handle voxel_coords,
            nb::handle voxel_active_rows,
-           nb::handle voxel_size,
-           nb::handle origin,
+           FloatTriple voxel_size,
+           FloatTriple origin,
            const std::string& interpolation) {
             return point_voxel_map_tuple(build_point_voxel_map(
                 array_arg(points, "points"),
@@ -403,10 +342,7 @@ void register_coords(nb::module_& module) {
                 array_arg(point_active_rows, "point_active_rows"),
                 array_arg(voxel_coords, "voxel_coords"),
                 array_arg(voxel_active_rows, "voxel_active_rows"),
-                QuantizationSpec{
-                    float_triple_from_values(voxel_size, "voxel_size"),
-                    float_triple_from_values(origin, "origin"),
-                },
+                QuantizationSpec{voxel_size, origin},
                 interpolation_from_name(interpolation)
             ));
         },
@@ -452,17 +388,17 @@ void register_coords(nb::module_& module) {
         "build_kernel_relation",
         [](nb::handle coords,
            nb::handle active_rows,
-           nb::handle kernel_size,
-           nb::handle stride,
-           nb::handle padding,
-           nb::handle dilation) {
+           Triple kernel_size,
+           Triple stride,
+           Triple padding,
+           Triple dilation) {
             return relation_tuple(build_kernel_relation(
                 array_arg(coords, "coords"),
                 array_arg(active_rows, "active_rows"),
-                triple_from_values(kernel_size, "kernel_size"),
-                triple_from_values(stride, "stride"),
-                triple_from_values(padding, "padding"),
-                triple_from_values(dilation, "dilation")
+                kernel_size,
+                stride,
+                padding,
+                dilation
             ));
         },
         "coords"_a,
@@ -489,13 +425,13 @@ void register_coords(nb::module_& module) {
         "build_generative_relation",
         [](nb::handle coords,
            nb::handle active_rows,
-           nb::handle kernel_size,
-           nb::handle stride) {
+           Triple kernel_size,
+           Triple stride) {
             return relation_tuple(build_generative_relation(
                 array_arg(coords, "coords"),
                 array_arg(active_rows, "active_rows"),
-                triple_from_values(kernel_size, "kernel_size"),
-                triple_from_values(stride, "stride")
+                kernel_size,
+                stride
             ));
         },
         "coords"_a,
@@ -518,13 +454,13 @@ void register_coords(nb::module_& module) {
         "build_submanifold_kernel_relation",
         [](nb::handle coords,
            nb::handle active_rows,
-           nb::handle kernel_size,
-           nb::handle dilation) {
+           Triple kernel_size,
+           Triple dilation) {
             return relation_tuple(build_submanifold_kernel_relation(
                 array_arg(coords, "coords"),
                 array_arg(active_rows, "active_rows"),
-                triple_from_values(kernel_size, "kernel_size"),
-                triple_from_values(dilation, "dilation")
+                kernel_size,
+                dilation
             ));
         },
         "coords"_a,
@@ -547,17 +483,17 @@ void register_coords(nb::module_& module) {
         "build_transposed_kernel_relation",
         [](nb::handle coords,
            nb::handle active_rows,
-           nb::handle kernel_size,
-           nb::handle stride,
-           nb::handle padding,
-           nb::handle dilation) {
+           Triple kernel_size,
+           Triple stride,
+           Triple padding,
+           Triple dilation) {
             return relation_tuple(build_transposed_kernel_relation(
                 array_arg(coords, "coords"),
                 array_arg(active_rows, "active_rows"),
-                triple_from_values(kernel_size, "kernel_size"),
-                triple_from_values(stride, "stride"),
-                triple_from_values(padding, "padding"),
-                triple_from_values(dilation, "dilation")
+                kernel_size,
+                stride,
+                padding,
+                dilation
             ));
         },
         "coords"_a,
@@ -586,19 +522,19 @@ void register_coords(nb::module_& module) {
            nb::handle active_rows,
            nb::handle target_coords,
            nb::handle target_active_rows,
-           nb::handle kernel_size,
-           nb::handle stride,
-           nb::handle padding,
-           nb::handle dilation) {
+           Triple kernel_size,
+           Triple stride,
+           Triple padding,
+           Triple dilation) {
             return relation_tuple(build_target_kernel_relation(
                 array_arg(coords, "coords"),
                 array_arg(active_rows, "active_rows"),
                 array_arg(target_coords, "target_coords"),
                 array_arg(target_active_rows, "target_active_rows"),
-                triple_from_values(kernel_size, "kernel_size"),
-                triple_from_values(stride, "stride"),
-                triple_from_values(padding, "padding"),
-                triple_from_values(dilation, "dilation")
+                kernel_size,
+                stride,
+                padding,
+                dilation
             ));
         },
         "coords"_a,
@@ -631,8 +567,8 @@ void register_coords(nb::module_& module) {
            nb::handle output_coords,
            nb::handle output_active_rows,
            nb::handle offsets,
-           nb::handle stride,
-           nb::handle padding) {
+           Triple stride,
+           Triple padding) {
             return implicit_gemm_view_tuple(build_relation_implicit_gemm_view(
                 array_arg(source_coords, "source_coords"),
                 array_arg(source_active_rows, "source_active_rows"),
@@ -640,8 +576,8 @@ void register_coords(nb::module_& module) {
                 array_arg(output_active_rows, "output_active_rows"),
                 array_arg(offsets, "offsets"),
                 CoordRelationOp::Forward,
-                triple_from_values(stride, "stride"),
-                triple_from_values(padding, "padding")
+                stride,
+                padding
             ));
         },
         "source_coords"_a,

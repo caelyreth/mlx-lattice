@@ -16,7 +16,7 @@ def main() -> None:
                 json.dumps(report.to_json(), indent=2) + '\n',
                 encoding='utf-8',
             )
-        print(json.dumps(report.summary, indent=2))
+        print(json.dumps(report.to_json(), indent=2))
         if report.failures:
             raise SystemExit(1)
         return

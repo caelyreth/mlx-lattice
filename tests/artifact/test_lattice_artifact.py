@@ -660,6 +660,30 @@ def test_lattice_artifact_runtime_binds_positional_abi() -> None:
     assert bool(mx.allclose(actual.feats, expected.feats))
 
 
+def test_lattice_artifact_runtime_binds_multiple_sparse_inputs_and_outputs() -> (
+    None
+):
+    x = _input_tensor()
+    target = x.replace(feats=x.feats * 2)
+    program = LatticeProgram(_runtime_plan(_two_sparse_input_plan()), {})
+
+    positional = program(x, target)
+    named = program(x=x, target=target)
+
+    assert isinstance(positional, tuple)
+    assert isinstance(named, tuple)
+    assert len(positional) == len(named) == 2
+    for actual, expected in zip(positional, (x, target), strict=True):
+        assert isinstance(actual, SparseTensor)
+        mx.eval(actual.feats, expected.feats)
+        assert bool(mx.allclose(actual.feats, expected.feats))
+    for actual, expected in zip(named, positional, strict=True):
+        assert isinstance(actual, SparseTensor)
+        assert isinstance(expected, SparseTensor)
+        mx.eval(actual.feats, expected.feats)
+        assert bool(mx.allclose(actual.feats, expected.feats))
+
+
 def test_lattice_artifact_runtime_rejects_missing_keyword_input() -> None:
     x = _input_tensor()
     program = LatticeProgram(
@@ -1156,6 +1180,75 @@ def _sparse_tensor_plan_args() -> list[dict[str, str]]:
             'role': 'sparse_active',
         },
     ]
+
+
+def _two_sparse_input_plan() -> dict[str, object]:
+    args: list[dict[str, str]] = []
+    for offset, prefix in ((0, 'x'), (3, 'target')):
+        args.extend(
+            [
+                {
+                    'name': f'arg{offset}',
+                    'abi_name': f'{prefix}_coords',
+                    'type': 'tensor<?x4xi32>',
+                    'role': 'sparse_coords',
+                },
+                {
+                    'name': f'arg{offset + 1}',
+                    'abi_name': f'{prefix}_features',
+                    'type': 'tensor<?x3xf16>',
+                    'role': 'sparse_features',
+                },
+                {
+                    'name': f'arg{offset + 2}',
+                    'abi_name': f'{prefix}_active',
+                    'type': 'tensor<1xi32>',
+                    'role': 'sparse_active',
+                },
+            ]
+        )
+    return {
+        'ir_version': CURRENT_DIALECT_VERSION,
+        'schema_digest': DIALECT_SCHEMA_DIGEST,
+        'weight_file': ARTIFACT_WEIGHT_FILE,
+        'name': 'forward',
+        'args': args,
+        'ops': [
+            {
+                'name': 'lattice.sparse.make',
+                'operands': ['arg0', 'arg1', 'arg2'],
+                'results': ['x'],
+                'attrs': {
+                    'stride': [1, 1, 1],
+                    'coord_order': 'batch_x_y_z',
+                },
+            },
+            {
+                'name': 'lattice.sparse.make',
+                'operands': ['arg3', 'arg4', 'arg5'],
+                'results': ['target'],
+                'attrs': {
+                    'stride': [1, 1, 1],
+                    'coord_order': 'batch_x_y_z',
+                },
+            },
+        ],
+        'returns': ['x', 'target'],
+        'outputs': [
+            {
+                'name': 'x',
+                'abi_name': 'features',
+                'type': '!lattice.sparse_tensor<f16>',
+                'role': 'sparse_tensor',
+            },
+            {
+                'name': 'target',
+                'abi_name': 'target_features',
+                'type': '!lattice.sparse_tensor<f16>',
+                'role': 'sparse_tensor',
+            },
+        ],
+    }
 
 
 def _quantized_conv_plan(*, bits: int) -> dict[str, object]:

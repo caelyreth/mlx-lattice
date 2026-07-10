@@ -69,21 +69,13 @@ class LatticeProgram:
         kwargs: Mapping[str, Any],
     ) -> dict[str, RuntimeValue]:
         plan_args = self.plan.args
+        if any(
+            isinstance(value, SparseTensor)
+            for value in (*args, *kwargs.values())
+        ):
+            return _bind_logical_inputs(plan_args, args, kwargs)
         value_names = tuple(item.name for item in plan_args)
         abi_names = tuple(item.abi_name for item in plan_args)
-        if len(args) == 1 and isinstance(args[0], SparseTensor):
-            if kwargs:
-                raise ValueError(
-                    'SparseTensor shorthand cannot be combined with keyword '
-                    'artifact inputs.'
-                )
-            coords, features, active = _sparse_tensor_abi_args(plan_args)
-            return {
-                coords: args[0].coords,
-                features: args[0].feats,
-                active: args[0].active_rows,
-            }
-
         if len(args) > len(value_names):
             raise ValueError('too many positional artifact inputs.')
         values: dict[str, RuntimeValue] = {}
@@ -245,24 +237,113 @@ def _runtime_value(value: Any) -> RuntimeValue:
     raise TypeError('artifact inputs must be SparseTensor or MLX arrays.')
 
 
-def _sparse_tensor_abi_args(
+@dataclass(frozen=True, slots=True)
+class _InputGroup:
+    abi_name: str
+    arguments: tuple[PlanArgument, ...]
+
+
+def _bind_logical_inputs(
     plan_args: Sequence[PlanArgument],
-) -> tuple[str, str, str]:
-    if len(plan_args) < 3:
+    args: Sequence[Any],
+    kwargs: Mapping[str, Any],
+) -> dict[str, RuntimeValue]:
+    groups = _input_groups(plan_args)
+    component_names = {argument.abi_name for argument in plan_args}
+    if any(isinstance(value, SparseTensor) for value in args) and (
+        set(kwargs) & component_names
+    ):
         raise ValueError(
-            'SparseTensor shorthand requires coords/features/active artifact '
-            'ABI arguments.'
+            'SparseTensor shorthand cannot be combined with component '
+            'artifact inputs.'
         )
-    expected_roles = ('sparse_coords', 'sparse_features', 'sparse_active')
-    actual_roles = tuple(item.role for item in plan_args[:3])
-    if actual_roles != expected_roles:
-        raise ValueError(
-            'SparseTensor shorthand requires the first three artifact ABI '
-            'arguments to be tagged as sparse_coords, sparse_features, and '
-            'sparse_active by the native MLIR importer.'
-        )
-    return (
-        plan_args[0].name,
-        plan_args[1].name,
-        plan_args[2].name,
+    if len(args) > len(groups):
+        raise ValueError('too many positional artifact inputs.')
+    values: dict[str, RuntimeValue] = {}
+    used: set[str] = set()
+    for group, value in zip(groups, args, strict=False):
+        _bind_input_group(values, group, value)
+    for group in groups[len(args) :]:
+        if group.abi_name not in kwargs:
+            if any(
+                argument.abi_name in kwargs for argument in group.arguments
+            ):
+                raise ValueError(
+                    'SparseTensor shorthand cannot be combined with '
+                    'component artifact inputs.'
+                )
+            raise ValueError(f'missing artifact input: {group.abi_name}')
+        _bind_input_group(values, group, kwargs[group.abi_name])
+        used.add(group.abi_name)
+    unexpected = set(kwargs) - used
+    if unexpected:
+        names = ', '.join(sorted(unexpected))
+        raise ValueError(f'unexpected artifact inputs: {names}')
+    return values
+
+
+def _input_groups(
+    plan_args: Sequence[PlanArgument],
+) -> tuple[_InputGroup, ...]:
+    groups: list[_InputGroup] = []
+    index = 0
+    sparse_roles = ('sparse_coords', 'sparse_features', 'sparse_active')
+    while index < len(plan_args):
+        argument = plan_args[index]
+        if argument.role != 'sparse_coords':
+            groups.append(_InputGroup(argument.abi_name, (argument,)))
+            index += 1
+            continue
+        sparse = tuple(plan_args[index : index + 3])
+        if (
+            len(sparse) != 3
+            or tuple(item.role for item in sparse) != sparse_roles
+        ):
+            raise ValueError(
+                'SparseTensor shorthand requires consecutive sparse_coords, '
+                'sparse_features, and sparse_active ABI arguments.'
+            )
+        groups.append(_InputGroup(_sparse_abi_name(sparse), sparse))
+        index += 3
+    return tuple(groups)
+
+
+def _sparse_abi_name(arguments: tuple[PlanArgument, ...]) -> str:
+    suffixes = ('_coords', '_features', '_active')
+    names = tuple(argument.abi_name for argument in arguments)
+    if names == ('coords', 'features', 'active'):
+        return 'input'
+    prefixes = tuple(
+        name[: -len(suffix)] if name.endswith(suffix) else ''
+        for name, suffix in zip(names, suffixes, strict=True)
     )
+    if not prefixes[0] or len(set(prefixes)) != 1:
+        raise ValueError(
+            'sparse artifact ABI names must share the '
+            '<input>_coords/features/active prefix.'
+        )
+    return prefixes[0]
+
+
+def _bind_input_group(
+    values: dict[str, RuntimeValue],
+    group: _InputGroup,
+    value: Any,
+) -> None:
+    if len(group.arguments) == 1:
+        if isinstance(value, SparseTensor):
+            raise ValueError(
+                'SparseTensor shorthand requires sparse_coords, '
+                'sparse_features, and sparse_active ABI roles.'
+            )
+        values[group.arguments[0].name] = _runtime_value(value)
+        return
+    if not isinstance(value, SparseTensor):
+        raise TypeError(
+            f'artifact input {group.abi_name!r} must be a SparseTensor.'
+        )
+    runtime_values = (value.coords, value.feats, value.active_rows)
+    for argument, runtime_value in zip(
+        group.arguments, runtime_values, strict=True
+    ):
+        values[argument.name] = runtime_value

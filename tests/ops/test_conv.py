@@ -712,6 +712,26 @@ def test_subm_conv3d_reuses_input_coordinate_identity() -> None:
     assert_same_sparse_identity(out, x)
 
 
+def test_subm_conv3d_supports_dilated_centered_kernels() -> None:
+    coords = mx.array(
+        [[0, x, 0, 0] for x in range(5)],
+        dtype=mx.int32,
+    )
+    feats = mx.arange(1, 6, dtype=mx.float32).reshape(-1, 1)
+    x = SparseTensor(coords, feats)
+    weight = mx.ones((1, 3, 1, 1, 1), dtype=mx.float32)
+
+    out = subm_conv3d(
+        x,
+        weight,
+        kernel_size=(3, 1, 1),
+        dilation=(2, 1, 1),
+    )
+
+    assert out.feats.tolist() == [[4.0], [6.0], [9.0], [6.0], [8.0]]
+    assert_same_sparse_identity(out, x)
+
+
 def test_transpose_convs_generate_the_same_output_contract() -> None:
     x = SparseTensor(
         mx.array([[0, 1, 0, 0]], dtype=mx.int32),

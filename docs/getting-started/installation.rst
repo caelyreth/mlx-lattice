@@ -7,6 +7,9 @@ device. The package also contains CPU routes for supported operators. CPU routes
 are useful for development and correctness checks, but the performance-oriented
 paths are Metal-oriented.
 
+The package pins MLX to version ``0.31.2`` because its native extension links
+against the MLX C++ ABI. Build and runtime MLX versions must match exactly.
+
 Installing from a checkout
 --------------------------
 
@@ -27,6 +30,10 @@ The native extension is part of the package. If you change native sources, use a
 normal editable rebuild path rather than assuming Python import reload is
 enough. MLX extension loading happens at import time, and stale build artifacts
 can otherwise make a local run appear inconsistent with the source tree.
+
+.. code-block:: bash
+
+   uv sync --reinstall-package mlx-lattice
 
 MLIR artifact support
 ---------------------

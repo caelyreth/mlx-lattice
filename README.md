@@ -13,7 +13,8 @@ coordinate-aligned sparse algebra, quantized inference weights, and
 
 ### Install
 
-`mlx-lattice` requires Python 3.12 or newer and MLX 0.31 or newer.
+`mlx-lattice` requires Python 3.12 or newer and MLX 0.31.2. The MLX
+version is pinned because the package links against MLX's native C++ ABI.
 
 ```bash
 uv add mlx-lattice

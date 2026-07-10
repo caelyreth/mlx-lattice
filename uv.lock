@@ -349,12 +349,12 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "lattice-contract", editable = "contract" },
-    { name = "mlx", specifier = ">=0.31" },
+    { name = "mlx", specifier = "==0.31.2" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "nanobind", specifier = ">=2" },
+    { name = "nanobind", specifier = "==2.12.0" },
     { name = "prek", specifier = ">=0.4.3" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.15.15" },

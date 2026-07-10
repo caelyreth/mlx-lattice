@@ -68,20 +68,22 @@ def replay_fixtures(path: Path, *, fail_fast: bool = False) -> ReplayReport:
         raise RuntimeError(
             'fixture replay requires an MLIR-enabled native extension.'
         )
-    root = fixture_root(path)
     failures: list[str] = []
     stats: list[CaseStats] = []
-    manifest = json.loads((root / 'manifest.json').read_text())
-    for item in manifest['cases']:
-        case = root / item['name']
-        try:
-            stats.append(_check_case(case, item))
-        except Exception as exc:
-            failures.append(f'{item["name"]}: {type(exc).__name__}: {exc}')
-            if fail_fast:
-                break
+    with fixture_root(path) as root:
+        manifest = json.loads((root / 'manifest.json').read_text())
+        for item in manifest['cases']:
+            case = root / item['name']
+            try:
+                stats.append(_check_case(case, item))
+            except Exception as exc:
+                failures.append(
+                    f'{item["name"]}: {type(exc).__name__}: {exc}'
+                )
+                if fail_fast:
+                    break
     return ReplayReport(
-        fixture_root=root,
+        fixture_root=path,
         schema=manifest.get('schema'),
         stats=stats,
         failures=failures,

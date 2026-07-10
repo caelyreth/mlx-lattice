@@ -8,6 +8,7 @@ __pycache__
 dist
 build
 benchmarks/results/
+.artifacts/
 **/_ext*.so
 **/_ext*.pyd
 **/_ext*.dll

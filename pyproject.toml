@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Z.Y. Lin", email = "me@iki.moe" }]
 keywords = ["mlx", "ml", "sparse", "convolution", "point-cloud"]
-dependencies = ["lattice-contract>=0.3.1,<0.4", "mlx>=0.31"]
+dependencies = ["lattice-contract>=0.3.1,<0.4", "mlx==0.31.2"]
 
 [project.urls]
 Homepage = "https://github.com/caelyreth/mlx-lattice"
@@ -17,7 +17,7 @@ Issues = "https://github.com/caelyreth/mlx-lattice/issues"
 Changelog = "https://github.com/caelyreth/mlx-lattice/releases"
 
 [build-system]
-requires = ["scikit-build-core>=0.12", "nanobind>=2", "mlx>=0.31"]
+requires = ["scikit-build-core>=0.12", "nanobind==2.12.0", "mlx==0.31.2"]
 build-backend = "scikit_build_core.build"
 
 # MARK: - deps
@@ -29,7 +29,13 @@ members = ["benchmarks", "conformance", "contract"]
 lattice-contract = { workspace = true }
 
 [dependency-groups]
-dev = ["nanobind>=2", "prek>=0.4.3", "pytest>=8", "ruff>=0.15.15", "ty>=0.0.42"]
+dev = [
+  "nanobind==2.12.0",
+  "prek>=0.4.3",
+  "pytest>=8",
+  "ruff>=0.15.15",
+  "ty>=0.0.42",
+]
 docs = [
     "furo>=2025.12.19",
     "sphinx>=9.1.0",
@@ -70,10 +76,6 @@ sdist.exclude = [
   "mlx_lattice/**/__pycache__/**",
 ]
 
-[tool.scikit-build.editable]
-rebuild = true
-verbose = false
-
 # MARK: - fmt + lint
 
 [tool.ruff]
@@ -98,4 +100,5 @@ extra-paths = ["benchmarks", "conformance"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["benchmarks", "conformance"]
 addopts = "-ra"

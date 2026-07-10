@@ -63,7 +63,6 @@ class KernelSpec:
         return (
             self.stride == (1, 1, 1)
             and self.padding == (0, 0, 0)
-            and self.dilation == (1, 1, 1)
             and all(value % 2 == 1 for value in self.size)
         )
 

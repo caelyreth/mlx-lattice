@@ -56,6 +56,15 @@ storage. Coordinate results must match exactly across runtimes. Feature results
 are checked with absolute and relative tolerances because CUDA and Metal use
 different floating-point kernels and reduction orders.
 
+Each logical sparse input is represented by three consecutive MLIR arguments
+tagged ``sparse_coords``, ``sparse_features``, and ``sparse_active``. Their ABI
+names share an ``<input>_coords/features/active`` prefix. The MLX program binder
+therefore accepts either low-level component arrays or one ``SparseTensor`` per
+logical input. Multi-input artifacts can be called positionally as
+``program(x, target)`` or by logical name as ``program(x=x, target=target)``.
+Multiple graph returns are preserved as an ordered Python tuple; a single return
+is unwrapped for convenience.
+
 Weights are bound through ``lattice.weight``:
 
 * convolution weights use ``conv3d_o_zyx_i``;
