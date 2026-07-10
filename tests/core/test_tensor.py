@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from mlx_lattice import SparseTensor
@@ -17,6 +19,7 @@ from mlx_lattice.ops import (
     sparse_add,
     sparse_cat_aligned,
     sparse_collate,
+    sparse_from_coordinates,
     sparse_mul,
     sparse_sub,
     topk_rows,
@@ -322,6 +325,64 @@ def test_sparse_collate_decompose_topk_and_prune() -> None:
         [[2, 0, 0], [3, 0, 0]],
     ]
     assert out.feats.tolist() == [[2.0], [3.0]]
+
+
+def test_sparse_construction_averages_duplicate_coordinates() -> None:
+    coords = mx.array(
+        [[0, 2, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+
+    def loss(feats: mx.array) -> mx.array:
+        return mx.sum(
+            sparse_from_coordinates(
+                coords,
+                feats,
+                batch_counts=(3,),
+                duplicate_reduction='mean',
+            ).feats
+        )
+
+    feats = mx.array([[2.0], [5.0], [6.0]], dtype=mx.float32)
+    out = sparse_from_coordinates(
+        coords,
+        feats,
+        batch_counts=(3,),
+        duplicate_reduction='mean',
+    )
+    gradient = mx.grad(loss)(feats)
+
+    assert out.coords.tolist() == [[0, 2, 0, 0], [0, 1, 0, 0]]
+    assert out.feats.tolist() == [[4.0], [5.0]]
+    assert out.batch_counts == (2,)
+    assert gradient.tolist() == [[0.5], [1.0], [0.5]]
+
+
+def test_sparse_collate_applies_duplicate_reduction_per_batch() -> None:
+    out = sparse_collate(
+        [
+            mx.array([[0, 0, 0], [0, 0, 0]], dtype=mx.int32),
+            mx.array([[0, 0, 0]], dtype=mx.int32),
+        ],
+        [
+            mx.array([[2.0], [6.0]], dtype=mx.float32),
+            mx.array([[9.0]], dtype=mx.float32),
+        ],
+        duplicate_reduction='mean',
+    )
+
+    assert out.coords.tolist() == [[0, 0, 0, 0], [1, 0, 0, 0]]
+    assert out.feats.tolist() == [[4.0], [9.0]]
+    assert out.batch_counts == (1, 1)
+
+
+def test_sparse_construction_validates_duplicate_reduction() -> None:
+    with pytest.raises(ValueError, match='duplicate_reduction'):
+        sparse_from_coordinates(
+            mx.zeros((1, 4), dtype=mx.int32),
+            mx.zeros((1, 1), dtype=mx.float32),
+            duplicate_reduction=cast(Any, 'sum'),
+        )
 
 
 def test_batch_partitioned_views_infer_noncontiguous_rows_from_coords() -> (

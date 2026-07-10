@@ -12,6 +12,7 @@ from mlx_lattice.ops import (
     prune_mask,
     reindex_sparse,
     sparse_add,
+    sparse_from_coordinates,
 )
 
 from mlx_lattice_bench.cases.common import benchmark_n, param_grid
@@ -40,6 +41,15 @@ def cases(
         )
     )
     return (
+        BenchmarkCase(
+            name='sparse_construct_mean_duplicates',
+            group='tensor',
+            params=params,
+            setup=_setup,
+            prepare=_prepare,
+            run=_mean_duplicates,
+            units=('elements', 'n_in'),
+        ),
         BenchmarkCase(
             name='prune_mask',
             group='tensor',
@@ -127,3 +137,11 @@ def _backward_sparse_add(
         return mx.sum(sparse_add(x.replace(feats=feats), y).feats)
 
     return mx.grad(loss), (x.feats,)
+
+
+def _mean_duplicates(inputs: TensorInputs) -> SparseTensor:
+    return sparse_from_coordinates(
+        mx.concatenate([inputs.x.coords, inputs.x.coords], axis=0),
+        mx.concatenate([inputs.x.feats, inputs.x.feats], axis=0),
+        duplicate_reduction='mean',
+    )

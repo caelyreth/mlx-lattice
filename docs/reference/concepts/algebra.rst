@@ -102,6 +102,13 @@ batch column, concatenates features, and records ``batch_counts``. This is the
 preferred entry point for building a batched sparse tensor from individual
 samples.
 
+Use ``duplicate_reduction='mean'`` in ``sparse_collate`` or
+``sparse_from_coordinates`` when input coordinates may repeat. It performs an
+unweighted feature mean for each exact integer coordinate, matching
+MinkowskiEngine's ``UNWEIGHTED_AVERAGE`` construction mode. The default
+``'none'`` path assumes the caller already provides unique support. Reduced
+coordinates retain their first-occurrence order.
+
 Related API and references
 --------------------------
 

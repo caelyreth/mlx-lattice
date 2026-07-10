@@ -18,12 +18,64 @@ from mlx_lattice.artifact.lowering import (
     artifact_lowering,
     lattice_lowering,
 )
-from mlx_lattice.core.coords import SparseAlignment, build_sparse_alignment
+from mlx_lattice.core.coords import (
+    SparseAlignment,
+    build_sparse_alignment,
+    inverse_map,
+    union_coords,
+)
 from mlx_lattice.core.tensor import SparseTensor
 from mlx_lattice.core.types import triple
 
 type SparseJoin = Literal['inner', 'left', 'right', 'outer']
 type SparseBinaryMode = Literal['add', 'sub', 'mul', 'maximum', 'minimum']
+type DuplicateReduction = Literal['none', 'mean']
+
+
+def sparse_from_coordinates(
+    coords: mx.array,
+    feats: mx.array,
+    *,
+    stride: int | Sequence[int] = 1,
+    batch_counts: Sequence[int] | None = None,
+    duplicate_reduction: DuplicateReduction = 'none',
+) -> SparseTensor:
+    """Construct a sparse tensor with explicit duplicate-row semantics."""
+    if duplicate_reduction == 'none':
+        return SparseTensor(
+            coords,
+            feats,
+            stride=stride,
+            batch_counts=batch_counts,
+        )
+    if duplicate_reduction != 'mean':
+        raise ValueError("duplicate_reduction must be 'none' or 'mean'.")
+
+    value = SparseTensor(
+        coords,
+        feats,
+        stride=stride,
+        batch_counts=batch_counts,
+    )
+    unique = union_coords(
+        value.coords,
+        mx.zeros((0, 4), dtype=value.coords.dtype),
+    )
+    rows = inverse_map(unique.coords, value.coords)
+    summed = mx.zeros_like(value.feats).at[rows].add(value.feats)
+    counts = mx.zeros((value.capacity,), dtype=mx.int32).at[rows].add(1)
+    averaged = (
+        summed / mx.maximum(counts, 1).astype(value.feats.dtype)[:, None]
+    )
+    active = int(unique.active_rows.item())
+    unique_coords = unique.coords[:active]
+    unique_counts = _deduplicated_batch_counts(batch_counts, unique_coords)
+    return SparseTensor(
+        unique_coords,
+        averaged[:active],
+        stride=value.stride,
+        batch_counts=unique_counts,
+    )
 
 
 def sparse_collate(
@@ -31,6 +83,7 @@ def sparse_collate(
     feats: Sequence[mx.array],
     *,
     stride: int | Sequence[int] = 1,
+    duplicate_reduction: DuplicateReduction = 'none',
 ) -> SparseTensor:
     """Collate unbatched sparse coordinates/features into one tensor.
 
@@ -70,11 +123,24 @@ def sparse_collate(
         )
         batched_feats.append(feat_rows)
 
-    return SparseTensor(
+    return sparse_from_coordinates(
         mx.concatenate(batched_coords, axis=0),
         mx.concatenate(batched_feats, axis=0),
         stride=triple(stride, name='stride'),
         batch_counts=tuple(int(values.shape[0]) for values in coords),
+        duplicate_reduction=duplicate_reduction,
+    )
+
+
+def _deduplicated_batch_counts(
+    declared: Sequence[int] | None,
+    coords: mx.array,
+) -> tuple[int, ...] | None:
+    if declared is None:
+        return None
+    return tuple(
+        int(mx.sum(mx.equal(coords[:, 0], batch)).item())
+        for batch in range(len(declared))
     )
 
 
