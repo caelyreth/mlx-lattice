@@ -77,6 +77,11 @@ Batch metadata
 * ``decomposed_features``;
 * global pooling.
 
+Batch decomposition groups active rows by the coordinate batch column and can
+therefore operate after support-changing layers even when ``batch_counts`` is
+not available. Declared counts still preserve trailing empty batches that
+cannot be inferred from coordinates alone.
+
 Local convolution and pooling use the batch column directly in coordinate
 relations. Global pooling needs ``batch_counts`` because it reduces to a dense
 ``(B, C)`` array.

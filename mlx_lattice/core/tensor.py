@@ -201,14 +201,25 @@ class SparseTensor:
 
     @property
     def batch_rows(self) -> tuple[mx.array, ...]:
-        """Row indices for each batch using ``batch_counts`` metadata."""
-        counts = self._require_batch_counts()
-        start = 0
+        """Active row indices grouped by coordinate batch value."""
+        active = int(self.active_rows.item())
+        if self.batch_counts is not None:
+            batch_size = len(self.batch_counts)
+        elif active == 0:
+            batch_size = 0
+        else:
+            batch_size = int(mx.max(self.coords[:active, 0]).item()) + 1
+
+        rows = mx.arange(active, dtype=mx.int32)
+        batch_indices = self.coords[:active, 0]
         batches = []
-        for count in counts:
-            stop = start + count
-            batches.append(mx.arange(start, stop, dtype=mx.int32))
-            start = stop
+        for batch in range(batch_size):
+            present = mx.equal(batch_indices, batch)
+            count = int(mx.sum(present).item())
+            ordering = mx.argsort(
+                mx.where(present, rows, rows + active)
+            ).astype(mx.int32)
+            batches.append(ordering[:count])
         return tuple(batches)
 
     @property
@@ -224,6 +235,19 @@ class SparseTensor:
         """Feature rows split by batch."""
         return tuple(
             mx.take(self.feats, rows, axis=0) for rows in self.batch_rows
+        )
+
+    @property
+    def decomposed_coordinates_and_features(
+        self,
+    ) -> tuple[tuple[mx.array, ...], tuple[mx.array, ...]]:
+        """Spatial coordinates and features split by batch."""
+        rows = self.batch_rows
+        return (
+            tuple(
+                mx.take(self.coords[:, 1:], part, axis=0) for part in rows
+            ),
+            tuple(mx.take(self.feats, part, axis=0) for part in rows),
         )
 
     def astype(self, dtype: mx.Dtype) -> SparseTensor:
@@ -315,14 +339,6 @@ class SparseTensor:
         from mlx_lattice.ops.tensor import sparse_mul
 
         return sparse_mul(self, other)
-
-    def _require_batch_counts(self) -> tuple[int, ...]:
-        if self.batch_counts is None:
-            raise ValueError(
-                'batch_counts metadata is required for batch-partitioned '
-                'sparse tensor operations.'
-            )
-        return self.batch_counts
 
 
 def _resolve_coordinate_identity(

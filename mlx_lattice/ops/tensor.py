@@ -466,11 +466,18 @@ def prune(x: SparseTensor, rows: mx.array) -> SparseTensor:
     if rows.ndim != 1:
         raise ValueError('rows must have shape (M,).')
     rows = rows.astype(mx.int32)
+    active = int(x.active_rows.item())
+    if rows.shape[0] and (
+        int(mx.min(rows).item()) < 0 or int(mx.max(rows).item()) >= active
+    ):
+        raise ValueError('rows must index active sparse rows.')
+    coords = mx.take(x.coords, rows, axis=0)
     return SparseTensor(
-        mx.take(x.coords, rows, axis=0),
+        coords,
         mx.take(x.feats, rows, axis=0),
         x.stride,
         coord_manager=x.coord_manager,
+        batch_counts=_selected_batch_counts(x, coords),
     )
 
 
@@ -487,10 +494,28 @@ def prune_mask(x: SparseTensor, mask: mx.array) -> SparseTensor:
     if mask.dtype != mx.bool_:
         raise ValueError('mask must be boolean.')
 
-    ordering = mx.argsort(mask.astype(mx.int32)).astype(mx.int32)
+    active = int(x.active_rows.item())
+    if active < x.capacity and bool(mx.any(mask[active:]).item()):
+        raise ValueError('mask must not select inactive sparse rows.')
     count = int(cast('int', mx.sum(mask).tolist()))
-    rows = mx.array([], dtype=mx.int32) if count == 0 else ordering[-count:]
+    indices = mx.arange(x.capacity, dtype=mx.int32)
+    ordering = mx.argsort(
+        mx.where(mask, indices, indices + x.capacity)
+    ).astype(mx.int32)
+    rows = ordering[:count]
     return prune(x, rows)
+
+
+def _selected_batch_counts(
+    x: SparseTensor,
+    coords: mx.array,
+) -> tuple[int, ...] | None:
+    if x.batch_counts is None:
+        return None
+    return tuple(
+        int(mx.sum(mx.equal(coords[:, 0], batch)).item())
+        for batch in range(len(x.batch_counts))
+    )
 
 
 def topk_rows(

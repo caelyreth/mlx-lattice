@@ -86,6 +86,9 @@ They must transform coordinates, features, active-row metadata, and coordinate
 identity together. ``replace_feature`` is the feature-only counterpart and
 preserves coordinate identity when row count is unchanged.
 
+Pruning keeps caller row order and carries declared per-batch counts forward,
+including empty batches. A mask may only select active sparse rows.
+
 ``reindex_sparse(source, target)`` is the exact-support counterpart to a join.
 It preserves target row order and coordinate identity, discards source-only
 rows, and fills target-only rows. Use it when a decoder branch must return to a

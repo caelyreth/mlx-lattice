@@ -324,14 +324,57 @@ def test_sparse_collate_decompose_topk_and_prune() -> None:
     assert out.feats.tolist() == [[2.0], [3.0]]
 
 
-def test_batch_partitioned_views_require_batch_count_metadata() -> None:
+def test_batch_partitioned_views_infer_noncontiguous_rows_from_coords() -> (
+    None
+):
     coords = mx.array(
-        [[0, 0, 0, 0], [1, 1, 0, 0]],
+        [[1, 1, 0, 0], [0, 0, 0, 0], [1, 2, 0, 0]],
         dtype=mx.int32,
     )
-    x = SparseTensor(coords, mx.ones((2, 1), dtype=mx.float32))
+    x = SparseTensor(
+        coords,
+        mx.array([[10.0], [20.0], [30.0]], dtype=mx.float32),
+    )
 
-    with pytest.raises(ValueError, match='batch_counts metadata'):
-        _ = x.batch_rows
-    with pytest.raises(ValueError, match='batch_counts metadata'):
-        _ = x.decomposed_coordinates
+    decomposed_coords, decomposed_feats = (
+        x.decomposed_coordinates_and_features
+    )
+
+    assert [part.tolist() for part in x.batch_rows] == [[1], [0, 2]]
+    assert [part.tolist() for part in decomposed_coords] == [
+        [[0, 0, 0]],
+        [[1, 0, 0], [2, 0, 0]],
+    ]
+    assert [part.tolist() for part in decomposed_feats] == [
+        [[20.0]],
+        [[10.0], [30.0]],
+    ]
+
+
+def test_prune_preserves_row_order_and_declared_empty_batches() -> None:
+    x = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [1, 1, 0, 0], [1, 2, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32),
+        batch_counts=(1, 2, 0),
+    )
+
+    out = prune(x, mx.array([2, 0], dtype=mx.int32))
+
+    assert out.coords.tolist() == [[1, 2, 0, 0], [0, 0, 0, 0]]
+    assert out.feats.tolist() == [[3.0], [1.0]]
+    assert out.batch_counts == (1, 1, 0)
+    assert [part.tolist() for part in out.batch_rows] == [[1], [0], []]
+
+
+def test_prune_mask_rejects_inactive_selection() -> None:
+    x = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 9, 0, 0]], dtype=mx.int32),
+        mx.ones((2, 1), dtype=mx.float32),
+        active_rows=mx.array([1], dtype=mx.int32),
+    )
+
+    with pytest.raises(ValueError, match='inactive'):
+        prune_mask(x, mx.array([True, True], dtype=mx.bool_))
