@@ -13,6 +13,7 @@ from mlx_lattice.ops import (
     lookup_coords,
     prune,
     prune_mask,
+    reindex_sparse,
     sparse_add,
     sparse_cat_aligned,
     sparse_collate,
@@ -268,6 +269,32 @@ def test_prune_mask_selects_sparse_rows_by_boolean_mask() -> None:
 
     assert kept.coords.tolist() == [[0, 3, 0, 0], [0, 2, 0, 0]]
     assert kept.feats.tolist() == [[3.0], [2.0]]
+
+
+def test_reindex_sparse_preserves_target_order_and_fills_missing_rows() -> (
+    None
+):
+    source = SparseTensor(
+        mx.array(
+            [[0, 1, 0, 0], [0, 3, 0, 0], [0, 5, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.array([[1.0], [3.0], [5.0]], dtype=mx.float32),
+    )
+    target = SparseTensor(
+        mx.array(
+            [[0, 5, 0, 0], [0, 2, 0, 0], [0, 1, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.zeros((3, 4), dtype=mx.float32),
+        batch_counts=(3,),
+    )
+
+    out = reindex_sparse(source, target, fill=-2.0)
+
+    assert out.same_coords(target)
+    assert out.batch_counts == (3,)
+    assert out.feats.tolist() == [[5.0], [-2.0], [1.0]]
 
 
 def test_sparse_collate_decompose_topk_and_prune() -> None:

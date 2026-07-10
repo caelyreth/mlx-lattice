@@ -10,6 +10,9 @@ from lattice_contract.dialect import (
 from lattice_contract.dialect import (
     sparse_cat as lattice_sparse_cat,
 )
+from lattice_contract.dialect import (
+    sparse_reindex as lattice_sparse_reindex,
+)
 
 from mlx_lattice.artifact.lowering import (
     artifact_lowering,
@@ -111,6 +114,10 @@ def gather_aligned_features(
     """
     if rows.ndim != 1 or rows.dtype != mx.int32:
         raise ValueError('rows must have shape (N,) and int32 dtype.')
+    if x.capacity == 0:
+        return mx.full(
+            (rows.shape[0], x.channels), float(fill), dtype=x.feats.dtype
+        )
     clipped = mx.maximum(rows, 0)
     gathered = mx.take(x.feats, clipped, axis=0)
     valid = (rows >= 0).astype(x.feats.dtype)[:, None]
@@ -118,6 +125,56 @@ def gather_aligned_features(
         return gathered * valid
     fill_value = mx.array(float(fill), dtype=x.feats.dtype)
     return mx.where(valid.astype(mx.bool_), gathered, fill_value)
+
+
+@lattice_lowering(op=lattice_sparse_reindex)
+def reindex_sparse(
+    input: SparseTensor,
+    target: SparseTensor,
+    *,
+    fill: float = 0.0,
+) -> SparseTensor:
+    """Gather ``input`` features onto the exact row order of ``target``.
+
+    Source rows absent from the target are discarded. Target rows absent from
+    the source receive ``fill`` in every channel. The result preserves the
+    target coordinate identity and batch metadata.
+    """
+    _require_compatible_sparse_tensors(input, target)
+    if input.same_coords(target):
+        return target.replace(feats=input.feats)
+
+    manager = input.coord_manager
+    target_key = (
+        target.coord_key
+        if target.coord_manager is manager
+        else manager.insert_coords(
+            target.coords, target.stride, target.active_rows
+        )
+    )
+    relation = manager.target_kernel_relation(
+        input.coord_key,
+        target_key,
+        kernel_size=(1, 1, 1),
+        stride=(1, 1, 1),
+        padding=(0, 0, 0),
+        dilation=(1, 1, 1),
+    )
+    rows = relation.require_implicit_gemm().out_in_map[:, 0]
+    return target.replace(
+        feats=gather_aligned_features(input, rows, fill=fill)
+    )
+
+
+@artifact_lowering(op=reindex_sparse)
+def reindex_sparse_from_artifact(
+    input: SparseTensor,
+    target: SparseTensor,
+    *,
+    fill: float,
+) -> SparseTensor:
+    """Lower lattice.sparse.reindex artifacts."""
+    return reindex_sparse(input, target, fill=fill)
 
 
 def sparse_binary_op(

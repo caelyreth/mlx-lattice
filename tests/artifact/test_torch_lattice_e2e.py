@@ -117,6 +117,43 @@ def test_torch_lattice_pool_transpose_artifact_runs_on_mlx() -> None:
 
 
 @pytest.mark.parametrize(
+    ('case_name', 'source_stride', 'target_rows', 'rtol', 'atol'),
+    [
+        ('target_transpose_convolution', (2, 1, 1), 4, 2e-3, 2e-3),
+        ('trilinear_upsample', (2, 1, 1), 4, 1e-5, 1e-6),
+        ('sparse_reindex', (1, 1, 1), 3, 1e-6, 1e-6),
+    ],
+)
+def test_torch_lattice_targeted_sparse_artifact_runs_on_mlx(
+    case_name: str,
+    source_stride: tuple[int, int, int],
+    target_rows: int,
+    rtol: float,
+    atol: float,
+) -> None:
+    case = FIXTURE_ROOT / case_name
+    program = load_lattice_program(case)
+    inputs = mx.load(str(case / 'inputs.safetensors'))
+    expected = mx.load(str(case / 'expected.safetensors'))
+
+    output = program(
+        source=_sparse_input(
+            inputs,
+            prefix='source_',
+            batch_counts=(int(inputs['source_active'].item()),),
+            stride=source_stride,
+        ),
+        target=_sparse_input(
+            inputs,
+            prefix='target_',
+            batch_counts=(target_rows,),
+        ),
+    )
+
+    _assert_sparse_output_close(output, expected, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
     ('case_name', 'batch_counts', 'input_prefix'),
     [
         ('transpose_convolution', (4,), ''),

@@ -1,7 +1,7 @@
 // Valid: point rows plus features produce a sparse voxel tensor.
 module attributes {
   lattice.ir_version = 0,
-  lattice.schema_digest = "545fd43029e2fbebc18404babc0ec463730a13056a18f51280d8f1a272a3369c",
+  lattice.schema_digest = "de8cda6380a1e82a3ba08d215a77a43a0a7088d74e81dbc2afa2446dbb79bfd1",
   lattice.input_names = ["input0", "input1", "input2", "input3"],
   lattice.input_roles = ["tensor", "tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],

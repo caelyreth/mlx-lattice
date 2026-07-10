@@ -238,6 +238,21 @@ def sparse_with_features() -> None:
     """Register lattice.sparse.with_features."""
 
 
+@LATTICE_DIALECT.op(
+    'sparse.reindex',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('target', 'sparse_tensor'),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(op_attr('fill', 'f32'),),
+    assembly='functional',
+    summary='Gather sparse features onto exact target support',
+)
+def sparse_reindex() -> None:
+    """Register lattice.sparse.reindex."""
+
+
 _CONV_ATTRS = (
     op_attr('kernel_size', 'i64_triple'),
     op_attr('stride', 'i64_triple'),

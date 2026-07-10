@@ -86,6 +86,11 @@ They must transform coordinates, features, active-row metadata, and coordinate
 identity together. ``replace_feature`` is the feature-only counterpart and
 preserves coordinate identity when row count is unchanged.
 
+``reindex_sparse(source, target)`` is the exact-support counterpart to a join.
+It preserves target row order and coordinate identity, discards source-only
+rows, and fills target-only rows. Use it when a decoder branch must return to a
+known geometry rather than relying on an incidental coordinate ordering.
+
 Collation
 ---------
 

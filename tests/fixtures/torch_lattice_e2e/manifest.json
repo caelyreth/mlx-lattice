@@ -10,6 +10,7 @@
     "normalized_convolution",
     "target_transpose_convolution",
     "trilinear_upsample",
-    "pool_transpose"
+    "pool_transpose",
+    "sparse_reindex"
   ]
 }

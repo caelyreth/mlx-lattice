@@ -6,7 +6,13 @@ from typing import Any, cast
 
 import mlx.core as mx
 from mlx_lattice.core import SparseTensor
-from mlx_lattice.ops import cat, crop, prune_mask, sparse_add
+from mlx_lattice.ops import (
+    cat,
+    crop,
+    prune_mask,
+    reindex_sparse,
+    sparse_add,
+)
 
 from mlx_lattice_bench.cases.common import benchmark_n, param_grid
 from mlx_lattice_bench.datasets import SparseArrays, sparse_arrays
@@ -41,6 +47,15 @@ def cases(
             setup=_setup,
             prepare=_prepare,
             run=lambda inputs: prune_mask(inputs.x, inputs.mask),
+            units=('elements', 'n_in'),
+        ),
+        BenchmarkCase(
+            name='sparse_reindex',
+            group='tensor',
+            params=params,
+            setup=_setup,
+            prepare=_prepare,
+            run=lambda inputs: reindex_sparse(inputs.x, inputs.y),
             units=('elements', 'n_in'),
         ),
         BenchmarkCase(

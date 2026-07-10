@@ -68,6 +68,20 @@ def Lattice_SparseWithFeaturesOp
   }];
 }
 
+def Lattice_SparseReindexOp : Lattice_Op<"sparse.reindex", [Pure]> {
+  let summary = "Gather sparse features onto exact target support";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_SparseTensorType:$target,
+    F32Attr:$fill
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $target attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 def Lattice_Conv3DOp : Lattice_Op<"conv3d"> {
   let summary = "Forward sparse 3D convolution";
   let arguments = (ins

@@ -394,6 +394,26 @@ LogicalResult SparseWithFeaturesOp::verify() {
     return success();
 }
 
+LogicalResult SparseReindexOp::verify() {
+    auto inputType = getInput().getType();
+    auto targetType = getTarget().getType();
+    auto resultType = getResult().getType();
+
+    if (failed(verifySparseRank(getOperation(), inputType)) ||
+        failed(verifySparseRank(getOperation(), targetType)) ||
+        failed(verifySparseRank(getOperation(), resultType))) {
+        return failure();
+    }
+    if (inputType.getCoord() != targetType.getCoord() ||
+        inputType.getFeature() != targetType.getFeature()) {
+        return emitOpError("input and target must share sparse conventions");
+    }
+    if (inputType.getDtype() != resultType.getDtype()) {
+        return emitOpError("result dtype must match input feature dtype");
+    }
+    return success();
+}
+
 LogicalResult Conv3DOp::verify() {
     if (failed(verifySparseRank(getOperation(), getInput().getType()))) {
         return failure();
