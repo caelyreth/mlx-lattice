@@ -89,3 +89,13 @@ p99, and max values for both absolute and relative error:
 
 For sparse outputs, coordinate equality is mandatory before feature tolerances
 are evaluated.
+
+Application partitioning
+------------------------
+
+Export the tensor-compute graph, not an entire codec process. Dataset traversal,
+entropy stream orchestration, adaptive Python control flow, and rendering remain
+host responsibilities. A Gameleon-style artifact should contain the sparse
+encoder/decoder block and its learned weights; the CUDA conformance gate trains
+that composed block before exporting it and MLX replays the same graph with exact
+coordinate equality.

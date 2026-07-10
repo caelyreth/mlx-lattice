@@ -116,6 +116,17 @@ def test_torch_lattice_pool_transpose_artifact_runs_on_mlx() -> None:
     _assert_sparse_output_close(output, expected, rtol=1e-5, atol=1e-6)
 
 
+def test_gameleon_reproduction_block_artifact_runs_on_mlx() -> None:
+    case = FIXTURE_ROOT / 'gameleon_reproduction_block'
+    program = load_lattice_program(case)
+    inputs = mx.load(str(case / 'inputs.safetensors'))
+    expected = mx.load(str(case / 'expected.safetensors'))
+
+    output = program(_sparse_input(inputs, prefix='x_', batch_counts=(8,)))
+
+    _assert_sparse_output_close(output, expected, rtol=3e-3, atol=3e-3)
+
+
 @pytest.mark.parametrize(
     ('case_name', 'source_stride', 'target_rows', 'rtol', 'atol'),
     [
