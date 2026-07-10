@@ -1,4 +1,4 @@
-// Valid: pooling transpose may consume explicit target support.
+// Invalid: target normalized transpose convolution epsilon must be positive.
 module attributes {
   lattice.ir_version = 0,
   lattice.schema_digest = "e48cb610f907d8c7afbe66c197f2e01ab7ba3519a3f3d452b9643768f5c476c9",
@@ -9,7 +9,7 @@ module attributes {
   lattice.weight_file = "weights.safetensors"
 } {
   func.func @forward(%source_coords: tensor<?x4xi32>,
-                     %source_features: tensor<?x8xf32>,
+                     %source_features: tensor<?x1xf32>,
                      %source_active: tensor<1xi32>,
                      %target_coords: tensor<?x4xi32>,
                      %target_features: tensor<?x1xf32>,
@@ -17,26 +17,24 @@ module attributes {
       -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                 feature = row_channel, dtype = f32> {
     %source = lattice.sparse.make %source_coords, %source_features, %source_active
-      {stride = array<i64: 2, 2, 2>, coord_order = #lattice.coord<batch_x_y_z>}
-      : (tensor<?x4xi32>, tensor<?x8xf32>, tensor<1xi32>)
-        -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                  feature = row_channel, dtype = f32>
+      {stride = array<i64: 2, 1, 1>, coord_order = #lattice.coord<batch_x_y_z>}
+      : (tensor<?x4xi32>, tensor<?x1xf32>, tensor<1xi32>)
+        -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
     %target = lattice.sparse.make %target_coords, %target_features, %target_active
       {stride = array<i64: 1, 1, 1>, coord_order = #lattice.coord<batch_x_y_z>}
       : (tensor<?x4xi32>, tensor<?x1xf32>, tensor<1xi32>)
-        -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                  feature = row_channel, dtype = f32>
-    %out = lattice.pool_transpose3d %source, %target
-      {kernel_size = array<i64: 2, 2, 2>,
-       stride = array<i64: 2, 2, 2>,
-       padding = array<i64: 0, 0, 0>,
-       dilation = array<i64: 1, 1, 1>}
-      : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                feature = row_channel, dtype = f32>,
-         !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                feature = row_channel, dtype = f32>)
-        -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                  feature = row_channel, dtype = f32>
+        -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
+    %weight = lattice.weight @up.weight
+      {storage_key = "up.weight", layout = #lattice.weight_layout<conv3d_o_zyx_i>,
+       packing = #lattice.packing<dense>} : !lattice.weight<conv3d, f32>
+    %out = lattice.target_normalized_conv_transpose3d %source, %target, %weight
+      {kernel_size = array<i64: 3, 1, 1>, stride = array<i64: 2, 1, 1>,
+       padding = array<i64: 1, 0, 0>, dilation = array<i64: 1, 1, 1>,
+       eps = 0.0 : f32}
+      : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>,
+         !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>,
+         !lattice.weight<conv3d, f32>)
+        -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
     return %out : !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                         feature = row_channel, dtype = f32>
   }

@@ -10,6 +10,7 @@ from mlx_lattice.ops import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    normalized_conv_transpose3d,
     normalized_subm_conv3d,
     subm_conv3d,
 )
@@ -31,11 +32,22 @@ type ConvKind = Literal[
     'target_subset',
     'target_superset',
     'transpose',
+    'target_transpose',
+    'normalized_target_transpose',
     'generative_transpose',
     'normalized_subm',
 ]
 type ConvGradTarget = Literal['features', 'weight', 'both']
 type ConvWeight = mx.array | QuantizedWeight
+
+_TRANSPOSE_KINDS = frozenset(
+    {
+        'transpose',
+        'target_transpose',
+        'normalized_target_transpose',
+        'generative_transpose',
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,9 +101,16 @@ def cases(
         ('conv3d_target_subset', 'target_subset'),
         ('conv3d_target_superset', 'target_superset'),
         ('conv_transpose3d', 'transpose'),
+        ('conv_transpose3d_target', 'target_transpose'),
         ('generative_conv_transpose3d', 'generative_transpose'),
         *(
-            (('normalized_subm_conv3d', 'normalized_subm'),)
+            (
+                ('normalized_subm_conv3d', 'normalized_subm'),
+                (
+                    'normalized_conv_transpose3d_target',
+                    'normalized_target_transpose',
+                ),
+            )
             if not quantized
             else ()
         ),
@@ -353,6 +372,26 @@ def _run(kind: ConvKind, inputs: ConvInputs) -> SparseTensor:
             kernel_size=2,
             stride=2,
         )
+    if kind == 'target_transpose':
+        return conv_transpose3d(
+            inputs.transposed,
+            inputs.kernel2_weight,
+            kernel_size=2,
+            stride=2,
+            coordinates=inputs.target_same,
+        )
+    if kind == 'normalized_target_transpose':
+        if isinstance(inputs.kernel2_weight, QuantizedWeight):
+            raise TypeError(
+                'normalized convolution requires dense weights.'
+            )
+        return normalized_conv_transpose3d(
+            inputs.transposed,
+            inputs.kernel2_weight,
+            kernel_size=2,
+            stride=2,
+            coordinates=inputs.target_same,
+        )
     return generative_conv_transpose3d(
         inputs.transposed,
         inputs.kernel2_weight,
@@ -366,7 +405,7 @@ def _compiled(
 ) -> Callable[[ConvFixture], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: ConvFixture) -> tuple[Any, tuple[Any, ...]]:
         weight = _weight_for(kind, fixture)
-        stride = 2 if kind in ('transpose', 'generative_transpose') else 1
+        stride = 2 if kind in _TRANSPOSE_KINDS else 1
 
         def fn(feats: mx.array, weight_arg: mx.array) -> mx.array:
             x = SparseTensor(
@@ -391,7 +430,7 @@ def _compiled_quantized(
         source = _weight_for(kind, fixture)
         if not isinstance(source, QuantizedWeight):
             raise TypeError('quantized benchmark requires packed weights.')
-        stride = 2 if kind in ('transpose', 'generative_transpose') else 1
+        stride = 2 if kind in _TRANSPOSE_KINDS else 1
 
         def fn(
             feats: mx.array,
@@ -436,7 +475,7 @@ def _backward(
 ) -> Callable[[ConvFixture], tuple[Any, tuple[Any, ...]]]:
     def factory(fixture: ConvFixture) -> tuple[Any, tuple[Any, ...]]:
         weight = _weight_for(kind, fixture)
-        stride = 2 if kind in ('transpose', 'generative_transpose') else 1
+        stride = 2 if kind in _TRANSPOSE_KINDS else 1
         base = fixture.arrays.tensor(stride=stride)
 
         def loss(feats: mx.array, weight_arg: mx.array) -> mx.array:
@@ -500,7 +539,13 @@ def _compiled_inputs(
         )
         else empty,
         kernel2_weight=weight
-        if kind in ('transpose', 'generative_transpose')
+        if kind
+        in (
+            'transpose',
+            'target_transpose',
+            'normalized_target_transpose',
+            'generative_transpose',
+        )
         else empty,
     )
 

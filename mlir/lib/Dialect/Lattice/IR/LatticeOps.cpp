@@ -254,6 +254,35 @@ LogicalResult verifyConvTriples(Operation* op, ConvTriples triples) {
     );
 }
 
+LogicalResult verifyTargetConv(
+    Operation* op,
+    SparseTensorType inputType,
+    SparseTensorType targetType,
+    SparseTensorType resultType,
+    WeightType weightType,
+    Value bias,
+    ConvTriples triples,
+    FloatAttr eps = {}
+) {
+    if (failed(verifySparseRank(op, inputType)) ||
+        failed(verifySparseRank(op, targetType)) ||
+        failed(verifySparseRank(op, resultType))) {
+        return failure();
+    }
+    if (inputType.getCoord() != targetType.getCoord() ||
+        targetType.getCoord() != resultType.getCoord()) {
+        return op->emitOpError(
+            "input, target, and result coord conventions must match"
+        );
+    }
+    if (failed(verifyWeightFamily(op, weightType, "conv3d")) ||
+        failed(verifyOptionalBias(op, bias)) ||
+        failed(verifyConvTriples(op, triples))) {
+        return failure();
+    }
+    return eps ? verifyPositiveEps(op, eps) : success();
+}
+
 } // namespace
 
 LogicalResult WeightOp::verify() {
@@ -471,31 +500,30 @@ LogicalResult NormalizedSubmConv3DOp::verify() {
 }
 
 LogicalResult TargetConv3DOp::verify() {
-    auto inputType = getInput().getType();
-    auto targetType = getTarget().getType();
-    auto resultType = getResult().getType();
-
-    if (failed(verifySparseRank(getOperation(), inputType)) ||
-        failed(verifySparseRank(getOperation(), targetType)) ||
-        failed(verifySparseRank(getOperation(), resultType))) {
-        return failure();
-    }
-    if (inputType.getCoord() != targetType.getCoord() ||
-        targetType.getCoord() != resultType.getCoord()) {
-        return emitOpError(
-            "input, target, and result coord conventions must match"
-        );
-    }
-    if (failed(
-            verifyWeightFamily(getOperation(), getWeight().getType(), "conv3d")
-        )) {
-        return failure();
-    }
-    if (failed(verifyOptionalBias(getOperation(), getBias()))) {
-        return failure();
-    }
-    return verifyConvTriples(
+    return verifyTargetConv(
         getOperation(),
+        getInput().getType(),
+        getTarget().getType(),
+        getResult().getType(),
+        getWeight().getType(),
+        getBias(),
+        ConvTriples{
+            .kernelSize = getKernelSize(),
+            .stride = getStride(),
+            .padding = getPadding(),
+            .dilation = getDilation(),
+        }
+    );
+}
+
+LogicalResult TargetConvTranspose3DOp::verify() {
+    return verifyTargetConv(
+        getOperation(),
+        getInput().getType(),
+        getTarget().getType(),
+        getResult().getType(),
+        getWeight().getType(),
+        getBias(),
         ConvTriples{
             .kernelSize = getKernelSize(),
             .stride = getStride(),
@@ -552,6 +580,24 @@ LogicalResult NormalizedConvTranspose3DOp::verify() {
         return failure();
     }
     return verifyPositiveEps(getOperation(), getEpsAttr());
+}
+
+LogicalResult TargetNormalizedConvTranspose3DOp::verify() {
+    return verifyTargetConv(
+        getOperation(),
+        getInput().getType(),
+        getTarget().getType(),
+        getResult().getType(),
+        getWeight().getType(),
+        getBias(),
+        ConvTriples{
+            .kernelSize = getKernelSize(),
+            .stride = getStride(),
+            .padding = getPadding(),
+            .dilation = getDilation(),
+        },
+        getEpsAttr()
+    );
 }
 
 LogicalResult GenerativeConvTranspose3DOp::verify() {

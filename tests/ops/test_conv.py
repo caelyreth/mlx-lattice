@@ -8,6 +8,7 @@ from mlx_lattice.ops import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    normalized_conv_transpose3d,
     normalized_generative_conv_transpose3d,
     normalized_subm_conv3d,
     subm_conv3d,
@@ -539,6 +540,83 @@ def test_conv3d_target_path_is_autogradable() -> None:
 
     assert grad_feats.tolist() == [[1.0], [2.0], [4.0]]
     assert grad_weight.tolist() == [[[[[4.0]]], [[[2.0]]], [[[3.0]]]]]
+
+
+def test_conv_transpose3d_target_coordinates_match_indexed_geometry() -> (
+    None
+):
+    source = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32),
+        stride=(2, 1, 1),
+    )
+    target = mx.array(
+        [[0, index, 0, 0] for index in range(5)], dtype=mx.int32
+    )
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1, 3, 1, 1, 1
+    )
+
+    out = conv_transpose3d(
+        source,
+        weight,
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        coordinates=target,
+    )
+
+    assert active_coords(out) == target.tolist()
+    assert active_feats(out).tolist() == [[2.0], [5.0], [4.0], [9.0], [6.0]]
+    assert out.stride == (1, 1, 1)
+
+
+def test_normalized_conv_transpose3d_target_matches_weight_norm() -> None:
+    source = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0], [4.0]], dtype=mx.float32),
+        stride=(2, 1, 1),
+    )
+    target = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1, 3, 1, 1, 1
+    )
+
+    numerator = conv_transpose3d(
+        source,
+        weight,
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        coordinates=target,
+    )
+    denominator = conv_transpose3d(
+        source.replace(feats=mx.ones_like(source.feats)),
+        mx.square(weight),
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        coordinates=target,
+    )
+    actual = normalized_conv_transpose3d(
+        source,
+        weight,
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        coordinates=target,
+    )
+    expected = numerator.feats / mx.sqrt(denominator.feats + 1e-8)
+    mx.eval(actual.feats, expected)
+
+    assert active_coords(actual) == target.tolist()
+    assert_nested_close(actual.feats.tolist(), expected.tolist())
 
 
 def test_conv3d_generic_path_is_autogradable_for_features_and_weights() -> (

@@ -19,6 +19,7 @@ from mlx_lattice.core.types import Triple
 from mlx_lattice.ops._projection import feature_projection
 from mlx_lattice.ops._quantized import quantized_matmul
 from mlx_lattice.ops._relation_exec import (
+    sparse_conv_features_from_implicit_gemm_view,
     sparse_conv_features_from_relation,
     sparse_quantized_conv_features_from_relation,
 )
@@ -196,6 +197,7 @@ def conv_transpose3d(
     stride: int | Sequence[int] = 2,
     padding: int | Sequence[int] = 0,
     dilation: int | Sequence[int] = 1,
+    coordinates: SparseTensor | CoordinateMapKey | mx.array | None = None,
 ) -> SparseTensor:
     """Apply sparse transpose convolution using a transposed kernel relation.
 
@@ -209,13 +211,22 @@ def conv_transpose3d(
         padding=padding,
         dilation=dilation,
     )
+    output_stride = _div_stride(x.stride, spec.stride)
+    if coordinates is not None:
+        return _target_transposed_conv(
+            x,
+            weight,
+            bias,
+            spec,
+            target_key=_target_key(x, coordinates, output_stride),
+        )
     return _relation_conv(
         x,
         weight,
         bias,
         spec,
         map_kind='transposed',
-        output_stride=_div_stride(x.stride, spec.stride),
+        output_stride=output_stride,
     )
 
 
@@ -230,6 +241,7 @@ def normalized_conv_transpose3d(
     padding: int | Sequence[int] = 0,
     dilation: int | Sequence[int] = 1,
     eps: float = 1e-8,
+    coordinates: SparseTensor | CoordinateMapKey | mx.array | None = None,
 ) -> SparseTensor:
     """Apply weight-normalized sparse transpose convolution."""
     spec = KernelSpec(
@@ -238,13 +250,23 @@ def normalized_conv_transpose3d(
         padding=padding,
         dilation=dilation,
     )
+    output_stride = _div_stride(x.stride, spec.stride)
+    if coordinates is not None:
+        return _normalized_target_transposed_conv(
+            x,
+            weight,
+            bias,
+            spec,
+            target_key=_target_key(x, coordinates, output_stride),
+            eps=eps,
+        )
     return _normalized_relation_conv(
         x,
         weight,
         bias,
         spec,
         map_kind='transposed',
-        output_stride=_div_stride(x.stride, spec.stride),
+        output_stride=output_stride,
         eps=eps,
     )
 
@@ -257,6 +279,7 @@ def generative_conv_transpose3d(
     *,
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
+    coordinates: SparseTensor | CoordinateMapKey | mx.array | None = None,
 ) -> SparseTensor:
     """Generate output coordinates from a sparse transpose-convolution rule.
 
@@ -265,13 +288,22 @@ def generative_conv_transpose3d(
     before subsequent target-aligned operations.
     """
     spec = KernelSpec(size=kernel_size, stride=stride)
+    output_stride = _div_stride(x.stride, spec.stride)
+    if coordinates is not None:
+        return _target_transposed_conv(
+            x,
+            weight,
+            bias,
+            spec,
+            target_key=_target_key(x, coordinates, output_stride),
+        )
     return _relation_conv(
         x,
         weight,
         bias,
         spec,
         map_kind='generative',
-        output_stride=_div_stride(x.stride, spec.stride),
+        output_stride=output_stride,
     )
 
 
@@ -284,16 +316,27 @@ def normalized_generative_conv_transpose3d(
     kernel_size: int | Sequence[int] = 2,
     stride: int | Sequence[int] = 2,
     eps: float = 1e-8,
+    coordinates: SparseTensor | CoordinateMapKey | mx.array | None = None,
 ) -> SparseTensor:
     """Generate support with weight-normalized transpose convolution."""
     spec = KernelSpec(size=kernel_size, stride=stride)
+    output_stride = _div_stride(x.stride, spec.stride)
+    if coordinates is not None:
+        return _normalized_target_transposed_conv(
+            x,
+            weight,
+            bias,
+            spec,
+            target_key=_target_key(x, coordinates, output_stride),
+            eps=eps,
+        )
     return _normalized_relation_conv(
         x,
         weight,
         bias,
         spec,
         map_kind='generative',
-        output_stride=_div_stride(x.stride, spec.stride),
+        output_stride=output_stride,
         eps=eps,
     )
 
@@ -430,6 +473,35 @@ def conv_transpose3d_from_artifact(
 
 
 @artifact_lowering(
+    op=conv_transpose3d,
+    dialect_op='target_conv_transpose3d',
+    weights={'weight': conv_weight(input='input')},
+)
+def target_conv_transpose3d_from_artifact(
+    input: SparseTensor,
+    target: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+) -> SparseTensor:
+    """Lower target-aware transpose-convolution artifacts."""
+    return conv_transpose3d(
+        input,
+        weight,
+        bias,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        coordinates=target,
+    )
+
+
+@artifact_lowering(
     op=normalized_conv_transpose3d,
     weights={'weight': conv_weight(input='input')},
 )
@@ -455,6 +527,37 @@ def normalized_conv_transpose3d_from_artifact(
         padding=padding,
         dilation=dilation,
         eps=eps,
+    )
+
+
+@artifact_lowering(
+    op=normalized_conv_transpose3d,
+    dialect_op='target_normalized_conv_transpose3d',
+    weights={'weight': conv_weight(input='input')},
+)
+def target_normalized_conv_transpose3d_from_artifact(
+    input: SparseTensor,
+    target: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+    eps: float,
+) -> SparseTensor:
+    """Lower target-aware normalized transpose-convolution artifacts."""
+    return normalized_conv_transpose3d(
+        input,
+        weight,
+        bias,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        eps=eps,
+        coordinates=target,
     )
 
 
@@ -507,6 +610,73 @@ def normalized_generative_conv_transpose3d_from_artifact(
 
 
 # MARK: - execution policy
+
+
+def _target_transposed_conv(
+    x: SparseTensor,
+    weight: mx.array | QuantizedWeight,
+    bias: mx.array | None,
+    spec: KernelSpec,
+    *,
+    target_key: CoordinateMapKey,
+) -> SparseTensor:
+    if isinstance(weight, QuantizedWeight):
+        raise ValueError(
+            'target transpose convolution does not support packed weights.'
+        )
+    _validate_feature_dtype(x.feats, weight)
+    _validate_metal_coord_dtype(x)
+    _validate_weight_for_kernel(x, weight, spec.volume)
+    view = x.coord_manager.target_transposed_view(
+        x.coord_key,
+        target_key,
+        kernel_size=spec.size,
+        stride=spec.stride,
+        padding=spec.padding,
+        dilation=spec.dilation,
+    )
+    feats = sparse_conv_features_from_implicit_gemm_view(
+        x.feats,
+        weight,
+        view.out_in_map,
+    )
+    return SparseTensor(
+        x.coord_manager.coords(target_key),
+        _with_bias(feats, bias),
+        stride=target_key.stride,
+        coord_key=target_key,
+        coord_manager=x.coord_manager,
+        active_rows=x.coord_manager.active_rows(target_key),
+    )
+
+
+def _normalized_target_transposed_conv(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None,
+    spec: KernelSpec,
+    *,
+    target_key: CoordinateMapKey,
+    eps: float,
+) -> SparseTensor:
+    if eps <= 0:
+        raise ValueError('eps must be positive.')
+    numerator = _target_transposed_conv(
+        x,
+        weight,
+        None,
+        spec,
+        target_key=target_key,
+    )
+    denominator = _target_transposed_conv(
+        x.replace(feats=mx.ones_like(x.feats)),
+        mx.square(weight),
+        None,
+        spec,
+        target_key=target_key,
+    )
+    feats = numerator.feats / mx.sqrt(denominator.feats + eps)
+    return numerator.replace(feats=_with_bias(feats, bias))
 
 
 def _relation_conv(

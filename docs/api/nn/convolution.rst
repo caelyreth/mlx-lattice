@@ -30,19 +30,19 @@ Module summary
      - Input coordinate identity.
      - :func:`mlx_lattice.ops.subm_conv3d`
    * - ``ConvTranspose3d``
-     - Transposed relation support.
+     - Transposed relation support or an explicit positional target.
      - :func:`mlx_lattice.ops.conv_transpose3d`
    * - ``GenerativeConvTranspose3d``
-     - Generated transpose-convolution support.
+     - Generated transpose-convolution support or an explicit positional target.
      - :func:`mlx_lattice.ops.generative_conv_transpose3d`
    * - ``NormalizedSubmConv3d``
      - Input coordinate identity.
      - :func:`mlx_lattice.ops.normalized_subm_conv3d`
    * - ``NormalizedConvTranspose3d``
-     - Transposed relation support.
+     - Transposed relation support or an explicit positional target.
      - :func:`mlx_lattice.ops.normalized_conv_transpose3d`
    * - ``NormalizedGenerativeConvTranspose3d``
-     - Generated transpose-convolution support.
+     - Generated transpose-convolution support or an explicit positional target.
      - :func:`mlx_lattice.ops.normalized_generative_conv_transpose3d`
 
 .. automodule:: mlx_lattice.nn.conv

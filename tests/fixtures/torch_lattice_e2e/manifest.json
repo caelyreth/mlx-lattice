@@ -8,6 +8,7 @@
     "transpose_convolution",
     "generative_transpose_convolution",
     "normalized_convolution",
+    "target_transpose_convolution",
     "pool_transpose"
   ]
 }

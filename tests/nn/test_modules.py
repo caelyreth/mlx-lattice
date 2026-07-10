@@ -250,6 +250,37 @@ def test_conv3d_module_accepts_target_coordinates() -> None:
     assert active_feats(out).tolist() == [[14.0], [3.0]]
 
 
+def test_transpose_convolution_module_accepts_positional_target() -> None:
+    source = SparseTensor(
+        mx.array([[0, 0, 0, 0], [0, 1, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0], [4.0]], dtype=mx.float32),
+        stride=(2, 1, 1),
+    )
+    target = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.zeros((3, 1), dtype=mx.float32),
+        coord_manager=source.coord_manager,
+    )
+    module = lnn.NormalizedConvTranspose3d(
+        1,
+        1,
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        bias=False,
+    )
+    module.weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1, 3, 1, 1, 1
+    )
+
+    out = module(source, target)
+
+    assert_same_sparse_identity(out, target)
+
+
 def test_sparse_operator_modules_are_autogradable() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],

@@ -258,6 +258,25 @@ def mapped_conv_weight(weight: mx.array) -> mx.array:
     return packed
 
 
+def sparse_conv_features_from_implicit_gemm_view(
+    feats: mx.array,
+    weight: mx.array,
+    out_in_map: mx.array,
+) -> mx.array:
+    """Execute dense convolution from an output-row by kernel-offset map."""
+    mapped = mapped_conv_weight(weight)
+    if mapped.ndim == 2:
+        mapped = mapped[None, ...]
+    if int(mapped.shape[0]) != int(out_in_map.shape[1]):
+        raise ValueError(
+            'weight kernel rows must match out_in_map columns.'
+        )
+    valid = out_in_map >= 0
+    gathered = mx.take(feats, mx.maximum(out_in_map, 0), axis=0)
+    gathered = gathered * valid[..., None].astype(feats.dtype)
+    return mx.einsum('nki,kio->no', gathered, mapped)
+
+
 def sparse_pool_features_from_relation(
     feats: mx.array,
     relation: KernelRelation,

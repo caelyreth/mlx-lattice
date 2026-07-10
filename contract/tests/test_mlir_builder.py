@@ -22,9 +22,11 @@ def test_lattice_dialect_schema_is_annotation_backed() -> None:
     assert digest['types'] == ('SparseTensor', 'Weight')
     assert 'conv3d' in digest['ops']
     assert 'conv_transpose3d' in digest['ops']
+    assert 'target_conv_transpose3d' in digest['ops']
     assert 'generative_conv_transpose3d' in digest['ops']
     assert 'normalized_subm_conv3d' in digest['ops']
     assert 'normalized_conv_transpose3d' in digest['ops']
+    assert 'target_normalized_conv_transpose3d' in digest['ops']
     assert 'normalized_generative_conv_transpose3d' in digest['ops']
     assert 'pool3d' in digest['ops']
     assert 'pool_transpose3d' in digest['ops']
@@ -95,6 +97,46 @@ def test_mlir_builder_emits_normalized_conv_family_ops() -> None:
     assert 'lattice.normalized_conv_transpose3d' in graph
     assert 'lattice.normalized_generative_conv_transpose3d' in graph
     assert 'eps = 0.00000001 : f32' in graph
+
+
+def test_mlir_builder_emits_target_transpose_conv_ops() -> None:
+    sparse = SparseTensorType(dtype='f32')
+    builder = MLIRModuleBuilder()
+    source = builder.argument('source', sparse)
+    target = builder.argument('target', sparse)
+    weight = builder.weight(
+        sym_name='up.weight',
+        storage_key='up.weight',
+        layout='conv3d_o_zyx_i',
+        result_type=WeightType('conv3d', 'f32'),
+    )
+    ordinary = builder.target_conv_transpose3d(
+        input=source,
+        target=target,
+        weight=weight,
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        dilation=(1, 1, 1),
+        result_type=sparse,
+    )
+    normalized = builder.target_normalized_conv_transpose3d(
+        input=ordinary,
+        target=target,
+        weight=weight,
+        kernel_size=(3, 1, 1),
+        stride=(2, 1, 1),
+        padding=(1, 0, 0),
+        dilation=(1, 1, 1),
+        eps=1e-8,
+        result_type=sparse,
+    )
+    builder.return_(normalized)
+
+    graph = builder.to_mlir()
+
+    assert 'lattice.target_conv_transpose3d' in graph
+    assert 'lattice.target_normalized_conv_transpose3d' in graph
 
 
 def test_mlir_builder_emits_pooling_ops() -> None:

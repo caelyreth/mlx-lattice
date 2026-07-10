@@ -21,8 +21,8 @@ operation:
      - ``submanifold``
      - Reuses input coordinate identity.
    * - ``conv_transpose3d``
-     - ``transposed``
-     - Uses the transpose-convolution relation support.
+     - ``transposed`` or target transposed
+     - Generates transpose support or evaluates on explicit target coordinates.
    * - ``generative_conv_transpose3d``
      - ``generative``
      - Generates support from input rows and stride.
@@ -30,8 +30,8 @@ operation:
      - ``submanifold``
      - Reuses input support and applies weight-dependent normalization.
    * - ``normalized_conv_transpose3d``
-     - ``transposed``
-     - Uses transposed support and applies weight-dependent normalization.
+     - ``transposed`` or target transposed
+     - Applies weight-dependent normalization on generated or target support.
    * - ``normalized_generative_conv_transpose3d``
      - ``generative``
      - Generates support and applies weight-dependent normalization.

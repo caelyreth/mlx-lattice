@@ -1,7 +1,7 @@
 // Invalid: generative transpose convolution must not carry padding/dilation.
 module attributes {
   lattice.ir_version = 0,
-  lattice.schema_digest = "33a97d62e5b150b98940c62284f42b326e879cc4aca2747cdbc0d77c851f66c7",
+  lattice.schema_digest = "e48cb610f907d8c7afbe66c197f2e01ab7ba3519a3f3d452b9643768f5c476c9",
   lattice.input_names = ["input0", "input1", "input2"],
   lattice.input_roles = ["tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],

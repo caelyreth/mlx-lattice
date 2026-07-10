@@ -157,6 +157,26 @@ def Lattice_ConvTranspose3DOp : Lattice_Op<"conv_transpose3d"> {
   }];
 }
 
+def Lattice_TargetConvTranspose3DOp
+    : Lattice_Op<"target_conv_transpose3d"> {
+  let summary = "Sparse 3D transpose convolution on explicit target support";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_SparseTensorType:$target,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    DenseI64ArrayAttr:$padding,
+    DenseI64ArrayAttr:$dilation
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $target `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 def Lattice_NormalizedConvTranspose3DOp
     : Lattice_Op<"normalized_conv_transpose3d"> {
   let summary = "Weight-normalized sparse 3D transpose convolution";
@@ -173,6 +193,27 @@ def Lattice_NormalizedConvTranspose3DOp
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
     $input `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_TargetNormalizedConvTranspose3DOp
+    : Lattice_Op<"target_normalized_conv_transpose3d"> {
+  let summary = "Weight-normalized transpose convolution on target support";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_SparseTensorType:$target,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    DenseI64ArrayAttr:$padding,
+    DenseI64ArrayAttr:$dilation,
+    F32Attr:$eps
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $target `,` $weight (`,` $bias^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }

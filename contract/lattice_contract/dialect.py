@@ -335,6 +335,23 @@ def conv_transpose3d() -> None:
 
 
 @LATTICE_DIALECT.op(
+    'target_conv_transpose3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('target', 'sparse_tensor'),
+        operand('weight', 'weight'),
+        operand('bias', 'weight', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=_CONV_ATTRS,
+    assembly='functional',
+    summary='Sparse 3D transpose convolution on explicit target support',
+)
+def target_conv_transpose3d() -> None:
+    """Register lattice.target_conv_transpose3d."""
+
+
+@LATTICE_DIALECT.op(
     'normalized_conv_transpose3d',
     operands=(
         operand('input', 'sparse_tensor'),
@@ -348,6 +365,23 @@ def conv_transpose3d() -> None:
 )
 def normalized_conv_transpose3d() -> None:
     """Register lattice.normalized_conv_transpose3d."""
+
+
+@LATTICE_DIALECT.op(
+    'target_normalized_conv_transpose3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('target', 'sparse_tensor'),
+        operand('weight', 'weight'),
+        operand('bias', 'weight', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(*_CONV_ATTRS, op_attr('eps', 'f32')),
+    assembly='functional',
+    summary='Weight-normalized transpose convolution on explicit target support',
+)
+def target_normalized_conv_transpose3d() -> None:
+    """Register lattice.target_normalized_conv_transpose3d."""
 
 
 @LATTICE_DIALECT.op(

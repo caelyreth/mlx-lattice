@@ -224,13 +224,21 @@ class ConvTranspose3d(mxnn.Module):
             self, in_channels, out_channels, self.spec, bias
         )
 
-    def __call__(self, x: SparseTensor) -> SparseTensor:
+    def __call__(
+        self,
+        x: SparseTensor,
+        coordinates: SparseTensor
+        | CoordinateMapKey
+        | mx.array
+        | None = None,
+    ) -> SparseTensor:
         return conv_transpose3d(
             x,
             self.weight,
             _optional_bias(self),
             kernel_size=self.spec.size,
             stride=self.spec.stride,
+            coordinates=coordinates,
             padding=self.spec.padding,
             dilation=self.spec.dilation,
         )
@@ -279,7 +287,14 @@ class NormalizedConvTranspose3d(ConvTranspose3d):
             raise ValueError('eps must be positive.')
         self.eps = float(eps)
 
-    def __call__(self, x: SparseTensor) -> SparseTensor:
+    def __call__(
+        self,
+        x: SparseTensor,
+        coordinates: SparseTensor
+        | CoordinateMapKey
+        | mx.array
+        | None = None,
+    ) -> SparseTensor:
         return normalized_conv_transpose3d(
             x,
             self.weight,
@@ -289,6 +304,7 @@ class NormalizedConvTranspose3d(ConvTranspose3d):
             padding=self.spec.padding,
             dilation=self.spec.dilation,
             eps=self.eps,
+            coordinates=coordinates,
         )
 
 
@@ -315,13 +331,21 @@ class GenerativeConvTranspose3d(mxnn.Module):
             self, in_channels, out_channels, self.spec, bias
         )
 
-    def __call__(self, x: SparseTensor) -> SparseTensor:
+    def __call__(
+        self,
+        x: SparseTensor,
+        coordinates: SparseTensor
+        | CoordinateMapKey
+        | mx.array
+        | None = None,
+    ) -> SparseTensor:
         return generative_conv_transpose3d(
             x,
             self.weight,
             _optional_bias(self),
             kernel_size=self.spec.size,
             stride=self.spec.stride,
+            coordinates=coordinates,
         )
 
     def to_quantized(
@@ -366,7 +390,14 @@ class NormalizedGenerativeConvTranspose3d(GenerativeConvTranspose3d):
             raise ValueError('eps must be positive.')
         self.eps = float(eps)
 
-    def __call__(self, x: SparseTensor) -> SparseTensor:
+    def __call__(
+        self,
+        x: SparseTensor,
+        coordinates: SparseTensor
+        | CoordinateMapKey
+        | mx.array
+        | None = None,
+    ) -> SparseTensor:
         return normalized_generative_conv_transpose3d(
             x,
             self.weight,
@@ -374,6 +405,7 @@ class NormalizedGenerativeConvTranspose3d(GenerativeConvTranspose3d):
             kernel_size=self.spec.size,
             stride=self.spec.stride,
             eps=self.eps,
+            coordinates=coordinates,
         )
 
 

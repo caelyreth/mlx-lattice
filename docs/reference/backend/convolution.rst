@@ -38,6 +38,9 @@ Semantic map kinds
    * - ``transposed``
      - ``CoordinateManager.transposed_kernel_relation``
      - Expanded support for transpose convolution.
+   * - ``target transposed``
+     - ``CoordinateManager.target_transposed_view``
+     - Caller-owned fine support using the indexed transpose equation.
    * - ``generative``
      - ``CoordinateManager.generative_relation``
      - Generated support from a transpose-convolution rule.
@@ -63,6 +66,12 @@ training derivative expected by exported models. A ``1x1x1`` kernel bypasses
 normalization and uses the ordinary pointwise projection. Packed weights are
 not accepted because their squared-weight normalization would not preserve the
 declared quantized contract.
+
+Transpose modules accept an optional second positional target. Without it they
+generate or recover support according to their module family. With it, ordinary
+and generative modules both evaluate on that exact support using
+``target = source * stride + offset * dilation - padding``. The target relation
+is cached by source key, target key, and kernel geometry.
 
 Floating forward routes
 -----------------------
