@@ -4,6 +4,9 @@ from mlx_lattice.nn.conv import (
     Conv3d,
     ConvTranspose3d,
     GenerativeConvTranspose3d,
+    NormalizedConvTranspose3d,
+    NormalizedGenerativeConvTranspose3d,
+    NormalizedSubmConv3d,
     SubmConv3d,
 )
 from mlx_lattice.nn.feature import (
@@ -52,6 +55,9 @@ __all__ = [
     'LeakyReLU',
     'Linear',
     'MaxPool3d',
+    'NormalizedConvTranspose3d',
+    'NormalizedGenerativeConvTranspose3d',
+    'NormalizedSubmConv3d',
     'Pool3d',
     'QuantizedConv3d',
     'QuantizedConvTranspose3d',

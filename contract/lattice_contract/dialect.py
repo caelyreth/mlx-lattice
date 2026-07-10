@@ -282,6 +282,26 @@ def subm_conv3d() -> None:
 
 
 @LATTICE_DIALECT.op(
+    'normalized_subm_conv3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('weight', 'weight'),
+        operand('bias', 'weight', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(
+        op_attr('kernel_size', 'i64_triple'),
+        op_attr('dilation', 'i64_triple'),
+        op_attr('eps', 'f32'),
+    ),
+    assembly='functional',
+    summary='Weight-normalized submanifold sparse 3D convolution',
+)
+def normalized_subm_conv3d() -> None:
+    """Register lattice.normalized_subm_conv3d."""
+
+
+@LATTICE_DIALECT.op(
     'target_conv3d',
     operands=(
         operand('input', 'sparse_tensor'),
@@ -315,6 +335,22 @@ def conv_transpose3d() -> None:
 
 
 @LATTICE_DIALECT.op(
+    'normalized_conv_transpose3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('weight', 'weight'),
+        operand('bias', 'weight', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(*_CONV_ATTRS, op_attr('eps', 'f32')),
+    assembly='functional',
+    summary='Weight-normalized sparse 3D transpose convolution',
+)
+def normalized_conv_transpose3d() -> None:
+    """Register lattice.normalized_conv_transpose3d."""
+
+
+@LATTICE_DIALECT.op(
     'generative_conv_transpose3d',
     operands=(
         operand('input', 'sparse_tensor'),
@@ -331,6 +367,26 @@ def conv_transpose3d() -> None:
 )
 def generative_conv_transpose3d() -> None:
     """Register lattice.generative_conv_transpose3d."""
+
+
+@LATTICE_DIALECT.op(
+    'normalized_generative_conv_transpose3d',
+    operands=(
+        operand('input', 'sparse_tensor'),
+        operand('weight', 'weight'),
+        operand('bias', 'weight', optional=True),
+    ),
+    results=(result('result', 'sparse_tensor'),),
+    attributes=(
+        op_attr('kernel_size', 'i64_triple'),
+        op_attr('stride', 'i64_triple'),
+        op_attr('eps', 'f32'),
+    ),
+    assembly='functional',
+    summary='Weight-normalized generative sparse transpose convolution',
+)
+def normalized_generative_conv_transpose3d() -> None:
+    """Register lattice.normalized_generative_conv_transpose3d."""
 
 
 @LATTICE_DIALECT.op(

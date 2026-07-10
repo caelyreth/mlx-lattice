@@ -432,6 +432,44 @@ LogicalResult SubmConv3DOp::verify() {
     );
 }
 
+LogicalResult NormalizedSubmConv3DOp::verify() {
+    auto kernelSize = getKernelSize();
+    if (failed(verifySparseRank(getOperation(), getInput().getType())) ||
+        failed(verifySparseRank(getOperation(), getResult().getType())) ||
+        failed(
+            verifyWeightFamily(getOperation(), getWeight().getType(), "conv3d")
+        ) ||
+        failed(verifyOptionalBias(getOperation(), getBias()))) {
+        return failure();
+    }
+    if (getOperation()->hasAttr("stride") ||
+        getOperation()->hasAttr("padding")) {
+        return emitOpError("must not carry stride or padding");
+    }
+    if (failed(verifyTriple(
+            getOperation(),
+            kernelSize,
+            "kernel_size",
+            /*strictlyPositive=*/true
+        ))) {
+        return failure();
+    }
+    for (int64_t item : kernelSize) {
+        if ((item % 2) == 0) {
+            return emitOpError("submanifold kernel_size values must be odd");
+        }
+    }
+    if (failed(verifyTriple(
+            getOperation(),
+            getDilation(),
+            "dilation",
+            /*strictlyPositive=*/true
+        ))) {
+        return failure();
+    }
+    return verifyPositiveEps(getOperation(), getEpsAttr());
+}
+
 LogicalResult TargetConv3DOp::verify() {
     auto inputType = getInput().getType();
     auto targetType = getTarget().getType();
@@ -493,6 +531,29 @@ LogicalResult ConvTranspose3DOp::verify() {
     );
 }
 
+LogicalResult NormalizedConvTranspose3DOp::verify() {
+    if (failed(verifySparseRank(getOperation(), getInput().getType())) ||
+        failed(verifySparseRank(getOperation(), getResult().getType())) ||
+        failed(
+            verifyWeightFamily(getOperation(), getWeight().getType(), "conv3d")
+        ) ||
+        failed(verifyOptionalBias(getOperation(), getBias()))) {
+        return failure();
+    }
+    if (failed(verifyConvTriples(
+            getOperation(),
+            ConvTriples{
+                .kernelSize = getKernelSize(),
+                .stride = getStride(),
+                .padding = getPadding(),
+                .dilation = getDilation(),
+            }
+        ))) {
+        return failure();
+    }
+    return verifyPositiveEps(getOperation(), getEpsAttr());
+}
+
 LogicalResult GenerativeConvTranspose3DOp::verify() {
     if (failed(verifySparseRank(getOperation(), getInput().getType()))) {
         return failure();
@@ -526,6 +587,36 @@ LogicalResult GenerativeConvTranspose3DOp::verify() {
         "stride",
         /*strictlyPositive=*/true
     );
+}
+
+LogicalResult NormalizedGenerativeConvTranspose3DOp::verify() {
+    if (failed(verifySparseRank(getOperation(), getInput().getType())) ||
+        failed(verifySparseRank(getOperation(), getResult().getType())) ||
+        failed(
+            verifyWeightFamily(getOperation(), getWeight().getType(), "conv3d")
+        ) ||
+        failed(verifyOptionalBias(getOperation(), getBias()))) {
+        return failure();
+    }
+    if (getOperation()->hasAttr("padding") ||
+        getOperation()->hasAttr("dilation")) {
+        return emitOpError("must not carry padding or dilation");
+    }
+    if (failed(verifyTriple(
+            getOperation(),
+            getKernelSize(),
+            "kernel_size",
+            /*strictlyPositive=*/true
+        )) ||
+        failed(verifyTriple(
+            getOperation(),
+            getStride(),
+            "stride",
+            /*strictlyPositive=*/true
+        ))) {
+        return failure();
+    }
+    return verifyPositiveEps(getOperation(), getEpsAttr());
 }
 
 LogicalResult Pool3DOp::verify() {

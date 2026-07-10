@@ -4,6 +4,9 @@ from mlx_lattice.ops.conv import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    normalized_conv_transpose3d,
+    normalized_generative_conv_transpose3d,
+    normalized_subm_conv3d,
     subm_conv3d,
 )
 from mlx_lattice.ops.coords import (
@@ -167,6 +170,9 @@ __all__ = [
     'morton_order',
     'morton_sort_coords',
     'normalized_cdf',
+    'normalized_conv_transpose3d',
+    'normalized_generative_conv_transpose3d',
+    'normalized_subm_conv3d',
     'occupancy_downsample',
     'occupancy_expand',
     'pool3d',

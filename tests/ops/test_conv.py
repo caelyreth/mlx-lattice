@@ -8,6 +8,8 @@ from mlx_lattice.ops import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    normalized_generative_conv_transpose3d,
+    normalized_subm_conv3d,
     subm_conv3d,
 )
 from mlx_lattice.ops._relation_exec import (
@@ -39,6 +41,74 @@ def test_conv3d_pointwise_matches_dense_linear_contract() -> None:
 
     assert out.feats.tolist() == [[9.0, 18.0], [19.0, 42.0]]
     assert_same_sparse_identity(out, x)
+
+
+def test_normalized_subm_conv3d_matches_weight_norm_contract() -> None:
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    x = SparseTensor(
+        coords,
+        mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32),
+    )
+    weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1, 3, 1, 1, 1
+    )
+    bias = mx.array([0.25], dtype=mx.float32)
+
+    out = normalized_subm_conv3d(x, weight, bias, kernel_size=(3, 1, 1))
+    expected = mx.array(
+        [
+            [8.0 / (13.0**0.5) + 0.25],
+            [14.0 / (14.0**0.5) + 0.25],
+            [8.0 / (5.0**0.5) + 0.25],
+        ],
+        dtype=mx.float32,
+    )
+    mx.eval(out.feats, expected)
+
+    assert_same_sparse_identity(out, x)
+    assert mx.allclose(out.feats, expected, rtol=1e-6, atol=1e-6).item()
+
+
+def test_normalized_pointwise_convolution_bypasses_weight_norm() -> None:
+    x = SparseTensor(
+        mx.array([[0, 0, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0, 3.0]], dtype=mx.float32),
+    )
+    weight = mx.array([[4.0, 5.0]], dtype=mx.float32)
+
+    out = normalized_subm_conv3d(x, weight, kernel_size=1)
+
+    assert out.feats.tolist() == [[23.0]]
+
+
+def test_normalized_generative_transpose_reuses_generated_support() -> None:
+    x = SparseTensor(
+        mx.array([[0, 0, 0, 0]], dtype=mx.int32),
+        mx.array([[2.0]], dtype=mx.float32),
+        stride=2,
+    )
+    weight = mx.array([1.0, 2.0], dtype=mx.float32).reshape(1, 2, 1, 1, 1)
+
+    out = normalized_generative_conv_transpose3d(
+        x, weight, kernel_size=(2, 1, 1), stride=2
+    )
+    numerator = generative_conv_transpose3d(
+        x, weight, kernel_size=(2, 1, 1), stride=2
+    )
+    denominator = generative_conv_transpose3d(
+        x.replace(feats=mx.ones_like(x.feats)),
+        mx.square(weight),
+        kernel_size=(2, 1, 1),
+        stride=2,
+    )
+    expected = numerator.feats / mx.sqrt(denominator.feats + 1e-8)
+    mx.eval(out.feats, expected)
+
+    assert mx.array_equal(out.coords, numerator.coords).item()
+    assert mx.allclose(out.feats, expected, rtol=1e-6, atol=1e-6).item()
 
 
 def test_conv3d_pointwise_uses_precise_small_fp32_projection(

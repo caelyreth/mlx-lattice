@@ -35,6 +35,15 @@ Module summary
    * - ``GenerativeConvTranspose3d``
      - Generated transpose-convolution support.
      - :func:`mlx_lattice.ops.generative_conv_transpose3d`
+   * - ``NormalizedSubmConv3d``
+     - Input coordinate identity.
+     - :func:`mlx_lattice.ops.normalized_subm_conv3d`
+   * - ``NormalizedConvTranspose3d``
+     - Transposed relation support.
+     - :func:`mlx_lattice.ops.normalized_conv_transpose3d`
+   * - ``NormalizedGenerativeConvTranspose3d``
+     - Generated transpose-convolution support.
+     - :func:`mlx_lattice.ops.normalized_generative_conv_transpose3d`
 
 .. automodule:: mlx_lattice.nn.conv
    :members:

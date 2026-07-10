@@ -23,6 +23,9 @@ def test_lattice_dialect_schema_is_annotation_backed() -> None:
     assert 'conv3d' in digest['ops']
     assert 'conv_transpose3d' in digest['ops']
     assert 'generative_conv_transpose3d' in digest['ops']
+    assert 'normalized_subm_conv3d' in digest['ops']
+    assert 'normalized_conv_transpose3d' in digest['ops']
+    assert 'normalized_generative_conv_transpose3d' in digest['ops']
     assert 'pool3d' in digest['ops']
     assert 'global_pool' in digest['ops']
     assert 'voxelize' in digest['ops']
@@ -82,6 +85,15 @@ def test_mlir_builder_emits_transpose_conv_family_ops() -> None:
     assert 'lattice.conv_transpose3d' in graph
     assert 'lattice.generative_conv_transpose3d' in graph
     assert 'array<i64: 2, 2, 2>' in graph
+
+
+def test_mlir_builder_emits_normalized_conv_family_ops() -> None:
+    graph = _normalized_conv_graph()
+
+    assert 'lattice.normalized_subm_conv3d' in graph
+    assert 'lattice.normalized_conv_transpose3d' in graph
+    assert 'lattice.normalized_generative_conv_transpose3d' in graph
+    assert 'eps = 0.00000001 : f32' in graph
 
 
 def test_mlir_builder_emits_pooling_ops() -> None:
@@ -208,6 +220,7 @@ def test_mlir_builder_output_passes_lattice_opt_when_available(
     for index, text in enumerate(
         (
             _conv_graph(),
+            _normalized_conv_graph(),
             _point_voxel_graph(),
             _sparse_binary_graph(),
             _feature_graph(),
@@ -298,6 +311,56 @@ def _transpose_conv_graph() -> str:
         weight=weight,
         kernel_size=(2, 2, 2),
         stride=(2, 2, 2),
+        result_type=sparse,
+    )
+    builder.return_(out)
+    return builder.to_mlir()
+
+
+def _normalized_conv_graph() -> str:
+    sparse = SparseTensorType(dtype='f16')
+    builder = MLIRModuleBuilder()
+    coords = builder.argument('coords', TensorType('tensor<?x4xi32>'))
+    feats = builder.argument('features', TensorType('tensor<?x32xf16>'))
+    active = builder.argument('active', TensorType('tensor<1xi32>'))
+    x = builder.sparse_make(
+        coords=coords,
+        features=feats,
+        active=active,
+        stride=(4, 4, 4),
+        coord_order='batch_x_y_z',
+        result_type=sparse,
+    )
+    weight = builder.weight(
+        sym_name='normalized.weight',
+        storage_key='normalized.weight',
+        layout='conv3d_o_zyx_i',
+        result_type=WeightType('conv3d', 'f16'),
+    )
+    subm = builder.normalized_subm_conv3d(
+        input=x,
+        weight=weight,
+        kernel_size=(3, 3, 3),
+        dilation=(1, 1, 1),
+        eps=1e-8,
+        result_type=sparse,
+    )
+    transposed = builder.normalized_conv_transpose3d(
+        input=subm,
+        weight=weight,
+        kernel_size=(2, 2, 2),
+        stride=(2, 2, 2),
+        padding=(0, 0, 0),
+        dilation=(1, 1, 1),
+        eps=1e-8,
+        result_type=sparse,
+    )
+    out = builder.normalized_generative_conv_transpose3d(
+        input=transposed,
+        weight=weight,
+        kernel_size=(2, 2, 2),
+        stride=(2, 2, 2),
+        eps=1e-8,
         result_type=sparse,
     )
     builder.return_(out)

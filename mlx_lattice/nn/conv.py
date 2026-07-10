@@ -16,6 +16,9 @@ from mlx_lattice.ops import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    normalized_conv_transpose3d,
+    normalized_generative_conv_transpose3d,
+    normalized_subm_conv3d,
     subm_conv3d,
 )
 
@@ -23,6 +26,9 @@ __all__ = [
     'Conv3d',
     'ConvTranspose3d',
     'GenerativeConvTranspose3d',
+    'NormalizedConvTranspose3d',
+    'NormalizedGenerativeConvTranspose3d',
+    'NormalizedSubmConv3d',
     'SubmConv3d',
 ]
 
@@ -154,6 +160,41 @@ class SubmConv3d(mxnn.Module):
         )
 
 
+class NormalizedSubmConv3d(SubmConv3d):
+    """Weight-normalized submanifold sparse convolution."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        kernel_size: int | Sequence[int] = 3,
+        dilation: int | Sequence[int] = 1,
+        bias: bool = True,
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            dilation=dilation,
+            bias=bias,
+        )
+        if eps <= 0:
+            raise ValueError('eps must be positive.')
+        self.eps = float(eps)
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return normalized_subm_conv3d(
+            x,
+            self.weight,
+            _optional_bias(self),
+            kernel_size=self.spec.size,
+            dilation=self.spec.dilation,
+            eps=self.eps,
+        )
+
+
 class ConvTranspose3d(mxnn.Module):
     """Sparse 3D transpose-convolution module.
 
@@ -210,6 +251,47 @@ class ConvTranspose3d(mxnn.Module):
         )
 
 
+class NormalizedConvTranspose3d(ConvTranspose3d):
+    """Weight-normalized sparse transpose convolution."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        kernel_size: int | Sequence[int] = 2,
+        stride: int | Sequence[int] = 2,
+        padding: int | Sequence[int] = 0,
+        dilation: int | Sequence[int] = 1,
+        bias: bool = True,
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            bias=bias,
+        )
+        if eps <= 0:
+            raise ValueError('eps must be positive.')
+        self.eps = float(eps)
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return normalized_conv_transpose3d(
+            x,
+            self.weight,
+            _optional_bias(self),
+            kernel_size=self.spec.size,
+            stride=self.spec.stride,
+            padding=self.spec.padding,
+            dilation=self.spec.dilation,
+            eps=self.eps,
+        )
+
+
 class GenerativeConvTranspose3d(mxnn.Module):
     """Generative sparse 3D transpose-convolution module.
 
@@ -257,6 +339,41 @@ class GenerativeConvTranspose3d(mxnn.Module):
         _validate_quantize_request(mode, quantize_input)
         return QuantizedGenerativeConvTranspose3d.from_conv(
             self, group_size=group_size, bits=4 if bits is None else bits
+        )
+
+
+class NormalizedGenerativeConvTranspose3d(GenerativeConvTranspose3d):
+    """Weight-normalized generative sparse transpose convolution."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        kernel_size: int | Sequence[int] = 2,
+        stride: int | Sequence[int] = 2,
+        bias: bool = True,
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            bias=bias,
+        )
+        if eps <= 0:
+            raise ValueError('eps must be positive.')
+        self.eps = float(eps)
+
+    def __call__(self, x: SparseTensor) -> SparseTensor:
+        return normalized_generative_conv_transpose3d(
+            x,
+            self.weight,
+            _optional_bias(self),
+            kernel_size=self.spec.size,
+            stride=self.spec.stride,
+            eps=self.eps,
         )
 
 

@@ -102,6 +102,24 @@ def Lattice_SubmConv3DOp : Lattice_Op<"subm_conv3d"> {
   }];
 }
 
+def Lattice_NormalizedSubmConv3DOp
+    : Lattice_Op<"normalized_subm_conv3d"> {
+  let summary = "Weight-normalized submanifold sparse 3D convolution";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$dilation,
+    F32Attr:$eps
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 def Lattice_TargetConv3DOp : Lattice_Op<"target_conv3d"> {
   let summary = "Sparse 3D convolution on explicit target coordinates";
   let arguments = (ins
@@ -139,6 +157,26 @@ def Lattice_ConvTranspose3DOp : Lattice_Op<"conv_transpose3d"> {
   }];
 }
 
+def Lattice_NormalizedConvTranspose3DOp
+    : Lattice_Op<"normalized_conv_transpose3d"> {
+  let summary = "Weight-normalized sparse 3D transpose convolution";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    DenseI64ArrayAttr:$padding,
+    DenseI64ArrayAttr:$dilation,
+    F32Attr:$eps
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 def Lattice_GenerativeConvTranspose3DOp
     : Lattice_Op<"generative_conv_transpose3d"> {
   let summary = "Sparse 3D generative transpose convolution";
@@ -148,6 +186,24 @@ def Lattice_GenerativeConvTranspose3DOp
     Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride
+  );
+  let results = (outs Lattice_SparseTensorType:$result);
+  let assemblyFormat = [{
+    $input `,` $weight (`,` $bias^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def Lattice_NormalizedGenerativeConvTranspose3DOp
+    : Lattice_Op<"normalized_generative_conv_transpose3d"> {
+  let summary = "Weight-normalized generative sparse transpose convolution";
+  let arguments = (ins
+    Lattice_SparseTensorType:$input,
+    Lattice_WeightType:$weight,
+    Optional<Lattice_WeightType>:$bias,
+    DenseI64ArrayAttr:$kernel_size,
+    DenseI64ArrayAttr:$stride,
+    F32Attr:$eps
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{

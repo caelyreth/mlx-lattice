@@ -206,6 +206,30 @@ def test_convolution_modules_use_mlx_weight_layout_and_public_ops() -> None:
     assert subm_out.feats.tolist() == active_feats(out).tolist()
 
 
+def test_normalized_convolution_module_owns_exact_semantics() -> None:
+    x = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32),
+    )
+    module = lnn.NormalizedSubmConv3d(
+        1, 1, kernel_size=(3, 1, 1), bias=False
+    )
+    module.weight = mx.array([1.0, 2.0, 3.0], dtype=mx.float32).reshape(
+        1, 3, 1, 1, 1
+    )
+
+    actual = module(x)
+    expected = mlx_lattice.ops.normalized_subm_conv3d(
+        x, module.weight, kernel_size=(3, 1, 1)
+    )
+
+    assert_same_sparse_identity(actual, expected)
+    assert_nested_close(actual.feats.tolist(), expected.feats.tolist())
+
+
 def test_conv3d_module_accepts_target_coordinates() -> None:
     x = SparseTensor(
         mx.array(

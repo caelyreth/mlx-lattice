@@ -1,7 +1,7 @@
 // Invalid: executable artifacts require one @forward function.
 module attributes {
   lattice.ir_version = 0,
-  lattice.schema_digest = "314833e397548364385e5a24c1faf5ebcd4eadc3a0d750a0bed444e2c855c4a1",
+  lattice.schema_digest = "8a5ace10e29b47304594c1b66608ab64318c68568a69f4dcbc1ed8c570d73088",
   lattice.input_names = [],
   lattice.input_roles = [],
   lattice.output_names = ["output0"],

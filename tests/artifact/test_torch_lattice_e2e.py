@@ -94,22 +94,30 @@ def test_torch_lattice_point_voxel_artifact_runs_on_mlx() -> None:
 
 
 @pytest.mark.parametrize(
-    ('case_name', 'batch_counts'),
+    ('case_name', 'batch_counts', 'input_prefix'),
     [
-        ('transpose_convolution', (4,)),
-        ('generative_transpose_convolution', (2,)),
+        ('transpose_convolution', (4,), ''),
+        ('generative_transpose_convolution', (2,), ''),
+        ('normalized_convolution', (4,), 'x_'),
     ],
 )
 def test_torch_lattice_transpose_artifact_runs_on_mlx(
     case_name: str,
     batch_counts: tuple[int, ...],
+    input_prefix: str,
 ) -> None:
     case = FIXTURE_ROOT / case_name
     program = load_lattice_program(case)
     inputs = mx.load(str(case / 'inputs.safetensors'))
     expected = mx.load(str(case / 'expected.safetensors'))
 
-    output = program(_sparse_input(inputs, batch_counts=batch_counts))
+    output = program(
+        _sparse_input(
+            inputs,
+            batch_counts=batch_counts,
+            prefix=input_prefix,
+        )
+    )
 
     _assert_sparse_output_close(output, expected, rtol=2e-3, atol=2e-3)
 
@@ -118,11 +126,12 @@ def _sparse_input(
     inputs: dict[str, mx.array],
     *,
     batch_counts: tuple[int, ...],
+    prefix: str = '',
 ) -> SparseTensor:
     return SparseTensor(
-        inputs['coords'],
-        inputs['features'],
-        active_rows=inputs['active'],
+        inputs[f'{prefix}coords'],
+        inputs[f'{prefix}features'],
+        active_rows=inputs[f'{prefix}active'],
         batch_counts=batch_counts,
     )
 

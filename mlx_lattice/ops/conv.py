@@ -27,6 +27,9 @@ __all__ = [
     'conv3d',
     'conv_transpose3d',
     'generative_conv_transpose3d',
+    'normalized_conv_transpose3d',
+    'normalized_generative_conv_transpose3d',
+    'normalized_subm_conv3d',
     'subm_conv3d',
 ]
 
@@ -145,6 +148,45 @@ def subm_conv3d(
 
 
 @lattice_lowering
+def normalized_subm_conv3d(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: int | Sequence[int] = 3,
+    dilation: int | Sequence[int] = 1,
+    eps: float = 1e-8,
+) -> SparseTensor:
+    """Apply weight-normalized convolution on input coordinate support.
+
+    For non-pointwise kernels the output is divided channel-wise by
+    ``sqrt(conv(ones, weight**2) + eps)`` before bias is applied. This is the
+    normalized sparse-convolution contract used by Gameleon's attribute
+    models. Pointwise kernels intentionally use the ordinary matrix product.
+    """
+    spec = KernelSpec(size=kernel_size, stride=1, dilation=dilation)
+    _require_odd_kernel(spec.size, 'normalized_subm_conv3d')
+    if spec.is_pointwise:
+        return subm_conv3d(
+            x,
+            weight,
+            bias,
+            kernel_size=spec.size,
+            dilation=spec.dilation,
+        )
+    return _normalized_relation_conv(
+        x,
+        weight,
+        bias,
+        spec,
+        map_kind='submanifold',
+        output_stride=x.stride,
+        reuse_input_coords=True,
+        eps=eps,
+    )
+
+
+@lattice_lowering
 def conv_transpose3d(
     x: SparseTensor,
     weight: mx.array | QuantizedWeight,
@@ -178,6 +220,36 @@ def conv_transpose3d(
 
 
 @lattice_lowering
+def normalized_conv_transpose3d(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: int | Sequence[int] = 2,
+    stride: int | Sequence[int] = 2,
+    padding: int | Sequence[int] = 0,
+    dilation: int | Sequence[int] = 1,
+    eps: float = 1e-8,
+) -> SparseTensor:
+    """Apply weight-normalized sparse transpose convolution."""
+    spec = KernelSpec(
+        size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+    )
+    return _normalized_relation_conv(
+        x,
+        weight,
+        bias,
+        spec,
+        map_kind='transposed',
+        output_stride=_div_stride(x.stride, spec.stride),
+        eps=eps,
+    )
+
+
+@lattice_lowering
 def generative_conv_transpose3d(
     x: SparseTensor,
     weight: mx.array | QuantizedWeight,
@@ -200,6 +272,29 @@ def generative_conv_transpose3d(
         spec,
         map_kind='generative',
         output_stride=_div_stride(x.stride, spec.stride),
+    )
+
+
+@lattice_lowering
+def normalized_generative_conv_transpose3d(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: int | Sequence[int] = 2,
+    stride: int | Sequence[int] = 2,
+    eps: float = 1e-8,
+) -> SparseTensor:
+    """Generate support with weight-normalized transpose convolution."""
+    spec = KernelSpec(size=kernel_size, stride=stride)
+    return _normalized_relation_conv(
+        x,
+        weight,
+        bias,
+        spec,
+        map_kind='generative',
+        output_stride=_div_stride(x.stride, spec.stride),
+        eps=eps,
     )
 
 
@@ -249,6 +344,31 @@ def subm_conv3d_from_artifact(
         bias,
         kernel_size=kernel_size,
         dilation=dilation,
+    )
+
+
+@artifact_lowering(
+    op=normalized_subm_conv3d,
+    weights={'weight': conv_weight(input='input')},
+)
+def normalized_subm_conv3d_from_artifact(
+    input: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: Triple,
+    dilation: Triple,
+    eps: float,
+) -> SparseTensor:
+    """Lower lattice.normalized_subm_conv3d artifacts."""
+
+    return normalized_subm_conv3d(
+        input,
+        weight,
+        bias,
+        kernel_size=kernel_size,
+        dilation=dilation,
+        eps=eps,
     )
 
 
@@ -310,6 +430,35 @@ def conv_transpose3d_from_artifact(
 
 
 @artifact_lowering(
+    op=normalized_conv_transpose3d,
+    weights={'weight': conv_weight(input='input')},
+)
+def normalized_conv_transpose3d_from_artifact(
+    input: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: Triple,
+    stride: Triple,
+    padding: Triple,
+    dilation: Triple,
+    eps: float,
+) -> SparseTensor:
+    """Lower lattice.normalized_conv_transpose3d artifacts."""
+
+    return normalized_conv_transpose3d(
+        input,
+        weight,
+        bias,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        eps=eps,
+    )
+
+
+@artifact_lowering(
     op=generative_conv_transpose3d,
     weights={'weight': conv_weight(input='input')},
 )
@@ -329,6 +478,31 @@ def generative_conv_transpose3d_from_artifact(
         bias,
         kernel_size=kernel_size,
         stride=stride,
+    )
+
+
+@artifact_lowering(
+    op=normalized_generative_conv_transpose3d,
+    weights={'weight': conv_weight(input='input')},
+)
+def normalized_generative_conv_transpose3d_from_artifact(
+    input: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None = None,
+    *,
+    kernel_size: Triple,
+    stride: Triple,
+    eps: float,
+) -> SparseTensor:
+    """Lower normalized generative transpose-convolution artifacts."""
+
+    return normalized_generative_conv_transpose3d(
+        input,
+        weight,
+        bias,
+        kernel_size=kernel_size,
+        stride=stride,
+        eps=eps,
     )
 
 
@@ -381,6 +555,42 @@ def _relation_conv(
         coord_manager=x.coord_manager,
         active_rows=relation.out_count,
     )
+
+
+def _normalized_relation_conv(
+    x: SparseTensor,
+    weight: mx.array,
+    bias: mx.array | None,
+    spec: KernelSpec,
+    *,
+    map_kind: str,
+    output_stride: Triple,
+    eps: float,
+    reuse_input_coords: bool = False,
+) -> SparseTensor:
+    if eps <= 0:
+        raise ValueError('eps must be positive.')
+    numerator = _relation_conv(
+        x,
+        weight,
+        None,
+        spec,
+        map_kind=map_kind,
+        output_stride=output_stride,
+        reuse_input_coords=reuse_input_coords,
+    )
+    unit = x.replace(feats=mx.ones_like(x.feats))
+    denominator = _relation_conv(
+        unit,
+        mx.square(weight),
+        None,
+        spec,
+        map_kind=map_kind,
+        output_stride=output_stride,
+        reuse_input_coords=reuse_input_coords,
+    )
+    normalized = numerator.feats / mx.sqrt(denominator.feats + eps)
+    return numerator.replace(feats=_with_bias(normalized, bias))
 
 
 def _kernel_relation(

@@ -7,7 +7,10 @@ public operations are:
 * :func:`mlx_lattice.ops.conv3d`;
 * :func:`mlx_lattice.ops.subm_conv3d`;
 * :func:`mlx_lattice.ops.conv_transpose3d`;
-* :func:`mlx_lattice.ops.generative_conv_transpose3d`.
+* :func:`mlx_lattice.ops.generative_conv_transpose3d`;
+* :func:`mlx_lattice.ops.normalized_subm_conv3d`;
+* :func:`mlx_lattice.ops.normalized_conv_transpose3d`;
+* :func:`mlx_lattice.ops.normalized_generative_conv_transpose3d`.
 
 All four routes reduce over relation edges. The difference is how the output
 coordinate support is produced.
@@ -42,6 +45,24 @@ Semantic map kinds
 ``forward``, ``target``, and ``submanifold`` map kinds are considered by the
 sorted implicit-GEMM forward route. Transposed and generative convolutions use
 relation traversal for their current public path.
+
+Weight-normalized routes
+------------------------
+
+The normalized convolution family preserves the same relation and output
+support as its unnormalized counterpart. For non-pointwise kernels it computes
+
+.. math::
+
+   Y = \frac{\operatorname{conv}(X, W)}
+            {\sqrt{\operatorname{conv}(\mathbf{1}, W^2) + \varepsilon}} + b.
+
+The numerator and denominator passes reuse the coordinate manager's cached
+relation. The denominator remains weight-dependent, which preserves the exact
+training derivative expected by exported models. A ``1x1x1`` kernel bypasses
+normalization and uses the ordinary pointwise projection. Packed weights are
+not accepted because their squared-weight normalization would not preserve the
+declared quantized contract.
 
 Floating forward routes
 -----------------------

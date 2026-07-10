@@ -1,37 +1,39 @@
-// Invalid: lattice.subm_conv3d must not carry stride or padding.
+// Invalid: normalized convolution epsilon must be positive.
 module attributes {
   lattice.ir_version = 0,
   lattice.schema_digest = "8a5ace10e29b47304594c1b66608ab64318c68568a69f4dcbc1ed8c570d73088",
-  lattice.input_names = ["input0", "input1", "input2"],
-  lattice.input_roles = ["tensor", "tensor", "tensor"],
-  lattice.output_names = ["output0"],
-  lattice.output_roles = ["tensor"],
+  lattice.input_names = ["coords", "features", "active"],
+  lattice.input_roles = ["sparse_coords", "sparse_features", "sparse_active"],
+  lattice.output_names = ["output"],
+  lattice.output_roles = ["sparse_tensor"],
   lattice.weight_file = "weights.safetensors"
 } {
-  func.func @forward(%coords: tensor<?x4xi32>,
-                     %features: tensor<?x32xf16>,
-                     %active: tensor<1xi32>)
-      -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                feature = row_channel, dtype = f16> {
+  func.func @forward(
+    %coords: tensor<?x4xi32>,
+    %features: tensor<?x32xf16>,
+    %active: tensor<1xi32>
+  ) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
+                              feature = row_channel, dtype = f16> {
     %input = lattice.sparse.make %coords, %features, %active
-      {stride = array<i64: 1, 1, 1>, coord_order = #lattice.coord<batch_x_y_z>}
+      {stride = array<i64: 1, 1, 1>,
+       coord_order = #lattice.coord<batch_x_y_z>}
       : (tensor<?x4xi32>, tensor<?x32xf16>, tensor<1xi32>)
         -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                   feature = row_channel, dtype = f16>
-    %weight = lattice.weight @block.subm.weight
-      {storage_key = "block.subm.weight",
+    %weight = lattice.weight @block.weight
+      {storage_key = "block.weight",
        layout = #lattice.weight_layout<conv3d_o_zyx_i>,
        packing = #lattice.packing<dense>}
       : !lattice.weight<conv3d, f16>
-    %out = lattice.subm_conv3d %input, %weight
-      {kernel_size = array<i64: 3, 3, 3>, stride = array<i64: 1, 1, 1>,
-       padding = array<i64: 1, 1, 1>, dilation = array<i64: 1, 1, 1>}
+    %out = lattice.normalized_subm_conv3d %input, %weight
+      {kernel_size = array<i64: 3, 3, 3>,
+       dilation = array<i64: 1, 1, 1>, eps = 0.0 : f32}
       : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                 feature = row_channel, dtype = f16>,
          !lattice.weight<conv3d, f16>)
         -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
                                   feature = row_channel, dtype = f16>
     return %out : !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z,
-                                        feature = row_channel, dtype = f16>
+                                         feature = row_channel, dtype = f16>
   }
 }

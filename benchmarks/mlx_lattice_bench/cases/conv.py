@@ -10,6 +10,7 @@ from mlx_lattice.ops import (
     conv3d,
     conv_transpose3d,
     generative_conv_transpose3d,
+    normalized_subm_conv3d,
     subm_conv3d,
 )
 
@@ -31,6 +32,7 @@ type ConvKind = Literal[
     'target_superset',
     'transpose',
     'generative_transpose',
+    'normalized_subm',
 ]
 type ConvGradTarget = Literal['features', 'weight', 'both']
 type ConvWeight = mx.array | QuantizedWeight
@@ -78,7 +80,8 @@ def cases(
             channel_pairs=channel_pairs,
         )
     )
-    specs = (
+    quantized = dtype in ('int4', 'int8')
+    specs: tuple[tuple[str, ConvKind], ...] = (
         ('conv3d_pointwise', 'pointwise'),
         ('conv3d_generic', 'generic'),
         ('subm_conv3d', 'subm'),
@@ -87,8 +90,12 @@ def cases(
         ('conv3d_target_superset', 'target_superset'),
         ('conv_transpose3d', 'transpose'),
         ('generative_conv_transpose3d', 'generative_transpose'),
+        *(
+            (('normalized_subm_conv3d', 'normalized_subm'),)
+            if not quantized
+            else ()
+        ),
     )
-    quantized = dtype in ('int4', 'int8')
     forward_cases = tuple(
         _case(name, kind, params, quantized=quantized)
         for name, kind in specs
@@ -310,6 +317,14 @@ def _run(kind: ConvKind, inputs: ConvInputs) -> SparseTensor:
         return conv3d(inputs.x, inputs.kernel3_weight, kernel_size=3)
     if kind == 'subm':
         return subm_conv3d(inputs.x, inputs.kernel3_weight, kernel_size=3)
+    if kind == 'normalized_subm':
+        if isinstance(inputs.kernel3_weight, QuantizedWeight):
+            raise TypeError(
+                'normalized convolution requires dense weights.'
+            )
+        return normalized_subm_conv3d(
+            inputs.x, inputs.kernel3_weight, kernel_size=3
+        )
     if kind == 'target_same':
         return conv3d(
             inputs.x,
@@ -478,6 +493,7 @@ def _compiled_inputs(
         in (
             'generic',
             'subm',
+            'normalized_subm',
             'target_same',
             'target_subset',
             'target_superset',
@@ -495,6 +511,7 @@ def _weight_for(kind: ConvKind, fixture: ConvFixture) -> ConvWeight:
     if kind in (
         'generic',
         'subm',
+        'normalized_subm',
         'target_same',
         'target_subset',
         'target_superset',

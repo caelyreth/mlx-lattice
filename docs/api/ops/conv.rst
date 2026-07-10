@@ -26,6 +26,15 @@ operation:
    * - ``generative_conv_transpose3d``
      - ``generative``
      - Generates support from input rows and stride.
+   * - ``normalized_subm_conv3d``
+     - ``submanifold``
+     - Reuses input support and applies weight-dependent normalization.
+   * - ``normalized_conv_transpose3d``
+     - ``transposed``
+     - Uses transposed support and applies weight-dependent normalization.
+   * - ``normalized_generative_conv_transpose3d``
+     - ``generative``
+     - Generates support and applies weight-dependent normalization.
 
 Floating weights accept dense 5D layout ``(C_out, Kx, Ky, Kz, C_in)`` and
 mapped kernel-major layout ``(K, C_in, C_out)``. Packed quantized weights use
