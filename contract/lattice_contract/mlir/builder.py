@@ -196,7 +196,7 @@ class MLIRModuleBuilder:
     ) -> SSAValue:
         """Append a function argument and return its SSA value."""
 
-        value = SSAValue(name, _type(type))
+        value = SSAValue(self._unique(name), _type(type))
         self._args.append(value)
         self._arg_roles.append(role)
         return value
@@ -301,11 +301,12 @@ class MLIRModuleBuilder:
         explicit = kwargs.get('result')
         if explicit is None and index > 0:
             explicit = kwargs.get(f'result_{index}')
-        name = (
+        stem = (
             str(explicit)
             if explicit is not None
-            else self._unique(op.python_name.replace('_', '.'))
+            else op.python_name.replace('_', '.')
         )
+        name = self._unique(stem)
         return SSAValue(name, type)
 
     def _unique(self, stem: str) -> str:

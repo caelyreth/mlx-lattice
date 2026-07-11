@@ -84,6 +84,35 @@ def test_mlir_builder_emits_valid_conv3d_graph_shape() -> None:
     assert '#lattice.packing<dense>' in graph
 
 
+def test_mlir_builder_allocates_unique_explicit_ssa_names() -> None:
+    sparse = SparseTensorType(dtype='f32')
+    builder = MLIRModuleBuilder()
+    coords = builder.argument('coords', TensorType('tensor<?x4xi32>'))
+    features = builder.argument('features', TensorType('tensor<?x1xf32>'))
+    active = builder.argument('active', TensorType('tensor<1xi32>'))
+    first = builder.sparse_make(
+        coords=coords,
+        features=features,
+        active=active,
+        stride=(1, 1, 1),
+        coord_order='batch_x_y_z',
+        result_type=sparse,
+        result='shared',
+    )
+    second = builder.sparse_with_features(
+        input=first,
+        features=features,
+        result_type=sparse,
+        result='shared',
+    )
+    builder.return_(second)
+
+    graph = builder.to_mlir()
+
+    assert '%shared = lattice.sparse.make' in graph
+    assert '%shared1 = lattice.sparse.with_features' in graph
+
+
 def test_mlir_builder_emits_transpose_conv_family_ops() -> None:
     graph = _transpose_conv_graph()
 
