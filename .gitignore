@@ -17,6 +17,7 @@ benchmarks/results/
 
 # ly's choice
 references
+conformance/precision_audit
 
 # preferences
 /.vscode
