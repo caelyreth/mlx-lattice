@@ -3,6 +3,7 @@ target_sources(
   mlx_lattice_feature_convolution
   PRIVATE
     api.cpp
+    projection.cpp
     primitive.cpp
     quantized.cpp
     streams.cpp
@@ -12,6 +13,7 @@ target_sources(
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/direct/quantized_runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/quantized_runtime.cpp>
+    $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/projection_runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/sorted_igemm/quantized_runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/tensor_ops/input_grad/runtime.cpp>
     $<$<BOOL:${MLX_LATTICE_HAS_METAL}>:metal/tensor_ops/quantized_forward/runtime.cpp>

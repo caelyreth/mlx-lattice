@@ -1,7 +1,7 @@
 // Invalid: lattice.conv3d requires a conv3d-compatible weight layout.
 module attributes {
-  lattice.ir_version = 0,
-  lattice.schema_digest = "de8cda6380a1e82a3ba08d215a77a43a0a7088d74e81dbc2afa2446dbb79bfd1",
+  lattice.ir_version = 1,
+  lattice.schema_digest = "eb5aaff9fc917038f49f4c62f9e19c2d78d2b3540035de55c270b9513d3156aa",
   lattice.input_names = ["input0", "input1", "input2"],
   lattice.input_roles = ["tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],

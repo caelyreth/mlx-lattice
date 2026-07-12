@@ -18,6 +18,10 @@ to 3-tuples. Kernel volume is:
 For ``3x3x3``, ``K=27``. For pointwise ``1x1x1``, ``K=1`` and convolution can
 often become a feature matrix multiplication.
 
+Kernel positions are always enumerated as ``(x, y, z)`` with ``z`` varying
+fastest. This is the ``conv3d_o_xyz_i`` artifact convention. Execution kernels
+may repack weights, but that does not change the public row-to-position mapping.
+
 Relation edge arrays
 --------------------
 

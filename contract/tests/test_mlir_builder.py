@@ -138,7 +138,7 @@ def test_mlir_builder_emits_target_transpose_conv_ops() -> None:
     weight = builder.weight(
         sym_name='up.weight',
         storage_key='up.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         result_type=WeightType('conv3d', 'f32'),
     )
     ordinary = builder.target_conv_transpose3d(
@@ -261,7 +261,7 @@ def test_mlir_builder_supports_quantized_weight_packing() -> None:
     weight = builder.weight(
         sym_name='stem.qweight',
         storage_key='stem.qweight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         packing=quantized_packing('int4', group_size=32),
         result_type=WeightType('conv3d', 'i4'),
     )
@@ -291,7 +291,7 @@ def test_mlir_builder_emits_optional_bias_operands() -> None:
     weight = builder.weight(
         sym_name='stem.weight',
         storage_key='stem.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         result_type=WeightType('conv3d', 'f16'),
     )
     bias = builder.weight(
@@ -368,7 +368,7 @@ def _conv_graph() -> str:
     weight = builder.weight(
         sym_name='stem.weight',
         storage_key='stem.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         packing=dense_packing(),
         result_type=WeightType('conv3d', 'f16'),
     )
@@ -402,7 +402,7 @@ def _transpose_conv_graph() -> str:
     weight = builder.weight(
         sym_name='decoder.weight',
         storage_key='decoder.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         packing=dense_packing(),
         result_type=WeightType('conv3d', 'f16'),
     )
@@ -443,7 +443,7 @@ def _normalized_conv_graph() -> str:
     weight = builder.weight(
         sym_name='normalized.weight',
         storage_key='normalized.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         result_type=WeightType('conv3d', 'f16'),
     )
     subm = builder.normalized_subm_conv3d(

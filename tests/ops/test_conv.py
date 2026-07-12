@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from lattice_contract import submanifold_conv3d_f32_to_f64
 
 from mlx_lattice import SparseTensor
 from mlx_lattice.core import dequantize_weight, quantize_weight
@@ -112,11 +113,11 @@ def test_normalized_generative_transpose_reuses_generated_support() -> None:
     assert mx.allclose(out.feats, expected, rtol=1e-6, atol=1e-6).item()
 
 
-def test_conv3d_pointwise_uses_precise_small_fp32_projection(
+def test_conv3d_pointwise_uses_accurate_fp32_projection(
     selected_backend,
 ) -> None:
     if selected_backend.name != 'metal':
-        pytest.skip('small fp32 projection precision is Metal-specific')
+        pytest.skip('accurate fp32 projection is Metal-specific')
     coords = mx.array([[0, row, 0, 0] for row in range(6)], dtype=mx.int32)
     feats = mx.array(
         [
@@ -172,6 +173,259 @@ def test_conv3d_generic_matches_fused_native_reference() -> None:
     assert out.coord_manager is x.coord_manager
     assert out.coord_key != x.coord_key
     assert out.coord_manager.owns(out.coord_key)
+
+
+def test_subm_conv3d_matches_contract_oracle_for_non_cubic_kernel() -> None:
+    coords = mx.array(
+        [
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 2, 0, 0],
+            [0, 0, 0, 1],
+            [0, 1, 0, 1],
+            [0, 2, 0, 1],
+            [0, 0, 0, 3],
+            [0, 1, 0, 3],
+            [0, 2, 0, 3],
+        ],
+        dtype=mx.int32,
+    )
+    feats = mx.array([[float(index)] for index in range(1, 10)])
+    kernel_size = (3, 1, 5)
+    rows = tuple(float(index) for index in range(1, 16))
+    weight = mx.array(rows, dtype=mx.float32).reshape((1, 3, 1, 5, 1))
+    expected = submanifold_conv3d_f32_to_f64(
+        coords.tolist(),
+        feats.tolist(),
+        tuple(((value,),) for value in rows),
+        kernel_size=kernel_size,
+    )
+
+    x = SparseTensor(coords, feats)
+    out = subm_conv3d(x, weight, kernel_size=kernel_size)
+    mx.eval(out.feats)
+
+    assert_same_sparse_identity(out, x)
+    assert active_feats(out).tolist() == [list(row) for row in expected]
+
+
+def test_subm_conv3d_fp32_stays_within_contract_oracle_tolerance() -> None:
+    kernel_size = (3, 3, 3)
+    in_channels, out_channels = 7, 5
+    coords = mx.array(
+        [
+            [0, x, y, z]
+            for x in range(3)
+            for y in range(3)
+            for z in range(3)
+        ],
+        dtype=mx.int32,
+    )
+    feats = mx.array(
+        [
+            [
+                (-1.0 if (row + channel) % 2 else 1.0)
+                * (0.125 + ((row * 11 + channel * 7) % 53) / 53.0)
+                for channel in range(in_channels)
+            ]
+            for row in range(int(coords.shape[0]))
+        ],
+        dtype=mx.float32,
+    )
+    rows = tuple(
+        tuple(
+            tuple(
+                (-1.0 if (kernel + input_channel + output) % 2 else 1.0)
+                * (
+                    0.125
+                    + ((kernel * 17 + input_channel * 5 + output) % 47)
+                    / 47.0
+                )
+                for output in range(out_channels)
+            )
+            for input_channel in range(in_channels)
+        )
+        for kernel in range(27)
+    )
+    weight = mx.array(
+        [
+            [
+                [
+                    [
+                        [
+                            rows[(x * 3 + y) * 3 + z][input_channel][output]
+                            for input_channel in range(in_channels)
+                        ]
+                        for z in range(3)
+                    ]
+                    for y in range(3)
+                ]
+                for x in range(3)
+            ]
+            for output in range(out_channels)
+        ],
+        dtype=mx.float32,
+    )
+    expected = mx.array(
+        submanifold_conv3d_f32_to_f64(
+            coords.tolist(),
+            feats.tolist(),
+            rows,
+            kernel_size=kernel_size,
+        ),
+        dtype=mx.float32,
+    )
+
+    out = subm_conv3d(
+        SparseTensor(coords, feats), weight, kernel_size=kernel_size
+    )
+    mx.eval(out.feats, expected)
+
+    assert mx.allclose(out.feats, expected, rtol=2e-6, atol=1e-5).item()
+
+
+@pytest.mark.parametrize(
+    ('rows', 'in_channels', 'out_channels'),
+    [(9, 37, 29), (128, 32, 32)],
+)
+def test_conv3d_pointwise_uses_accurate_fp32_projection_at_any_size(
+    selected_backend,
+    rows: int,
+    in_channels: int,
+    out_channels: int,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('accurate fp32 projection is Metal-specific')
+    coords = mx.array(
+        [[0, row, 0, 0] for row in range(rows)], dtype=mx.int32
+    )
+    features = mx.array(
+        [
+            [
+                (-1.0 if (row + channel) % 2 else 1.0)
+                * (0.125 + ((row * 31 + channel * 17) % 97) / 97.0)
+                * 1.0e4
+                for channel in range(in_channels)
+            ]
+            for row in range(rows)
+        ],
+        dtype=mx.float32,
+    )
+    weight = mx.array(
+        [
+            [
+                (-1.0 if (output * 7 + channel * 3) % 2 else 1.0)
+                * (0.125 + ((output * 19 + channel * 13) % 89) / 89.0)
+                * 1.0e-4
+                for channel in range(in_channels)
+            ]
+            for output in range(out_channels)
+        ],
+        dtype=mx.float32,
+    )
+    expected = submanifold_conv3d_f32_to_f64(
+        coords.tolist(),
+        features.tolist(),
+        (
+            tuple(
+                tuple(
+                    float(weight[output, channel].item())
+                    for output in range(out_channels)
+                )
+                for channel in range(in_channels)
+            ),
+        ),
+        kernel_size=1,
+    )
+
+    out = conv3d(SparseTensor(coords, features), weight, kernel_size=1)
+    reference = mx.array(expected, dtype=mx.float32)
+    mx.eval(out.feats, reference)
+
+    assert float(mx.max(mx.abs(out.feats - reference)).item()) <= 5e-6
+
+
+def test_conv3d_pointwise_native_projection_preserves_vjp_contract(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('native fp32 projection is Metal-specific')
+    rows, channels = 128, 32
+    coords = mx.array(
+        [[0, row, 0, 0] for row in range(rows)], dtype=mx.int32
+    )
+    feats = mx.array(
+        [
+            [
+                ((row * 17 + channel * 5) % 41 - 20) / 41.0
+                for channel in range(channels)
+            ]
+            for row in range(rows)
+        ],
+        dtype=mx.float32,
+    )
+    weight = mx.array(
+        [
+            [
+                ((output * 13 + channel * 7) % 37 - 18) / 37.0
+                for channel in range(channels)
+            ]
+            for output in range(channels)
+        ],
+        dtype=mx.float32,
+    )
+
+    def loss(features: mx.array, matrix: mx.array) -> mx.array:
+        return mx.sum(
+            conv3d(
+                SparseTensor(coords, features), matrix, kernel_size=1
+            ).feats
+        )
+
+    grad_feats, grad_weight = mx.grad(loss, argnums=(0, 1))(feats, weight)
+    expected_feats = mx.broadcast_to(mx.sum(weight, axis=0), feats.shape)
+    expected_weight = mx.broadcast_to(
+        mx.sum(feats, axis=0)[None, :], weight.shape
+    )
+    mx.eval(grad_feats, grad_weight, expected_feats, expected_weight)
+
+    assert mx.allclose(
+        grad_feats, expected_feats, rtol=2e-6, atol=2e-6
+    ).item()
+    assert mx.allclose(
+        grad_weight, expected_weight, rtol=2e-6, atol=2e-6
+    ).item()
+
+    def project(features: mx.array, matrix: mx.array) -> mx.array:
+        return conv3d(
+            SparseTensor(coords, features), matrix, kernel_size=1
+        ).feats
+
+    (_,), (feature_jvp,) = mx.jvp(
+        project,
+        (feats, weight),
+        (mx.ones_like(feats), mx.zeros_like(weight)),
+    )
+    (_,), (weight_jvp,) = mx.jvp(
+        project,
+        (feats, weight),
+        (mx.zeros_like(feats), mx.ones_like(weight)),
+    )
+    expected_feature_jvp = mx.broadcast_to(
+        mx.sum(weight, axis=1)[None, :], feature_jvp.shape
+    )
+    expected_weight_jvp = mx.broadcast_to(
+        mx.sum(feats, axis=1)[:, None], weight_jvp.shape
+    )
+    mx.eval(
+        feature_jvp,
+        weight_jvp,
+        expected_feature_jvp,
+        expected_weight_jvp,
+    )
+
+    assert mx.array_equal(feature_jvp, expected_feature_jvp).item()
+    assert mx.array_equal(weight_jvp, expected_weight_jvp).item()
 
 
 def test_conv3d_generic_supports_float16() -> None:
@@ -907,6 +1161,63 @@ def test_transpose_convs_generate_the_same_output_contract() -> None:
     assert active_coords(generated) == active_coords(out)
     assert active_feats(generated).tolist() == active_feats(out).tolist()
     assert generated.stride == out.stride
+
+
+@pytest.mark.parametrize('kernel_size', [2, 3])
+@pytest.mark.parametrize('stride', [1, 2])
+def test_generative_transpose_uses_every_canonical_kernel_row(
+    kernel_size: int, stride: int
+) -> None:
+    """Generated and explicit support agree for every z-fastest kernel row."""
+    source = [2, 3, 4]
+    x = SparseTensor(
+        mx.array([[0, *source]], dtype=mx.int32),
+        mx.ones((1, 1), dtype=mx.float32),
+        stride=stride,
+    )
+    kernel_volume = kernel_size**3
+
+    for kernel_row in range(kernel_volume):
+        values = [0.0] * kernel_volume
+        values[kernel_row] = 1.0
+        weight = mx.array(values, dtype=mx.float32).reshape(
+            1, kernel_size, kernel_size, kernel_size, 1
+        )
+        generated = generative_conv_transpose3d(
+            x,
+            weight,
+            kernel_size=kernel_size,
+            stride=stride,
+        )
+        explicit = generative_conv_transpose3d(
+            x,
+            weight,
+            kernel_size=kernel_size,
+            stride=stride,
+            coordinates=generated.coords,
+        )
+        offset = (
+            kernel_row // (kernel_size * kernel_size),
+            (kernel_row // kernel_size) % kernel_size,
+            kernel_row % kernel_size,
+        )
+        expected_coord = [
+            0,
+            *(source[axis] * stride + offset[axis] for axis in range(3)),
+        ]
+        coords = active_coords(generated)
+        features = active_feats(generated).tolist()
+
+        assert generated.stride == (1, 1, 1)
+        assert expected_coord in coords
+        assert features[coords.index(expected_coord)] == [1.0]
+        assert all(
+            feature == [0.0]
+            for coord, feature in zip(coords, features, strict=True)
+            if coord != expected_coord
+        )
+        assert active_coords(explicit) == coords
+        assert active_feats(explicit).tolist() == features
 
 
 def test_conv_ops_reject_ambiguous_contracts() -> None:

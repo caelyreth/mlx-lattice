@@ -1,6 +1,6 @@
 module attributes {
-  lattice.ir_version = 0,
-  lattice.schema_digest = "de8cda6380a1e82a3ba08d215a77a43a0a7088d74e81dbc2afa2446dbb79bfd1",
+  lattice.ir_version = 1,
+  lattice.schema_digest = "eb5aaff9fc917038f49f4c62f9e19c2d78d2b3540035de55c270b9513d3156aa",
   lattice.input_names = ["source_coords", "source_features", "source_active", "target_coords", "target_features", "target_active"],
   lattice.input_roles = ["sparse_coords", "sparse_features", "sparse_active", "sparse_coords", "sparse_features", "sparse_active"],
   lattice.output_names = ["output"],

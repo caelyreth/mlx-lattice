@@ -62,9 +62,9 @@ class PackedWeightPayload:
     ) -> QuantizedWeight:
         """Resolve this payload as a sparse-convolution weight."""
 
-        if self.layout != 'conv3d_o_zyx_i':
+        if self.layout != 'conv3d_o_xyz_i':
             raise ValueError(
-                'conv3d artifact weight must use conv3d_o_zyx_i layout.'
+                'conv3d artifact weight must use conv3d_o_xyz_i layout.'
             )
         return self._resolve(
             in_channels=in_channels,
@@ -111,7 +111,8 @@ class PackedWeightPayload:
 class LoweringProgram(Protocol):
     """Program context required by artifact lowerings."""
 
-    weights: Mapping[str, mx.array]
+    @property
+    def weights(self) -> Mapping[str, mx.array]: ...
 
 
 class LoweringFn(Protocol):
@@ -556,7 +557,7 @@ def triple_attr(
     items = tuple(int(item) for item in value)
     if len(items) != 3:
         raise ValueError(f'{name} must contain exactly 3 integers.')
-    return cast(tuple[int, int, int], items)
+    return items[0], items[1], items[2]
 
 
 def float_triple_attr(
@@ -570,7 +571,7 @@ def float_triple_attr(
     items = tuple(float(item) for item in value)
     if len(items) != 3:
         raise ValueError(f'{name} must contain exactly 3 values.')
-    return cast(tuple[float, float, float], items)
+    return items[0], items[1], items[2]
 
 
 def join_attr(attrs: Mapping[str, Any], name: str) -> SparseJoin:

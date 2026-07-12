@@ -1,17 +1,103 @@
 {
+  "schema": "torch_lattice_e2e_fixtures/v1",
   "cases": [
-    "sparse_classifier",
-    "target_branch",
-    "point_voxel",
-    "quantized_classifier_int8",
-    "quantized_classifier_int4",
-    "transpose_convolution",
-    "generative_transpose_convolution",
-    "normalized_convolution",
-    "target_transpose_convolution",
-    "trilinear_upsample",
-    "pool_transpose",
-    "sparse_reindex",
-    "gameleon_reproduction_block"
+    {
+      "name": "sparse_classifier",
+      "family": "classifier",
+      "output_kind": "dense",
+      "rtol": 0.0005,
+      "atol": 0.0005
+    },
+    {
+      "name": "target_branch",
+      "family": "sparse_branch",
+      "output_kind": "sparse",
+      "rtol": 0.002,
+      "atol": 0.002
+    },
+    {
+      "name": "point_voxel",
+      "family": "point_voxel",
+      "output_kind": "dense",
+      "rtol": 0.0001,
+      "atol": 0.0001
+    },
+    {
+      "name": "quantized_classifier_int8",
+      "family": "quantized",
+      "output_kind": "dense",
+      "rtol": 0.01,
+      "atol": 0.01
+    },
+    {
+      "name": "quantized_classifier_int4",
+      "family": "quantized",
+      "output_kind": "dense",
+      "rtol": 0.05,
+      "atol": 0.05
+    },
+    {
+      "name": "transpose_convolution",
+      "family": "transpose",
+      "output_kind": "sparse",
+      "rtol": 0.002,
+      "atol": 0.002
+    },
+    {
+      "name": "generative_transpose_convolution",
+      "family": "transpose",
+      "output_kind": "sparse",
+      "rtol": 0.002,
+      "atol": 0.002
+    },
+    {
+      "name": "normalized_convolution",
+      "family": "normalized",
+      "output_kind": "sparse",
+      "rtol": 0.002,
+      "atol": 0.002
+    },
+    {
+      "name": "canonical_kernel_layout",
+      "family": "kernel_layout",
+      "output_kind": "sparse",
+      "rtol": 1e-05,
+      "atol": 1e-05
+    },
+    {
+      "name": "target_transpose_convolution",
+      "family": "transpose",
+      "output_kind": "sparse",
+      "rtol": 0.002,
+      "atol": 0.002
+    },
+    {
+      "name": "trilinear_upsample",
+      "family": "upsample",
+      "output_kind": "sparse",
+      "rtol": 1e-05,
+      "atol": 1e-06
+    },
+    {
+      "name": "pool_transpose",
+      "family": "pool",
+      "output_kind": "sparse",
+      "rtol": 1e-05,
+      "atol": 1e-06
+    },
+    {
+      "name": "sparse_reindex",
+      "family": "reindex",
+      "output_kind": "sparse",
+      "rtol": 1e-06,
+      "atol": 1e-06
+    },
+    {
+      "name": "gameleon_reproduction_block",
+      "family": "gameleon",
+      "output_kind": "sparse",
+      "rtol": 0.003,
+      "atol": 0.003
+    }
   ]
 }

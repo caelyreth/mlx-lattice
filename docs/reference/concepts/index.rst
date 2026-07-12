@@ -11,6 +11,7 @@ specialized kernels where useful.
 
    sparse-tensor
    coordinates-relations
+   numerics
    algebra
    model-ir
    artifact-semantics

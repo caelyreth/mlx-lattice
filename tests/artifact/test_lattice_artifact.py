@@ -157,13 +157,13 @@ def test_lattice_artifact_compile_requires_native_mlir_execution() -> None:
     ('graph', 'diagnostic'),
     [
         (
-            lambda: _graph().replace('  lattice.ir_version = 0,\n', ''),
+            lambda: _graph().replace('  lattice.ir_version = 1,\n', ''),
             'lattice.ir_version',
         ),
         (
             lambda: _graph().replace(
-                'lattice.ir_version = 0',
                 'lattice.ir_version = 1',
+                'lattice.ir_version = 2',
             ),
             'unsupported lattice.ir_version',
         ),
@@ -559,7 +559,7 @@ def test_lattice_artifact_runtime_lowers_conv_bias() -> None:
             _dense_weight_plan(
                 op_name='lattice.conv3d',
                 weight_key='stem.weight',
-                weight_layout='conv3d_o_zyx_i',
+                weight_layout='conv3d_o_xyz_i',
                 bias_key='stem.bias',
                 result_name='v3',
                 attrs={
@@ -944,7 +944,7 @@ def _graph() -> str:
     weight = builder.weight(
         sym_name='stem.weight',
         storage_key='stem.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         packing=dense_packing(),
         result_type=WeightType('conv3d', 'f16'),
     )
@@ -964,7 +964,7 @@ def _graph() -> str:
 def _no_entry_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 0,\n'
+        '  lattice.ir_version = 1,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = [],\n'
         '  lattice.input_roles = [],\n'
@@ -979,7 +979,7 @@ def _no_entry_graph() -> str:
 def _multiple_entry_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 0,\n'
+        '  lattice.ir_version = 1,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = ["x"],\n'
         '  lattice.input_roles = ["tensor"],\n'
@@ -1000,7 +1000,7 @@ def _multiple_entry_graph() -> str:
 def _empty_return_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 0,\n'
+        '  lattice.ir_version = 1,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = [],\n'
         '  lattice.input_roles = [],\n'
@@ -1018,7 +1018,7 @@ def _empty_return_graph() -> str:
 def _non_lattice_body_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 0,\n'
+        '  lattice.ir_version = 1,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = ["x"],\n'
         '  lattice.input_roles = ["tensor"],\n'
@@ -1064,7 +1064,7 @@ def _pointwise_graph() -> str:
     weight = builder.weight(
         sym_name='stem.weight',
         storage_key='stem.weight',
-        layout='conv3d_o_zyx_i',
+        layout='conv3d_o_xyz_i',
         packing=dense_packing(),
         result_type=WeightType('conv3d', 'f16'),
     )
@@ -1255,7 +1255,7 @@ def _two_sparse_input_plan() -> dict[str, object]:
 def _quantized_conv_plan(*, bits: int) -> dict[str, object]:
     return _single_sparse_input_plan(
         weight_key='stem.qweight',
-        weight_layout='conv3d_o_zyx_i',
+        weight_layout='conv3d_o_xyz_i',
         weight_family_op='lattice.conv3d',
         packing_kind='int4' if bits == 4 else 'int8',
         result_name='v2',

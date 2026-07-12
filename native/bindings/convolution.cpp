@@ -10,6 +10,21 @@ using namespace nb::literals;
 
 void register_convolution(nb::module_& module) {
     module.def(
+        "precise_feature_projection",
+        [](nb::handle feats, nb::handle weights) {
+            return precise_feature_projection(
+                array_arg(feats, "feats"), array_arg(weights, "weights")
+            );
+        },
+        "feats"_a,
+        "weights"_a,
+        nb::sig(
+            "def precise_feature_projection(feats: mlx.core.array, "
+            "weights: mlx.core.array) -> mlx.core.array"
+        ),
+        "Project FP32 feature rows with portable Metal arithmetic."
+    );
+    module.def(
         "sparse_quantized_conv_features",
         [](nb::handle feats,
            nb::handle weights,

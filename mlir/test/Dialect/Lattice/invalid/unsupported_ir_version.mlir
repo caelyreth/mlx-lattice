@@ -1,7 +1,7 @@
-// Invalid: only lattice.ir_version = 0 is currently accepted.
+// Invalid: only lattice.ir_version = 1 is currently accepted.
 module attributes {
-  lattice.ir_version = 1,
-  lattice.schema_digest = "de8cda6380a1e82a3ba08d215a77a43a0a7088d74e81dbc2afa2446dbb79bfd1",
+  lattice.ir_version = 2,
+  lattice.schema_digest = "eb5aaff9fc917038f49f4c62f9e19c2d78d2b3540035de55c270b9513d3156aa",
   lattice.input_names = [],
   lattice.input_roles = [],
   lattice.output_names = [],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from lattice_contract.kernel import CANONICAL_CONV3D_WEIGHT_LAYOUT
 from lattice_contract.schema import (
     DialectSchema,
     attr_param,
@@ -66,7 +67,12 @@ class FeatureLayoutAttr:
     'WeightLayout',
     'weight_layout',
     parameters=(attr_param('value', 'string'),),
-    values=('conv3d_o_zyx_i', 'linear_o_i', 'channel_c', 'bias_c'),
+    values=(
+        CANONICAL_CONV3D_WEIGHT_LAYOUT,
+        'linear_o_i',
+        'channel_c',
+        'bias_c',
+    ),
     summary='Logical weight layout',
 )
 class WeightLayoutAttr:

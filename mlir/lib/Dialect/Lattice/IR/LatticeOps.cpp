@@ -293,8 +293,8 @@ LogicalResult WeightOp::verify() {
     if (getStorageKey().empty()) {
         return emitOpError("requires a non-empty storage_key");
     }
-    if (type.getFamily() == "conv3d" && layout != "conv3d_o_zyx_i") {
-        return emitOpError("conv3d weight must use conv3d_o_zyx_i layout");
+    if (type.getFamily() == "conv3d" && layout != "conv3d_o_xyz_i") {
+        return emitOpError("conv3d weight must use conv3d_o_xyz_i layout");
     }
     if (type.getFamily() == "linear" && layout != "linear_o_i") {
         return emitOpError("linear weight must use linear_o_i layout");

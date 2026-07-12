@@ -59,7 +59,9 @@ def conv3d(
         x: Input sparse tensor with feature shape ``(N_in, C_in)``.
         weight: Floating weight or packed ``QuantizedWeight``. Floating weights
             accept ``(C_out, C_in)``, ``(K, C_in, C_out)``, or
-            ``(C_out, Kx, Ky, Kz, C_in)`` depending on kernel geometry.
+            ``(C_out, Kx, Ky, Kz, C_in)`` depending on kernel geometry. The
+            spatial axes are ``x, y, z``; flattened kernel rows therefore have
+            ``z`` varying fastest.
         bias: Optional ``(C_out,)`` bias matching output feature dtype.
         kernel_size: 3D kernel size.
         stride: 3D convolution stride. Output sparse stride is

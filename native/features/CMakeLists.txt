@@ -25,6 +25,7 @@ if(MLX_LATTICE_HAS_METAL)
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/direct/specialized_input_grad.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/direct/specialized_weight_grad.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/direct/weight_grad.metal
+      ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/projection.metal
       ${CMAKE_CURRENT_LIST_DIR}/convolution/metal/sorted_igemm/quantized_contract.metal
       ${CMAKE_CURRENT_LIST_DIR}/coordinates/metal/hash.metal
       ${CMAKE_CURRENT_LIST_DIR}/coordinates/metal/relation_kernels.metal

@@ -96,7 +96,7 @@ The module must also carry artifact metadata:
 .. code-block:: text
 
    module attributes {
-     lattice.ir_version = 0,
+     lattice.ir_version = 1,
      lattice.schema_digest = "...",
      lattice.input_names = ["coords", "features", "active"],
      lattice.input_roles = ["sparse_coords",
@@ -111,7 +111,7 @@ The module must also carry artifact metadata:
 
 ``lattice.schema_digest`` is a SHA-256 fingerprint of the contract dialect
 schema. It closes the gap where two producers both claim
-``ir_version = 0`` but disagree on the operation, attribute, or type surface.
+``ir_version = 1`` but disagree on the operation, attribute, or type surface.
 The native verifier and Python ``RuntimePlan`` both reject mismatched digests.
 
 ``lattice.input_names`` and ``lattice.output_names`` are the public call ABI.
@@ -176,7 +176,7 @@ of the semantic graph surface. Quantization is represented by weight packing:
 
    %w = lattice.weight @stem.qweight
      {storage_key = "stem.qweight",
-      layout = #lattice.weight_layout<conv3d_o_zyx_i>,
+      layout = #lattice.weight_layout<conv3d_o_xyz_i>,
       packing = #lattice.packing<int4,
                                  group_size = 32,
                                  scale_dtype = f16,

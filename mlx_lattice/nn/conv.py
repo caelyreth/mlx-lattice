@@ -45,7 +45,8 @@ class Conv3d(mxnn.Module):
     """Sparse 3D convolution module.
 
     The module owns a dense 5D weight with layout
-    ``(C_out, Kx, Ky, Kz, C_in)`` and optional bias. Calling the module delegates
+    ``(C_out, Kx, Ky, Kz, C_in)`` and optional bias. The spatial axes are
+    ``x, y, z`` with ``z`` varying fastest in flattened views. Calling the module delegates
     to :func:`mlx_lattice.ops.conv3d`; coordinate support follows the same
     forward or explicit-target semantics as the functional API.
     """

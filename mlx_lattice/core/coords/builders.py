@@ -4,6 +4,7 @@ import math
 from collections.abc import Sequence
 
 import mlx.core as mx
+from lattice_contract import indexed_kernel_offsets, sparse_kernel_offsets
 
 from mlx_lattice._native import ext
 from mlx_lattice.core.coords.validation import validate_coords
@@ -173,20 +174,7 @@ def kernel_offsets(
     _require_positive(kernel, 'kernel_size')
     _require_positive(rate, 'dilation')
 
-    axes = []
-    for size in kernel:
-        if size % 2 == 1:
-            radius = size // 2
-            axes.append(range(-radius, radius + 1))
-        else:
-            axes.append(range(size))
-
-    return tuple(
-        (int(x * rate[0]), int(y * rate[1]), int(z * rate[2]))
-        for x in axes[0]
-        for y in axes[1]
-        for z in axes[2]
-    )
+    return sparse_kernel_offsets(kernel, rate)
 
 
 def _indexed_kernel_offsets(
@@ -197,12 +185,7 @@ def _indexed_kernel_offsets(
     rate = triple(dilation, name='dilation')
     _require_positive(kernel, 'kernel_size')
     _require_positive(rate, 'dilation')
-    return tuple(
-        (x * rate[0], y * rate[1], z * rate[2])
-        for x in range(kernel[0])
-        for y in range(kernel[1])
-        for z in range(kernel[2])
-    )
+    return indexed_kernel_offsets(kernel, rate)
 
 
 def build_kernel_relation(

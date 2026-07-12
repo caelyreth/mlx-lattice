@@ -38,7 +38,7 @@ for exporters and tests; semantic verification remains the job of
 ``lattice-opt`` and the MLIR dialect verifier.
 
 Generated modules include the required artifact ABI metadata:
-``lattice.ir_version = 0`` and
+``lattice.ir_version = 1`` and
 ``lattice.weight_file = "weights.safetensors"``. These attributes are part of
 the stable exchange contract, not optional documentation. The corresponding
 Python constants are exported as ``CURRENT_DIALECT_VERSION``,

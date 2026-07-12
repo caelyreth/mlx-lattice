@@ -48,6 +48,21 @@ covered migration subset, original ``Conv3d(kernel_size > 1, stride = 1)`` maps
 to the explicit submanifold operation. New artifacts should emit
 ``lattice.subm_conv3d`` directly for support-preserving convolution.
 
+Generated and target transpose support
+--------------------------------------
+
+``lattice.generative_conv_transpose3d`` enumerates every canonical kernel
+position for every active source coordinate. For a source coordinate ``s`` and
+kernel position ``k``, generated output support is ``s * stride + k``. The
+flattened kernel row is ``(x, y, z)`` with z varying fastest, so producers must
+not reuse a historical framework's implicit flattening convention.
+
+Target-conditioned transpose operations instead execute only at the coordinate
+set carried by their target sparse value. That target must have a sparse stride
+equal to ``source.stride / stride``. The exchange format deliberately models
+this target as a graph input or earlier graph value; it never guesses an output
+support from a weight tensor.
+
 Coordinate and weight ABI
 -------------------------
 
@@ -67,13 +82,28 @@ is unwrapped for convenience.
 
 Weights are bound through ``lattice.weight``:
 
-* convolution weights use ``conv3d_o_zyx_i``;
+* convolution weights use ``conv3d_o_xyz_i``;
 * linear weights use ``linear_o_i``;
 * bias/channel vectors use ``bias_c`` or ``channel_c``;
 * int4/int8 weights must declare packed ``lattice.packing`` metadata.
 
 Quantized conformance fixtures compare against artifact-packed and dequantized
 weights, not the pre-quantized training weights.
+
+Compatibility and rejection policy
+----------------------------------
+
+Artifact loading is intentionally strict. MLIR IR version 0, legacy JSON
+manifests, missing schema digests, old ``conv3d_o_zyx_i`` convolution layouts,
+and undeclared weight files are rejected before execution. A caller must
+perform an explicit one-time migration rather than relying on a runtime
+fallback. This keeps a portable artifact self-describing and prevents a legacy
+kernel permutation from silently changing a model result.
+
+Coordinate support is exact across runtimes: duplicate sparse coordinate rows
+are invalid, and replay first requires coordinate equality. Feature values are
+floating-point results and are compared with the fixture's declared absolute
+and relative tolerance, not with cross-device bitwise equality.
 
 Conformance replay
 ------------------
@@ -99,3 +129,32 @@ host responsibilities. A Gameleon-style artifact should contain the sparse
 encoder/decoder block and its learned weights; the CUDA conformance gate trains
 that composed block before exporting it and MLX replays the same graph with exact
 coordinate equality.
+
+Fixed-Profile Geometry Replay
+-----------------------------
+
+The Level-8 geometry conformance runner covers a fixed, active Gameleon
+forward-BPP profile before it is representable as a single MLIR artifact. It
+uses generic occupancy downsampling/expansion and Morton ordering from
+``mlx-lattice``, plus MLX Core for the dense predictor heads. It includes the
+FOG hierarchy and neural BPP estimate, but excludes PLY parsing, sparse input
+construction, checkpoint loading, and arithmetic coding from its timed region.
+
+Convert a trusted TorchSparse checkpoint once, then replay the prepared
+Level-8 PLY on Metal:
+
+.. code-block:: bash
+
+   # Run from the Torch Lattice CUDA workspace.
+   uv run convert-checkpoint checkpoint.pt weights.safetensors \
+     --kernel-spec legacy-kernels.json
+   uv run conformance geometry-profile \
+     --weights weights.safetensors \
+     --input level8.ply \
+     --device metal
+
+The CUDA-side conversion is strict: it canonicalizes each explicitly declared
+historical ``.kernel`` state key and records its actual source layout and row
+permutation in a JSON manifest. Historical TorchSparse uses x-fastest rows for
+odd-volume kernels and z-fastest rows for even-volume kernels. MLX replay never
+performs that conversion at load time.

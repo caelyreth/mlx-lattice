@@ -86,7 +86,9 @@ Floating forward routes
    * - Pointwise matmul
      - ``1x1x1`` kernel, stride 1, no padding/dilation, no explicit target
        support
-     - Computes ``x.feats @ weight.T`` and preserves coordinates.
+     - Preserves coordinates. Metal FP32 uses a native projection checked
+       against the shared binary64 oracle; other dtypes use matrix
+       multiplication.
    * - Generic relation traversal
      - Any valid relation convolution not captured by a more specific route
      - Consumes edge arrays plus output/input/kernel CSR views.

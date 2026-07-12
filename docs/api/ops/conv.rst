@@ -36,7 +36,9 @@ operation:
      - ``generative``
      - Generates support and applies weight-dependent normalization.
 
-Floating weights accept dense 5D layout ``(C_out, Kx, Ky, Kz, C_in)`` and
+Floating weights accept dense 5D layout ``(C_out, Kx, Ky, Kz, C_in)``. Spatial
+axes are ``x, y, z`` and flattened rows vary ``z`` fastest; this is the
+``conv3d_o_xyz_i`` artifact layout. They also accept
 mapped kernel-major layout ``(K, C_in, C_out)``. Packed quantized weights use
 ``QuantizedWeight``.
 

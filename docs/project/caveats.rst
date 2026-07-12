@@ -20,6 +20,32 @@ Two tensors can contain equal coordinate rows but have different
 not by a late comparison of array contents. Use sparse alignment when combining
 independently constructed tensors.
 
+Coordinate uniqueness is required
+---------------------------------
+
+Each active coordinate row must be unique. Lattice relations define one feature
+row per ``(batch, x, y, z)`` location, so duplicate-coordinate inputs are not a
+supported accumulation convention. Normalize duplicate coordinates explicitly
+at the import boundary before constructing a ``SparseTensor``. In particular,
+MinkowskiEngine checkpoints and tensors must not be treated as directly
+interchangeable until their coordinate and kernel conventions have been
+converted.
+
+Transpose support is explicit
+-----------------------------
+
+``conv_transpose3d`` uses a relation derived from a compatible earlier forward
+operation unless explicit target coordinates are supplied. By contrast,
+``generative_conv_transpose3d`` expands support according to
+``target = source * stride + offset``. Supplying ``coordinates`` to either
+operation makes that set the complete output support: coordinates outside it
+are never synthesized.
+
+Transpose stride must divide the input sparse stride. A target sparse tensor
+must use the resulting output stride. This is a validation error rather than a
+best-effort coordinate conversion because silently accepting a mismatched
+target changes the lattice represented by the result.
+
 Active rows and capacity differ
 -------------------------------
 
@@ -82,6 +108,21 @@ Quantization is storage-real, not fake quantization
 ``QuantizedWeight`` stores packed int4/int8 data plus affine metadata. Supported
 native routes consume packed storage. If you want the floating contract, call
 ``dequantize_weight`` explicitly and use the floating operation.
+
+Artifacts and checkpoints are versioned boundaries
+--------------------------------------------------
+
+The current artifact format is MLIR IR version 1 with canonical
+``conv3d_o_xyz_i`` convolution weights. Legacy JSON manifests, MLIR IR version
+0, and ``conv3d_o_zyx_i`` weights are rejected at load time. Runtime loaders do
+not infer historical TorchSparse or MinkowskiEngine kernel-row order. Convert a
+trusted legacy checkpoint once with the CUDA-side checkpoint converter, retain
+its permutation manifest with the converted weights, and validate a known
+input/output fixture before deployment.
+
+Artifacts also do not serialize coordinate managers, relation caches, native
+backend handles, or selected kernel routes. Those are reconstructed locally and
+can differ by backend without changing the public graph semantics.
 
 Sparse performance depends on geometry
 --------------------------------------

@@ -26,7 +26,9 @@ def test_torch_lattice_sparse_classifier_artifact_runs_on_mlx() -> None:
     inputs = mx.load(str(case / 'inputs.safetensors'))
     expected = mx.load(str(case / 'expected.safetensors'))['output']
 
-    output = program(_sparse_input(inputs, batch_counts=(3, 2)))
+    output = program(
+        _sparse_input(inputs, prefix='x_', batch_counts=(3, 2))
+    )
 
     mx.eval(output, expected)
     assert mx.allclose(output, expected, rtol=5e-4, atol=5e-4).item()
@@ -49,7 +51,9 @@ def test_torch_lattice_quantized_classifier_artifact_runs_on_mlx(
     inputs = mx.load(str(case / 'inputs.safetensors'))
     expected = mx.load(str(case / 'expected.safetensors'))['output']
 
-    output = program(_sparse_input(inputs, batch_counts=(3, 2)))
+    output = program(
+        _sparse_input(inputs, prefix='x_', batch_counts=(3, 2))
+    )
 
     mx.eval(output, expected)
     assert mx.allclose(output, expected, rtol=rtol, atol=atol).item()
@@ -127,6 +131,21 @@ def test_gameleon_reproduction_block_artifact_runs_on_mlx() -> None:
     _assert_sparse_output_close(output, expected, rtol=3e-3, atol=3e-3)
 
 
+def test_torch_lattice_canonical_kernel_layout_artifact_runs_on_mlx() -> (
+    None
+):
+    """Exercise an exported non-cubic convolution with row-distinct weights."""
+
+    case = FIXTURE_ROOT / 'canonical_kernel_layout'
+    program = load_lattice_program(case)
+    inputs = mx.load(str(case / 'inputs.safetensors'))
+    expected = mx.load(str(case / 'expected.safetensors'))
+
+    output = program(_sparse_input(inputs, prefix='x_', batch_counts=(15,)))
+
+    _assert_sparse_output_close(output, expected, rtol=1e-5, atol=1e-5)
+
+
 @pytest.mark.parametrize(
     ('case_name', 'source_stride', 'target_rows', 'rtol', 'atol'),
     [
@@ -167,8 +186,8 @@ def test_torch_lattice_targeted_sparse_artifact_runs_on_mlx(
 @pytest.mark.parametrize(
     ('case_name', 'batch_counts', 'input_prefix'),
     [
-        ('transpose_convolution', (4,), ''),
-        ('generative_transpose_convolution', (2,), ''),
+        ('transpose_convolution', (4,), 'x_'),
+        ('generative_transpose_convolution', (2,), 'x_'),
         ('normalized_convolution', (4,), 'x_'),
     ],
 )

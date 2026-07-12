@@ -4,6 +4,17 @@
 
 namespace mlx_lattice {
 
+/**
+ * Project feature rows with an ``(C_out, C_in)`` matrix using the portable
+ * FP32 arithmetic contract.
+ *
+ * The public convolution surface owns this operation.  Keeping it native
+ * avoids MLX's relaxed Metal matrix-multiply lowering while retaining normal
+ * primitive autodiff behavior.
+ */
+mx::array
+precise_feature_projection(const mx::array& feats, const mx::array& weights);
+
 mx::array sparse_quantized_conv_features(
     const mx::array& feats,
     const mx::array& weights,
