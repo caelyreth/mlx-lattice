@@ -101,9 +101,11 @@ fallback. This keeps a portable artifact self-describing and prevents a legacy
 kernel permutation from silently changing a model result.
 
 Coordinate support is exact across runtimes: duplicate sparse coordinate rows
-are invalid, and replay first requires coordinate equality. Feature values are
-floating-point results and are compared with the fixture's declared absolute
-and relative tolerance, not with cross-device bitwise equality.
+are invalid, and replay first aligns both sparse results in canonical Morton
+order before requiring coordinate equality. Physical sparse-row order is not an
+exchange contract. Feature values are floating-point results and are compared
+with the fixture's declared absolute and relative tolerance, not with
+cross-device bitwise equality.
 
 Conformance replay
 ------------------

@@ -3,8 +3,12 @@ from __future__ import annotations
 import tarfile
 from pathlib import Path
 
+import mlx.core as mx
 from lattice_conformance.archive import fixture_root
 from lattice_conformance.metrics import distribution
+from lattice_conformance.replay import _assert_sparse_close
+
+from mlx_lattice import SparseTensor
 
 
 def test_fuzz_replay_distribution_reports_common_accuracy_quantiles() -> (
@@ -44,3 +48,31 @@ def test_fixture_root_cleans_archive_extraction(tmp_path: Path) -> None:
         assert (extracted / 'manifest.json').exists()
 
     assert not temporary_root.exists()
+
+
+def test_sparse_replay_aligns_features_by_coordinate_value() -> None:
+    expected_coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]], dtype=mx.int32
+    )
+    expected_features = mx.array([[1.0], [2.0], [3.0]], dtype=mx.float32)
+    actual = SparseTensor(
+        mx.array(
+            [[0, 0, 1, 0], [0, 0, 0, 0], [0, 1, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.array([[3.0], [1.0], [2.0]], dtype=mx.float32),
+    )
+
+    max_abs, max_rel = _assert_sparse_close(
+        actual,
+        {
+            'output.active': mx.array([3], dtype=mx.int32),
+            'output.coords': expected_coords,
+            'output.features': expected_features,
+        },
+        rtol=0.0,
+        atol=0.0,
+    )
+
+    assert max_abs == 0.0
+    assert max_rel == 0.0

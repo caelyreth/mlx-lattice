@@ -14,6 +14,7 @@ from mlx_lattice.artifact import (
     load_lattice_program,
     native_artifact_execution_available,
 )
+from mlx_lattice.core.coords import morton_sort_coords
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,20 +147,32 @@ def _assert_sparse_close(
     ).item():
         raise AssertionError('sparse active row mismatch')
     active = int(output.active_rows.item())
-    if not mx.array_equal(
-        output.coords[:active], expected['output.coords']
-    ).item():
+    actual_coords, actual_features = _canonical_sparse_rows(
+        output.coords[:active], output.feats[:active]
+    )
+    expected_coords, expected_features = _canonical_sparse_rows(
+        expected['output.coords'], expected['output.features']
+    )
+    if not mx.array_equal(actual_coords, expected_coords).item():
         raise AssertionError('sparse coordinate mismatch')
-    features = output.feats[:active]
-    max_abs, max_rel = _error_stats(features, expected['output.features'])
+    max_abs, max_rel = _error_stats(actual_features, expected_features)
     if not mx.allclose(
-        features,
-        expected['output.features'],
+        actual_features,
+        expected_features,
         rtol=rtol,
         atol=atol,
     ).item():
         raise AssertionError('sparse feature mismatch')
     return max_abs, max_rel
+
+
+def _canonical_sparse_rows(
+    coords: mx.array, features: mx.array
+) -> tuple[mx.array, mx.array]:
+    """Align sparse rows by coordinate value before cross-runtime comparison."""
+
+    ordering = morton_sort_coords(coords)
+    return ordering.coords, mx.take(features, ordering.order, axis=0)
 
 
 def _error_stats(
