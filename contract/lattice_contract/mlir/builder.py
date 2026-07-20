@@ -470,6 +470,9 @@ def _format_attrs(op: OpDef, kwargs: Mapping[str, Any]) -> str:
     attrs = []
     for attr in op.attributes:
         if attr.name not in kwargs:
+            if attr.name == 'accumulation':
+                attrs.append('accumulation = "canonical_f32"')
+                continue
             if attr.required:
                 raise ValueError(
                     f'missing required MLIR builder argument: {attr.name}'

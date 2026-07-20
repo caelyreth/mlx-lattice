@@ -96,7 +96,7 @@ The module must also carry artifact metadata:
 .. code-block:: text
 
    module attributes {
-     lattice.ir_version = 1,
+     lattice.ir_version = 2,
      lattice.schema_digest = "...",
      lattice.input_names = ["coords", "features", "active"],
      lattice.input_roles = ["sparse_coords",
@@ -111,8 +111,16 @@ The module must also carry artifact metadata:
 
 ``lattice.schema_digest`` is a SHA-256 fingerprint of the contract dialect
 schema. It closes the gap where two producers both claim
-``ir_version = 1`` but disagree on the operation, attribute, or type surface.
+``ir_version = 2`` but disagree on the operation, attribute, or type surface.
 The native verifier and Python ``RuntimePlan`` both reject mismatched digests.
+
+IR v2 makes the sparse ABI's coordinate scale explicit. The public coordinate
+tensor always contains physical ``(batch, x, y, z)`` positions, while the
+``stride`` attribute records the lattice scale. Importers convert to their
+internal coordinate representation only after checking that every spatial
+coordinate is exactly divisible by that stride. Convolution artifact ops also
+carry ``accumulation = \"canonical_f32\"``: portable artifacts accumulate in
+FP32 even when their input and weight storage is FP16.
 
 ``lattice.input_names`` and ``lattice.output_names`` are the public call ABI.
 They are independent from SSA value labels such as ``%arg0`` or importer

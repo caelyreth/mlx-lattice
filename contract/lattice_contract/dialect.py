@@ -70,6 +70,7 @@ class FeatureLayoutAttr:
     values=(
         CANONICAL_CONV3D_WEIGHT_LAYOUT,
         'linear_o_i',
+        'embedding_n_c',
         'channel_c',
         'bias_c',
     ),
@@ -259,12 +260,14 @@ def sparse_reindex() -> None:
     """Register lattice.sparse.reindex."""
 
 
-_CONV_ATTRS = (
+_KERNEL_ATTRS = (
     op_attr('kernel_size', 'i64_triple'),
     op_attr('stride', 'i64_triple'),
     op_attr('padding', 'i64_triple'),
     op_attr('dilation', 'i64_triple'),
 )
+
+_CONV_ATTRS = (*_KERNEL_ATTRS, op_attr('accumulation', 'str'))
 
 
 @LATTICE_DIALECT.op(
@@ -294,6 +297,7 @@ def conv3d() -> None:
     attributes=(
         op_attr('kernel_size', 'i64_triple'),
         op_attr('dilation', 'i64_triple'),
+        op_attr('accumulation', 'str'),
     ),
     assembly='functional',
     summary='Submanifold sparse 3D convolution',
@@ -314,6 +318,7 @@ def subm_conv3d() -> None:
         op_attr('kernel_size', 'i64_triple'),
         op_attr('dilation', 'i64_triple'),
         op_attr('eps', 'f32'),
+        op_attr('accumulation', 'str'),
     ),
     assembly='functional',
     summary='Weight-normalized submanifold sparse 3D convolution',
@@ -416,6 +421,7 @@ def target_normalized_conv_transpose3d() -> None:
     attributes=(
         op_attr('kernel_size', 'i64_triple'),
         op_attr('stride', 'i64_triple'),
+        op_attr('accumulation', 'str'),
     ),
     assembly='functional',
     summary='Sparse 3D generative transpose convolution',
@@ -436,6 +442,7 @@ def generative_conv_transpose3d() -> None:
         op_attr('kernel_size', 'i64_triple'),
         op_attr('stride', 'i64_triple'),
         op_attr('eps', 'f32'),
+        op_attr('accumulation', 'str'),
     ),
     assembly='functional',
     summary='Weight-normalized generative sparse transpose convolution',
@@ -450,7 +457,7 @@ def normalized_generative_conv_transpose3d() -> None:
     results=(result('result', 'sparse_tensor'),),
     attributes=(
         op_attr('mode', 'pool_mode'),
-        *_CONV_ATTRS,
+        *_KERNEL_ATTRS,
     ),
     assembly='functional',
     summary='Local sparse 3D pooling',
@@ -466,7 +473,7 @@ def pool3d() -> None:
         operand('target', 'sparse_tensor', optional=True),
     ),
     results=(result('result', 'sparse_tensor'),),
-    attributes=_CONV_ATTRS,
+    attributes=_KERNEL_ATTRS,
     assembly='functional',
     summary='Sparse average-pooling transpose',
 )
@@ -560,6 +567,44 @@ def devoxelize() -> None:
 )
 def linear() -> None:
     """Register lattice.linear."""
+
+
+@LATTICE_DIALECT.op(
+    'embedding_lookup',
+    operands=(
+        operand('input', 'tensor'),
+        operand('weight', 'weight'),
+    ),
+    results=(result('result', 'tensor'),),
+    assembly='functional',
+    summary='Gather embedding rows using integer indices',
+)
+def embedding_lookup() -> None:
+    """Register lattice.embedding_lookup."""
+
+
+@LATTICE_DIALECT.op(
+    'elementwise',
+    operands=(operand('input', 'tensor'),),
+    results=(result('result', 'tensor'),),
+    attributes=(op_attr('kind', 'str'),),
+    assembly='functional',
+    summary='Deterministic dense elementwise transform',
+)
+def elementwise() -> None:
+    """Register lattice.elementwise."""
+
+
+@LATTICE_DIALECT.op(
+    'softmax',
+    operands=(operand('input', 'tensor'),),
+    results=(result('result', 'tensor'),),
+    attributes=(op_attr('axis', 'i64'),),
+    assembly='functional',
+    summary='FP32 subtract-max softmax',
+)
+def softmax() -> None:
+    """Register lattice.softmax."""
 
 
 @LATTICE_DIALECT.op(

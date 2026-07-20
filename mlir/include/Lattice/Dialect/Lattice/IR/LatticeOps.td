@@ -91,7 +91,8 @@ def Lattice_Conv3DOp : Lattice_Op<"conv3d"> {
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
-    DenseI64ArrayAttr:$dilation
+    DenseI64ArrayAttr:$dilation,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -107,7 +108,8 @@ def Lattice_SubmConv3DOp : Lattice_Op<"subm_conv3d"> {
     Lattice_WeightType:$weight,
     Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
-    DenseI64ArrayAttr:$dilation
+    DenseI64ArrayAttr:$dilation,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -125,7 +127,8 @@ def Lattice_NormalizedSubmConv3DOp
     Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$dilation,
-    F32Attr:$eps
+    F32Attr:$eps,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -144,7 +147,8 @@ def Lattice_TargetConv3DOp : Lattice_Op<"target_conv3d"> {
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
-    DenseI64ArrayAttr:$dilation
+    DenseI64ArrayAttr:$dilation,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -162,7 +166,8 @@ def Lattice_ConvTranspose3DOp : Lattice_Op<"conv_transpose3d"> {
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
-    DenseI64ArrayAttr:$dilation
+    DenseI64ArrayAttr:$dilation,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -182,7 +187,8 @@ def Lattice_TargetConvTranspose3DOp
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
-    DenseI64ArrayAttr:$dilation
+    DenseI64ArrayAttr:$dilation,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -202,7 +208,8 @@ def Lattice_NormalizedConvTranspose3DOp
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
     DenseI64ArrayAttr:$dilation,
-    F32Attr:$eps
+    F32Attr:$eps,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -223,7 +230,8 @@ def Lattice_TargetNormalizedConvTranspose3DOp
     DenseI64ArrayAttr:$stride,
     DenseI64ArrayAttr:$padding,
     DenseI64ArrayAttr:$dilation,
-    F32Attr:$eps
+    F32Attr:$eps,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -240,7 +248,8 @@ def Lattice_GenerativeConvTranspose3DOp
     Lattice_WeightType:$weight,
     Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
-    DenseI64ArrayAttr:$stride
+    DenseI64ArrayAttr:$stride,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -258,7 +267,8 @@ def Lattice_NormalizedGenerativeConvTranspose3DOp
     Optional<Lattice_WeightType>:$bias,
     DenseI64ArrayAttr:$kernel_size,
     DenseI64ArrayAttr:$stride,
-    F32Attr:$eps
+    F32Attr:$eps,
+    StrAttr:$accumulation
   );
   let results = (outs Lattice_SparseTensorType:$result);
   let assemblyFormat = [{
@@ -376,6 +386,42 @@ def Lattice_LinearOp : Lattice_Op<"linear", [Pure]> {
   let assemblyFormat = [{
     $input `,` $weight (`,` $bias^)? attr-dict `:`
     functional-type(operands, results)
+  }];
+}
+
+def Lattice_EmbeddingLookupOp : Lattice_Op<"embedding_lookup", [Pure]> {
+  let summary = "Gather embedding rows using integer indices";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    Lattice_WeightType:$weight
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input `,` $weight attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def Lattice_ElementwiseOp : Lattice_Op<"elementwise", [Pure]> {
+  let summary = "Deterministic dense elementwise transform";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    StrAttr:$kind
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def Lattice_SoftmaxOp : Lattice_Op<"softmax", [Pure]> {
+  let summary = "FP32 subtract-max softmax";
+  let arguments = (ins
+    AnyRankedTensor:$input,
+    I64Attr:$axis
+  );
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type(operands, results)
   }];
 }
 

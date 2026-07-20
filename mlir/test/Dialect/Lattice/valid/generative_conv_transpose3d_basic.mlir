@@ -1,7 +1,7 @@
 // Valid: generative transpose convolution creates support from input rows.
 module attributes {
-  lattice.ir_version = 1,
-  lattice.schema_digest = "eb5aaff9fc917038f49f4c62f9e19c2d78d2b3540035de55c270b9513d3156aa",
+  lattice.ir_version = 2,
+  lattice.schema_digest = "1380f1e819fc0eb1af587202ecec3c14ec2c981d249333c5061f0263f82072ad",
   lattice.input_names = ["input0", "input1", "input2"],
   lattice.input_roles = ["tensor", "tensor", "tensor"],
   lattice.output_names = ["output0"],
@@ -33,7 +33,7 @@ module attributes {
 
     %out = lattice.generative_conv_transpose3d %input, %weight
       {kernel_size = array<i64: 2, 2, 2>,
-       stride = array<i64: 2, 2, 2>}
+       stride = array<i64: 2, 2, 2>, accumulation = "canonical_f32"}
       : (!lattice.sparse_tensor<rank = 3,
                                 coord = batch_x_y_z,
                                 feature = row_channel,

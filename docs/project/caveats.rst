@@ -112,13 +112,16 @@ native routes consume packed storage. If you want the floating contract, call
 Artifacts and checkpoints are versioned boundaries
 --------------------------------------------------
 
-The current artifact format is MLIR IR version 1 with canonical
-``conv3d_o_xyz_i`` convolution weights. Legacy JSON manifests, MLIR IR version
-0, and ``conv3d_o_zyx_i`` weights are rejected at load time. Runtime loaders do
-not infer historical TorchSparse or MinkowskiEngine kernel-row order. Convert a
+The current artifact format is MLIR IR version 2 with canonical
+``conv3d_o_xyz_i`` convolution weights and physical sparse ABI coordinates.
+Legacy JSON manifests, all earlier MLIR versions, and
+``conv3d_o_zyx_i`` weights are rejected at load time. Runtime loaders do not
+infer historical TorchSparse or MinkowskiEngine kernel-row order. Convert a
 trusted legacy checkpoint once with the CUDA-side checkpoint converter, retain
 its permutation manifest with the converted weights, and validate a known
-input/output fixture before deployment.
+input/output fixture before deployment. IR v2 also fixes convolution artifact
+accumulation to ``canonical_f32``; FP16 is a storage and input/output format,
+not permission to change the accumulation contract.
 
 Artifacts also do not serialize coordinate managers, relation caches, native
 backend handles, or selected kernel routes. Those are reconstructed locally and

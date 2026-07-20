@@ -45,7 +45,7 @@ from lattice_contract.schema import (
     type_param,
 )
 
-__version__ = '0.5.0'
+__version__ = '0.6.0'
 
 __all__ = [
     'ARTIFACT_GRAPH_FILE',

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
@@ -37,6 +37,9 @@ class LatticeProgram:
 
     plan: RuntimePlan
     weights: Mapping[str, mx.array]
+    _sparse_input_cache: dict[
+        tuple[int, int, tuple[int, int, int]], SparseTensor
+    ] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     @classmethod
     def from_artifact(cls, artifact: LatticeArtifact) -> LatticeProgram:
@@ -131,6 +134,7 @@ def _register_artifact_lowerings() -> None:
 
     for module in (
         'mlx_lattice.ops.conv',
+        'mlx_lattice.ops.elementwise',
         'mlx_lattice.ops.feature',
         'mlx_lattice.ops.pool',
         'mlx_lattice.ops.quantization',
@@ -185,6 +189,7 @@ def weight_from_artifact(
 
 @artifact_lowering(op=sparse_make)
 def sparse_make_from_artifact(
+    program: LatticeProgram,
     coords: mx.array,
     features: mx.array,
     active: mx.array,
@@ -196,19 +201,39 @@ def sparse_make_from_artifact(
         raise ValueError(
             f'unsupported sparse coordinate order: {coord_order}'
         )
-    return SparseTensor(
-        coords,
+    cache_key = (id(coords), id(active), stride)
+    cached = program._sparse_input_cache.get(cache_key)
+    if cached is not None:
+        return cached.replace(feats=features)
+
+    stride_array = mx.array((1, *stride), dtype=mx.int32)
+    physical = coords.astype(mx.int32)
+    remainder = mx.remainder(physical, stride_array)
+    if bool(mx.any(mx.not_equal(remainder, 0)).item()):
+        raise ValueError(
+            'IR v2 sparse coordinates must be exactly divisible by the '
+            f'declared tensor stride {stride}.'
+        )
+    result = SparseTensor(
+        physical // stride_array,
         features,
         stride=stride,
         active_rows=active,
     )
+    program._sparse_input_cache[cache_key] = result
+    return result
 
 
 @artifact_lowering(op=sparse_decompose)
 def sparse_decompose_from_artifact(
     input: SparseTensor,
 ) -> tuple[mx.array, mx.array, mx.array]:
-    return (input.coords, input.feats, input.active_rows)
+    stride_array = mx.array((1, *input.stride), dtype=mx.int32)
+    return (
+        input.coords.astype(mx.int32) * stride_array,
+        input.feats,
+        input.active_rows,
+    )
 
 
 def _store_results(
@@ -347,3 +372,7 @@ def _bind_input_group(
         group.arguments, runtime_values, strict=True
     ):
         values[argument.name] = runtime_value
+
+
+# Keep the lowering registry complete for schema inspection as well as execution.
+_register_artifact_lowerings()

@@ -71,6 +71,14 @@ LogicalResult verifyPositiveEps(Operation* op, FloatAttr eps) {
     return success();
 }
 
+LogicalResult verifyCanonicalAccumulation(Operation* op) {
+    auto accumulation = op->getAttrOfType<StringAttr>("accumulation");
+    if (!accumulation || accumulation.getValue() != "canonical_f32") {
+        return op->emitOpError("requires accumulation = \"canonical_f32\"");
+    }
+    return success();
+}
+
 LogicalResult verifyBinaryOp(Operation* op, BinaryOpAttr binaryOp) {
     auto value = binaryOp.getValue();
     if (value != "add" && value != "sub" && value != "mul" &&
@@ -299,6 +307,9 @@ LogicalResult WeightOp::verify() {
     if (type.getFamily() == "linear" && layout != "linear_o_i") {
         return emitOpError("linear weight must use linear_o_i layout");
     }
+    if (type.getFamily() == "embedding" && layout != "embedding_n_c") {
+        return emitOpError("embedding weight must use embedding_n_c layout");
+    }
     if (type.getFamily() == "channel" && layout != "channel_c") {
         return emitOpError("channel weight must use channel_c layout");
     }
@@ -306,16 +317,20 @@ LogicalResult WeightOp::verify() {
         return emitOpError("bias weight must use bias_c layout");
     }
     if (type.getFamily() != "conv3d" && type.getFamily() != "linear" &&
-        type.getFamily() != "channel" && type.getFamily() != "bias") {
+        type.getFamily() != "embedding" && type.getFamily() != "channel" &&
+        type.getFamily() != "bias") {
         return emitOpError(
-            "weight family must be conv3d, linear, channel, or bias"
+            "weight family must be conv3d, linear, embedding, channel, or bias"
         );
     }
     if (packing.getKind() == "dense") {
         return success();
     }
-    if (type.getFamily() == "bias" || type.getFamily() == "channel") {
-        return emitOpError("channel and bias weights must use dense packing");
+    if (type.getFamily() == "embedding" || type.getFamily() == "bias" ||
+        type.getFamily() == "channel") {
+        return emitOpError(
+            "embedding, channel, and bias weights must use dense packing"
+        );
     }
     if (packing.getKind() != "int4" && packing.getKind() != "int8") {
         return emitOpError("packing kind must be dense, int4, or int8");
@@ -429,15 +444,18 @@ LogicalResult Conv3DOp::verify() {
     if (failed(verifyOptionalBias(getOperation(), getBias()))) {
         return failure();
     }
-    return verifyConvTriples(
-        getOperation(),
-        ConvTriples{
-            .kernelSize = getKernelSize(),
-            .stride = getStride(),
-            .padding = getPadding(),
-            .dilation = getDilation(),
-        }
-    );
+    if (failed(verifyConvTriples(
+            getOperation(),
+            ConvTriples{
+                .kernelSize = getKernelSize(),
+                .stride = getStride(),
+                .padding = getPadding(),
+                .dilation = getDilation(),
+            }
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult SubmConv3DOp::verify() {
@@ -473,12 +491,15 @@ LogicalResult SubmConv3DOp::verify() {
             return emitOpError("submanifold kernel_size values must be odd");
         }
     }
-    return verifyTriple(
-        getOperation(),
-        getDilation(),
-        "dilation",
-        /*strictlyPositive=*/true
-    );
+    if (failed(verifyTriple(
+            getOperation(),
+            getDilation(),
+            "dilation",
+            /*strictlyPositive=*/true
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult NormalizedSubmConv3DOp::verify() {
@@ -516,41 +537,50 @@ LogicalResult NormalizedSubmConv3DOp::verify() {
         ))) {
         return failure();
     }
-    return verifyPositiveEps(getOperation(), getEpsAttr());
+    if (failed(verifyPositiveEps(getOperation(), getEpsAttr()))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult TargetConv3DOp::verify() {
-    return verifyTargetConv(
-        getOperation(),
-        getInput().getType(),
-        getTarget().getType(),
-        getResult().getType(),
-        getWeight().getType(),
-        getBias(),
-        ConvTriples{
-            .kernelSize = getKernelSize(),
-            .stride = getStride(),
-            .padding = getPadding(),
-            .dilation = getDilation(),
-        }
-    );
+    if (failed(verifyTargetConv(
+            getOperation(),
+            getInput().getType(),
+            getTarget().getType(),
+            getResult().getType(),
+            getWeight().getType(),
+            getBias(),
+            ConvTriples{
+                .kernelSize = getKernelSize(),
+                .stride = getStride(),
+                .padding = getPadding(),
+                .dilation = getDilation(),
+            }
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult TargetConvTranspose3DOp::verify() {
-    return verifyTargetConv(
-        getOperation(),
-        getInput().getType(),
-        getTarget().getType(),
-        getResult().getType(),
-        getWeight().getType(),
-        getBias(),
-        ConvTriples{
-            .kernelSize = getKernelSize(),
-            .stride = getStride(),
-            .padding = getPadding(),
-            .dilation = getDilation(),
-        }
-    );
+    if (failed(verifyTargetConv(
+            getOperation(),
+            getInput().getType(),
+            getTarget().getType(),
+            getResult().getType(),
+            getWeight().getType(),
+            getBias(),
+            ConvTriples{
+                .kernelSize = getKernelSize(),
+                .stride = getStride(),
+                .padding = getPadding(),
+                .dilation = getDilation(),
+            }
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult ConvTranspose3DOp::verify() {
@@ -568,15 +598,18 @@ LogicalResult ConvTranspose3DOp::verify() {
     if (failed(verifyOptionalBias(getOperation(), getBias()))) {
         return failure();
     }
-    return verifyConvTriples(
-        getOperation(),
-        ConvTriples{
-            .kernelSize = getKernelSize(),
-            .stride = getStride(),
-            .padding = getPadding(),
-            .dilation = getDilation(),
-        }
-    );
+    if (failed(verifyConvTriples(
+            getOperation(),
+            ConvTriples{
+                .kernelSize = getKernelSize(),
+                .stride = getStride(),
+                .padding = getPadding(),
+                .dilation = getDilation(),
+            }
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult NormalizedConvTranspose3DOp::verify() {
@@ -599,25 +632,31 @@ LogicalResult NormalizedConvTranspose3DOp::verify() {
         ))) {
         return failure();
     }
-    return verifyPositiveEps(getOperation(), getEpsAttr());
+    if (failed(verifyPositiveEps(getOperation(), getEpsAttr()))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult TargetNormalizedConvTranspose3DOp::verify() {
-    return verifyTargetConv(
-        getOperation(),
-        getInput().getType(),
-        getTarget().getType(),
-        getResult().getType(),
-        getWeight().getType(),
-        getBias(),
-        ConvTriples{
-            .kernelSize = getKernelSize(),
-            .stride = getStride(),
-            .padding = getPadding(),
-            .dilation = getDilation(),
-        },
-        getEpsAttr()
-    );
+    if (failed(verifyTargetConv(
+            getOperation(),
+            getInput().getType(),
+            getTarget().getType(),
+            getResult().getType(),
+            getWeight().getType(),
+            getBias(),
+            ConvTriples{
+                .kernelSize = getKernelSize(),
+                .stride = getStride(),
+                .padding = getPadding(),
+                .dilation = getDilation(),
+            },
+            getEpsAttr()
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult GenerativeConvTranspose3DOp::verify() {
@@ -647,12 +686,15 @@ LogicalResult GenerativeConvTranspose3DOp::verify() {
         ))) {
         return failure();
     }
-    return verifyTriple(
-        getOperation(),
-        getStride(),
-        "stride",
-        /*strictlyPositive=*/true
-    );
+    if (failed(verifyTriple(
+            getOperation(),
+            getStride(),
+            "stride",
+            /*strictlyPositive=*/true
+        ))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult NormalizedGenerativeConvTranspose3DOp::verify() {
@@ -682,7 +724,10 @@ LogicalResult NormalizedGenerativeConvTranspose3DOp::verify() {
         ))) {
         return failure();
     }
-    return verifyPositiveEps(getOperation(), getEpsAttr());
+    if (failed(verifyPositiveEps(getOperation(), getEpsAttr()))) {
+        return failure();
+    }
+    return verifyCanonicalAccumulation(getOperation());
 }
 
 LogicalResult Pool3DOp::verify() {
@@ -892,6 +937,57 @@ LogicalResult LinearOp::verify() {
         return failure();
     }
     return verifyOptionalBias(getOperation(), getBias());
+}
+
+LogicalResult EmbeddingLookupOp::verify() {
+    auto inputType = cast<RankedTensorType>(getInput().getType());
+    auto resultType = cast<RankedTensorType>(getResult().getType());
+
+    if (failed(verifyI32Vector(getOperation(), inputType, "input")) ||
+        failed(verifyRank2F32(getOperation(), resultType, "result"))) {
+        return failure();
+    }
+    return verifyWeightFamily(
+        getOperation(), getWeight().getType(), "embedding"
+    );
+}
+
+LogicalResult ElementwiseOp::verify() {
+    auto inputType = cast<RankedTensorType>(getInput().getType());
+    auto resultType = cast<RankedTensorType>(getResult().getType());
+    auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+
+    if (failed(
+            verifyFeatureTensorPair(getOperation(), inputType, resultType)
+        )) {
+        return failure();
+    }
+    if (!inputType.getElementType().isF32()) {
+        return emitOpError("input and result must use f32 elements");
+    }
+    if (!kind || (kind.getValue() != "exp" && kind.getValue() != "round")) {
+        return emitOpError("kind must be exp or round");
+    }
+    return success();
+}
+
+LogicalResult SoftmaxOp::verify() {
+    auto inputType = cast<RankedTensorType>(getInput().getType());
+    auto resultType = cast<RankedTensorType>(getResult().getType());
+    auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
+
+    if (failed(
+            verifyFeatureTensorPair(getOperation(), inputType, resultType)
+        )) {
+        return failure();
+    }
+    if (!inputType.getElementType().isF32()) {
+        return emitOpError("input and result must use f32 elements");
+    }
+    if (!axis || (axis.getInt() != -1 && axis.getInt() != 1)) {
+        return emitOpError("axis must select the final feature dimension");
+    }
+    return success();
 }
 
 LogicalResult ActivationOp::verify() {

@@ -27,12 +27,12 @@ Lightweight builds can validate through the repository ``lattice-opt`` tool.
 The Python layer does not parse lattice MLIR text itself.
 
 Artifact validation also enforces the module-level ABI contract:
-``lattice.ir_version`` must be ``0`` and ``lattice.weight_file`` must be
+``lattice.ir_version`` must be ``2`` and ``lattice.weight_file`` must be
 ``"weights.safetensors"``. Unsupported versions or payload names fail before
 the graph reaches runtime lowering. The module must also contain exactly one
 ``func.func`` entry named ``forward`` and that function must return at least
 one value. The entry body is intentionally simple: one block containing only
-``lattice`` dialect operations and ``func.return``. This matches the v0 MLX
+``lattice`` dialect operations and ``func.return``. This matches the v2 MLX
 importer contract and prevents silently ignored MLIR operations.
 
 Executable lowering is available when the MLIR-enabled native extension is
@@ -68,7 +68,7 @@ Plan freezing is schema-aware and ABI-aware: the plan must carry
 contract, operation names must resolve through ``lattice-contract``, SSA
 operand/result counts must match the contract op definition, required
 attributes must be present, enum attributes and structured packing metadata
-must use valid v0 values, triple/numeric/string attributes must have the
+must use valid v2 values, triple/numeric/string attributes must have the
 expected payload shape, runtime value labels must be defined before use, and
 returns must reference defined values. Frozen plans also deep-freeze nested
 attribute payloads such as packing maps and stride triples so runtime lowerings

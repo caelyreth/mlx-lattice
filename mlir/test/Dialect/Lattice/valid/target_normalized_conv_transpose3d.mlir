@@ -1,7 +1,7 @@
 // Valid: normalized transpose convolution may consume explicit target support.
 module attributes {
-  lattice.ir_version = 1,
-  lattice.schema_digest = "eb5aaff9fc917038f49f4c62f9e19c2d78d2b3540035de55c270b9513d3156aa",
+  lattice.ir_version = 2,
+  lattice.schema_digest = "1380f1e819fc0eb1af587202ecec3c14ec2c981d249333c5061f0263f82072ad",
   lattice.input_names = ["source_coords", "source_features", "source_active", "target_coords", "target_features", "target_active"],
   lattice.input_roles = ["sparse_coords", "sparse_features", "sparse_active", "sparse_coords", "sparse_features", "sparse_active"],
   lattice.output_names = ["output"],
@@ -32,7 +32,7 @@ module attributes {
     %out = lattice.target_normalized_conv_transpose3d %source, %target, %weight
       {kernel_size = array<i64: 3, 1, 1>, stride = array<i64: 2, 1, 1>,
        padding = array<i64: 1, 0, 0>, dilation = array<i64: 1, 1, 1>,
-       eps = 1.0e-8 : f32}
+       eps = 1.0e-8 : f32, accumulation = "canonical_f32"}
       : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>,
          !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>,
          !lattice.weight<conv3d, f32>)

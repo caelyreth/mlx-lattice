@@ -13,6 +13,21 @@ from lattice_contract import (
 from lattice_contract.dialect import LATTICE_DIALECT
 from lattice_contract.schema import OpDef
 
+_CANONICAL_ACCUMULATION_OPS = frozenset(
+    {
+        'conv3d',
+        'subm_conv3d',
+        'normalized_subm_conv3d',
+        'target_conv3d',
+        'conv_transpose3d',
+        'target_conv_transpose3d',
+        'normalized_conv_transpose3d',
+        'target_normalized_conv_transpose3d',
+        'generative_conv_transpose3d',
+        'normalized_generative_conv_transpose3d',
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class PlanArgument:
@@ -205,6 +220,13 @@ def _validate_operation_shape(
             _validate_attr_value(
                 name, operand.name, 'str', attrs[operand.name]
             )
+    if (
+        definition.name in _CANONICAL_ACCUMULATION_OPS
+        and attrs.get('accumulation') != 'canonical_f32'
+    ):
+        raise ValueError(
+            f'{name}.accumulation must be canonical_f32 for IR v2.'
+        )
 
 
 def _validate_attr_value(

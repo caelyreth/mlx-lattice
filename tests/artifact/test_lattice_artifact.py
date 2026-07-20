@@ -157,13 +157,13 @@ def test_lattice_artifact_compile_requires_native_mlir_execution() -> None:
     ('graph', 'diagnostic'),
     [
         (
-            lambda: _graph().replace('  lattice.ir_version = 1,\n', ''),
+            lambda: _graph().replace('  lattice.ir_version = 2,\n', ''),
             'lattice.ir_version',
         ),
         (
             lambda: _graph().replace(
-                'lattice.ir_version = 1',
                 'lattice.ir_version = 2',
+                'lattice.ir_version = 3',
             ),
             'unsupported lattice.ir_version',
         ),
@@ -375,6 +375,20 @@ def test_runtime_plan_rejects_unsupported_schema_digest() -> None:
         RuntimePlan.from_native(raw)
 
 
+def test_runtime_plan_rejects_noncanonical_convolution_accumulation() -> (
+    None
+):
+    raw = _quantized_conv_plan(bits=4)
+    ops = cast(list[dict[str, object]], raw['ops'])
+    attrs = cast(dict[str, object], ops[-1]['attrs'])
+    attrs['accumulation'] = 'native_fp16'
+
+    with pytest.raises(
+        ValueError, match='accumulation must be canonical_f32'
+    ):
+        RuntimePlan.from_native(raw)
+
+
 def test_runtime_plan_rejects_unsupported_module_metadata() -> None:
     raw = _activation_plan(kind='relu')
     raw['weight_file'] = 'model.safetensors'
@@ -577,6 +591,46 @@ def test_lattice_artifact_runtime_lowers_conv_bias() -> None:
     assert isinstance(actual, SparseTensor)
     mx.eval(actual.feats, expected.feats)
     assert bool(mx.allclose(actual.feats, expected.feats))
+
+
+def test_artifact_sparse_abi_roundtrips_physical_strided_coordinates() -> (
+    None
+):
+    raw = _plan_payload(
+        ops=[
+            {
+                'name': 'lattice.sparse.make',
+                'operands': ['arg0', 'arg1', 'arg2'],
+                'results': ['v0'],
+                'attrs': {
+                    'stride': [2, 2, 2],
+                    'coord_order': 'batch_x_y_z',
+                },
+            },
+            {
+                'name': 'lattice.sparse.decompose',
+                'operands': ['v0'],
+                'results': ['v1', 'v2', 'v3'],
+                'attrs': {},
+            },
+        ],
+        returns=['v1', 'v2', 'v3'],
+    )
+    program = LatticeProgram(_runtime_plan(raw), {})
+    coords = mx.array([[0, 2, 4, 6], [0, 4, 6, 8]], dtype=mx.int32)
+    feats = mx.ones((2, 3), dtype=mx.float16)
+    active = mx.array([2], dtype=mx.int32)
+
+    returned = program(coords, feats, active)
+    assert isinstance(returned, tuple)
+    returned_coords, returned_feats, returned_active = returned
+    assert mx.array_equal(returned_coords, coords).item()
+    assert mx.array_equal(returned_feats, feats).item()
+    assert mx.array_equal(returned_active, active).item()
+
+    invalid = mx.array([[0, 3, 4, 6]], dtype=mx.int32)
+    with pytest.raises(ValueError, match='exactly divisible'):
+        program(invalid, mx.ones((1, 3), dtype=mx.float16), active)
 
 
 def test_lattice_artifact_runtime_lowers_linear_bias() -> None:
@@ -964,7 +1018,7 @@ def _graph() -> str:
 def _no_entry_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 1,\n'
+        '  lattice.ir_version = 2,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = [],\n'
         '  lattice.input_roles = [],\n'
@@ -979,7 +1033,7 @@ def _no_entry_graph() -> str:
 def _multiple_entry_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 1,\n'
+        '  lattice.ir_version = 2,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = ["x"],\n'
         '  lattice.input_roles = ["tensor"],\n'
@@ -1000,7 +1054,7 @@ def _multiple_entry_graph() -> str:
 def _empty_return_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 1,\n'
+        '  lattice.ir_version = 2,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = [],\n'
         '  lattice.input_roles = [],\n'
@@ -1018,7 +1072,7 @@ def _empty_return_graph() -> str:
 def _non_lattice_body_graph() -> str:
     return (
         'module attributes {\n'
-        '  lattice.ir_version = 1,\n'
+        '  lattice.ir_version = 2,\n'
         f'  lattice.schema_digest = "{DIALECT_SCHEMA_DIGEST}",\n'
         '  lattice.input_names = ["x"],\n'
         '  lattice.input_roles = ["tensor"],\n'
@@ -1133,6 +1187,33 @@ def _input_tensor() -> SparseTensor:
 
 def _runtime_plan(raw: dict[str, object]) -> RuntimePlan:
     return RuntimePlan.from_native(raw)
+
+
+_CONV_ARTIFACT_OPS = frozenset(
+    {
+        'lattice.conv3d',
+        'lattice.subm_conv3d',
+        'lattice.normalized_subm_conv3d',
+        'lattice.target_conv3d',
+        'lattice.conv_transpose3d',
+        'lattice.target_conv_transpose3d',
+        'lattice.normalized_conv_transpose3d',
+        'lattice.target_normalized_conv_transpose3d',
+        'lattice.generative_conv_transpose3d',
+        'lattice.normalized_generative_conv_transpose3d',
+    }
+)
+
+
+def _artifact_attrs(
+    op_name: str,
+    attrs: dict[str, object],
+) -> dict[str, object]:
+    """Return explicit IR v2 operation attributes for a test plan."""
+    result = dict(attrs)
+    if op_name in _CONV_ARTIFACT_OPS:
+        result.setdefault('accumulation', 'canonical_f32')
+    return result
 
 
 def _plan_payload(
@@ -1314,7 +1395,7 @@ def _single_sparse_input_plan(
                 'name': weight_family_op,
                 'operands': ['v0', 'v1'],
                 'results': [result_name],
-                'attrs': consumer_attrs,
+                'attrs': _artifact_attrs(weight_family_op, consumer_attrs),
             },
         ],
         returns=[result_name],
@@ -1365,7 +1446,7 @@ def _dense_weight_plan(
                 'name': op_name,
                 'operands': ['v0', 'v1', 'v2'],
                 'results': [result_name],
-                'attrs': attrs,
+                'attrs': _artifact_attrs(op_name, attrs),
             },
         ],
         returns=[result_name],

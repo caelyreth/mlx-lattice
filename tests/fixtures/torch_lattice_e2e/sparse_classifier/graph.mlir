@@ -1,6 +1,6 @@
 module attributes {
-  lattice.ir_version = 1,
-  lattice.schema_digest = "eb5aaff9fc917038f49f4c62f9e19c2d78d2b3540035de55c270b9513d3156aa",
+  lattice.ir_version = 2,
+  lattice.schema_digest = "1380f1e819fc0eb1af587202ecec3c14ec2c981d249333c5061f0263f82072ad",
   lattice.input_names = ["x_coords", "x_features", "x_active"],
   lattice.input_roles = ["sparse_coords", "sparse_features", "sparse_active"],
   lattice.output_names = ["output"],
@@ -15,7 +15,7 @@ module attributes {
     %x = lattice.sparse.make %x_coords, %x_features, %x_active {stride = array<i64: 1, 1, 1>, coord_order = #lattice.coord<batch_x_y_z>} : (tensor<?x4xi32>, tensor<?x3xf32>, tensor<1xi32>) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
     %stem_weight = lattice.weight @stem_weight {storage_key = "stem.weight", layout = #lattice.weight_layout<conv3d_o_xyz_i>, packing = #lattice.packing<dense>} : !lattice.weight<conv3d, f32>
     %stem_bias = lattice.weight @stem_bias {storage_key = "stem.bias", layout = #lattice.weight_layout<bias_c>, packing = #lattice.packing<dense>} : !lattice.weight<bias, f32>
-    %stem = lattice.conv3d %x, %stem_weight, %stem_bias {kernel_size = array<i64: 1, 1, 1>, stride = array<i64: 1, 1, 1>, padding = array<i64: 0, 0, 0>, dilation = array<i64: 1, 1, 1>} : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>, !lattice.weight<conv3d, f32>, !lattice.weight<bias, f32>) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
+    %stem = lattice.conv3d %x, %stem_weight, %stem_bias {kernel_size = array<i64: 1, 1, 1>, stride = array<i64: 1, 1, 1>, padding = array<i64: 0, 0, 0>, dilation = array<i64: 1, 1, 1>, accumulation = "canonical_f32"} : (!lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>, !lattice.weight<conv3d, f32>, !lattice.weight<bias, f32>) -> !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32>
     %sparse_decompose, %norm_features_in, %norm_active = lattice.sparse.decompose %stem : !lattice.sparse_tensor<rank = 3, coord = batch_x_y_z, feature = row_channel, dtype = f32> -> (tensor<?x4xi32>, tensor<?x4xf32>, tensor<1xi32>)
     %norm_weight = lattice.weight @norm_weight {storage_key = "norm.weight", layout = #lattice.weight_layout<channel_c>, packing = #lattice.packing<dense>} : !lattice.weight<channel, f32>
     %norm_bias = lattice.weight @norm_bias {storage_key = "norm.bias", layout = #lattice.weight_layout<bias_c>, packing = #lattice.packing<dense>} : !lattice.weight<bias, f32>

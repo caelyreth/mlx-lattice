@@ -66,10 +66,16 @@ support from a weight tensor.
 Coordinate and weight ABI
 -------------------------
 
-Sparse artifact inputs use ``batch_x_y_z`` coordinates and row-channel feature
-storage. Coordinate results must match exactly across runtimes. Feature results
-are checked with absolute and relative tolerances because CUDA and Metal use
-different floating-point kernels and reduction orders.
+Sparse artifact inputs use physical ``batch_x_y_z`` coordinates and row-channel
+feature storage. The coordinates passed through the ABI are never pre-divided
+by sparse stride: an input declared with stride ``(2, 2, 2)`` must carry even
+spatial positions. Importers validate that divisibility and convert to a local
+logical representation only internally. Coordinate results use the same
+physical representation and must match exactly across runtimes. Feature
+results are checked with absolute and relative tolerances because CUDA and
+Metal use different floating-point kernels and reduction orders. Convolution
+artifact ops declare ``accumulation = \"canonical_f32\"``; FP16 storage does not
+change the portable accumulation contract.
 
 Each logical sparse input is represented by three consecutive MLIR arguments
 tagged ``sparse_coords``, ``sparse_features``, and ``sparse_active``. Their ABI
@@ -93,9 +99,10 @@ weights, not the pre-quantized training weights.
 Compatibility and rejection policy
 ----------------------------------
 
-Artifact loading is intentionally strict. MLIR IR version 0, legacy JSON
-manifests, missing schema digests, old ``conv3d_o_zyx_i`` convolution layouts,
-and undeclared weight files are rejected before execution. A caller must
+Artifact loading is intentionally strict. Every MLIR version before IR v2,
+legacy JSON manifests, missing schema digests, old ``conv3d_o_zyx_i``
+convolution layouts, and undeclared weight files are rejected before execution.
+A caller must
 perform an explicit one-time migration rather than relying on a runtime
 fallback. This keeps a portable artifact self-describing and prevents a legacy
 kernel permutation from silently changing a model result.
