@@ -73,11 +73,15 @@ Backend routes
      - Valid ``float32`` features and kernel relation
      - CPU relation reduction over edge arrays.
    * - Metal local pooling
-     - Valid ``float32`` features, ``int32`` coordinates, Metal device
-     - ``sparse_pool_relation_f32_i32`` over output rows and channels.
+     - Valid ``float32`` or inference-only ``float16`` features, ``int32``
+       coordinates, Metal device
+     - ``sparse_pool_relation_f32_i32`` or ``sparse_pool_relation_f16_i32``
+       over output rows and channels. The FP16 kernel accumulates in FP32 and
+       converts only its final result to FP16.
    * - Local pooling VJP
      - Differentiating through local pooling
-     - Sum/avg use direct gradient scatter; max uses max-tie policy.
+     - Float32 sum/avg use direct gradient scatter; float32 max uses max-tie
+       policy. FP16 local pooling rejects VJP/JVP; use float32 for training.
    * - Local pooling JVP
      - Forward-mode transform
      - ``sparse_pool_relation_jvp_f32_i32``.
@@ -107,7 +111,8 @@ Validation boundaries
 
 Local pooling currently validates:
 
-* feature dtype is ``float32``;
+* CPU feature dtype is ``float32``; Metal also accepts inference-only
+  ``float16``;
 * Metal coordinates are ``int32``;
 * mode is ``sum``, ``max``, or ``avg``;
 * relation metadata includes output coordinates, counts, kernel count, and

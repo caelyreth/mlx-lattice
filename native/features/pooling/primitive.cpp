@@ -1,6 +1,7 @@
 #include "features/pooling/factories.h"
 
 #include <memory>
+#include <stdexcept>
 #include <typeinfo>
 #include <vector>
 
@@ -72,6 +73,12 @@ class SparsePoolFeatures final : public SparsePrimitive {
     jvp(const std::vector<mx::array>& primals,
         const std::vector<mx::array>& tangents,
         const std::vector<int>& argnums) override {
+        if (primals[0].dtype() == mx::float16) {
+            throw std::invalid_argument(
+                "float16 sparse pooling autodiff is not supported; use "
+                "float32 for training."
+            );
+        }
         for (int index = 0; index < int(argnums.size()); ++index) {
             if (argnums[index] == 0) {
                 auto pooled = make_sparse_pool_features(
@@ -111,6 +118,12 @@ class SparsePoolFeatures final : public SparsePrimitive {
         const std::vector<mx::array>& cotangents,
         const std::vector<int>& argnums,
         const std::vector<mx::array>& outputs) override {
+        if (primals[0].dtype() == mx::float16) {
+            throw std::invalid_argument(
+                "float16 sparse pooling autodiff is not supported; use "
+                "float32 for training."
+            );
+        }
         std::vector<mx::array> grads;
         grads.reserve(argnums.size());
         for (const auto argnum : argnums) {

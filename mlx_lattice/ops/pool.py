@@ -46,8 +46,9 @@ def pool3d(
 
     Local pooling builds a forward kernel relation and reduces input features
     that contribute to each output coordinate. The output sparse stride is
-    ``x.stride * stride``. Current native pooling routes accept ``float32``
-    features; Metal routes additionally require ``int32`` coordinates.
+    ``x.stride * stride``. Native local pooling accepts ``float32`` and,
+    on Metal, inference-only ``float16`` features. Metal routes additionally
+    require ``int32`` coordinates.
     """
     spec = KernelSpec(
         size=kernel_size,
@@ -165,6 +166,7 @@ def pool_transpose3d(
     dilation: int | Sequence[int] = 1,
 ) -> SparseTensor:
     """Average coarse features onto generated or explicit fine support."""
+    _validate_pool_dtype(x.feats)
     spec = KernelSpec(
         size=kernel_size,
         stride=stride,
@@ -173,6 +175,7 @@ def pool_transpose3d(
     )
     output_stride = _div_stride(x.stride, spec.stride)
     if target is None:
+        _validate_local_pool_execution(x.feats)
         relation = x.coord_manager.transposed_kernel_relation(
             x.coord_key,
             kernel_size=spec.size,
@@ -388,6 +391,7 @@ def _fused_pool(
 ) -> SparseTensor:
     _validate_pool_dtype(x.feats)
     _validate_metal_coord_dtype(x)
+    _validate_local_pool_execution(x.feats)
     if mode not in ('sum', 'max', 'avg'):
         raise ValueError("mode must be 'sum', 'max', or 'avg'.")
     relation = x.coord_manager.kernel_relation(
@@ -559,8 +563,13 @@ def _batch_ids(counts: tuple[int, ...]) -> mx.array:
 
 
 def _validate_pool_dtype(feats: mx.array) -> None:
-    if feats.dtype != mx.float32:
-        raise ValueError('pooling currently supports float32 tensors.')
+    if feats.dtype not in (mx.float32, mx.float16):
+        raise ValueError('pooling supports float32 and float16 tensors.')
+
+
+def _validate_local_pool_execution(feats: mx.array) -> None:
+    if feats.dtype == mx.float16 and mx.default_device() != mx.gpu:
+        raise ValueError('float16 local sparse pooling requires Metal.')
 
 
 def _validate_metal_coord_dtype(x: SparseTensor) -> None:

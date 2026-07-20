@@ -16,13 +16,19 @@ mx::Stream sparse_pool_features_stream(
 ) {
     auto device = mx::default_device() == mx::Device::gpu ? mx::Device::gpu
                                                           : mx::Device::cpu;
+    if (device == mx::Device::cpu && feats.dtype() != mx::float32) {
+        throw std::invalid_argument(
+            "CPU sparse pooling requires float32 features."
+        );
+    }
     if (device == mx::Device::gpu &&
-        (feats.dtype() != mx::float32 || in_rows.dtype() != mx::int32 ||
-         out_rows.dtype() != mx::int32 || kernel_ids.dtype() != mx::int32 ||
-         row_offsets.dtype() != mx::int32 || counts.dtype() != mx::int32)) {
+        ((feats.dtype() != mx::float32 && feats.dtype() != mx::float16) ||
+         in_rows.dtype() != mx::int32 || out_rows.dtype() != mx::int32 ||
+         kernel_ids.dtype() != mx::int32 || row_offsets.dtype() != mx::int32 ||
+         counts.dtype() != mx::int32)) {
         throw std::invalid_argument(
             "Metal sparse pooling requires int32 relation arrays and float32 "
-            "features."
+            "or float16 features."
         );
     }
     return mx::default_stream(device);

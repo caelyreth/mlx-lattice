@@ -79,8 +79,12 @@ void eval(
     allocate(out);
     auto library = lattice_library(stream);
     auto& encoder = command_encoder(stream);
-    auto kernel =
-        lattice_kernel(stream, "sparse_pool_relation_f32_i32", library);
+    auto kernel = lattice_kernel(
+        stream,
+        inputs[0].dtype() == mx::float16 ? "sparse_pool_relation_f16_i32"
+                                         : "sparse_pool_relation_f32_i32",
+        library
+    );
     encoder.set_compute_pipeline_state(kernel);
     bind_input_arrays(encoder, inputs, 0, 6);
     encoder.set_output_array(out, 6);

@@ -137,7 +137,9 @@ The route selector validates public contracts before native execution:
 * Metal sparse convolution and pooling require ``int32`` coordinates.
 * Floating convolution supports ``float16`` and ``float32`` feature/weight
   matrices on native routes.
-* Local pooling currently accepts ``float32`` features.
+* Local pooling accepts ``float32`` features on CPU and Metal. Metal also
+  accepts inference-only ``float16`` features, with FP32 accumulation and no
+  JVP/VJP support.
 * Packed quantized convolution requires int4 or int8 packed ``uint32`` weights,
   scale/bias arrays matching feature dtype, and group size in ``{32, 64, 128}``.
 * Sorted fp16 implicit-GEMM routes require relation metadata that can produce

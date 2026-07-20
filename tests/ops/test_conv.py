@@ -113,6 +113,67 @@ def test_normalized_generative_transpose_reuses_generated_support() -> None:
     assert mx.allclose(out.feats, expected, rtol=1e-6, atol=1e-6).item()
 
 
+def test_generative_conv_transpose3d_runs_generic_fp16_relation_on_metal(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('float16 sparse relation kernels are Metal-only')
+    x = SparseTensor(
+        mx.array([[0, 0, 0, 0]], dtype=mx.int32),
+        mx.ones((1, 64), dtype=mx.float16),
+    )
+    weight = mx.ones((64, 2, 2, 2, 64), dtype=mx.float16)
+
+    out = generative_conv_transpose3d(
+        x,
+        weight,
+        kernel_size=2,
+        stride=1,
+    )
+    mx.eval(out.feats)
+
+    assert out.feats.dtype == mx.float16
+    assert out.feats.shape == (8, 64)
+    assert mx.allclose(
+        out.feats,
+        mx.full((8, 64), 64.0, dtype=mx.float16),
+        rtol=1e-3,
+        atol=1e-3,
+    ).item()
+
+
+def test_generative_conv_transpose3d_fp16_large_relation_on_metal(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('float16 sparse relation kernels are Metal-only')
+    input_rows = 6_250
+    axis = mx.arange(input_rows, dtype=mx.int32)
+    zeros = mx.zeros((input_rows,), dtype=mx.int32)
+    x = SparseTensor(
+        mx.stack((zeros, axis * 2, zeros, zeros), axis=1),
+        mx.ones((input_rows, 64), dtype=mx.float16),
+    )
+    weight = mx.ones((64, 2, 2, 2, 64), dtype=mx.float16)
+
+    out = generative_conv_transpose3d(
+        x,
+        weight,
+        kernel_size=2,
+        stride=1,
+    )
+    mx.eval(out.feats)
+
+    assert int(out.active_rows.item()) == 50_000
+    assert out.feats.shape == (50_000, 64)
+    assert mx.allclose(
+        out.feats,
+        mx.full((50_000, 64), 64.0, dtype=mx.float16),
+        rtol=1e-3,
+        atol=1e-3,
+    ).item()
+
+
 def test_conv3d_pointwise_uses_accurate_fp32_projection(
     selected_backend,
 ) -> None:

@@ -17,9 +17,9 @@ void validate_sparse_pool_features(
     if (feats.ndim() != 2) {
         throw std::invalid_argument("feats must have shape (N, C).");
     }
-    if (feats.dtype() != mx::float32) {
+    if (feats.dtype() != mx::float32 && feats.dtype() != mx::float16) {
         throw std::invalid_argument(
-            "sparse_pool_features currently supports float32 feats."
+            "sparse_pool_features supports float32 and float16 feats."
         );
     }
     if (in_rows.ndim() != 1 || out_rows.ndim() != 1 || kernel_ids.ndim() != 1) {

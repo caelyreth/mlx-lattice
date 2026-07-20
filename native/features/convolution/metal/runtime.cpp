@@ -433,14 +433,7 @@ void eval(
     }
     const char* kernel_name = "sparse_relation_conv_atomic_f32_i32";
     if (use_dense_c) {
-        if (fp16 && shape.in_channels == 64 && shape.out_channels == 64 &&
-            shape.out_capacity >= 50000 && stride_i32(inputs[0], 1) == 1) {
-            kernel_name =
-                "sparse_relation_conv_f16_i32_cout16_dense_contiguous_cin64_"
-                "cout64";
-        } else {
-            kernel_name = dense_forward_kernel_name(shape, fp16);
-        }
+        kernel_name = dense_forward_kernel_name(shape, fp16);
     } else if (use_cout16) {
         kernel_name = typed_kernel_name(
             "sparse_relation_conv_f32_i32_cout16",

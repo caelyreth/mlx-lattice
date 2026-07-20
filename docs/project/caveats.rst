@@ -71,8 +71,9 @@ Dtype boundaries
      - ``float16`` or ``float32`` features/weights
      - Specialized Metal routes depend on dtype and channel count.
    * - Local pooling
-     - ``float32`` features
-     - Sum, max, and average local pooling share this boundary.
+     - ``float32`` on CPU; ``float16`` or ``float32`` on Metal
+     - Metal FP16 sum, max, and average pooling are inference-only and
+       accumulate each output in FP32 before the FP16 store.
    * - Point/voxel
      - ``float32`` points/features, ``int32`` maps
      - Native quantization and interpolation routes use this contract.

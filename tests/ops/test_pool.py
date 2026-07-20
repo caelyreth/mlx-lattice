@@ -64,6 +64,80 @@ def test_local_pooling_uses_fused_native_neighborhood_reductions() -> None:
     ]
 
 
+def test_local_pooling_supports_fp16_inference_on_metal(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('float16 local pooling is Metal-only')
+    coords = mx.array(
+        [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+        dtype=mx.int32,
+    )
+    x = SparseTensor(
+        coords,
+        mx.array([[1.0], [2.0], [3.0]], dtype=mx.float16),
+    )
+
+    summed = sum_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+    maxed = max_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+    averaged = avg_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+    mx.eval(summed.feats, maxed.feats, averaged.feats)
+
+    assert summed.feats.dtype == mx.float16
+    assert maxed.feats.dtype == mx.float16
+    assert averaged.feats.dtype == mx.float16
+    assert summed.feats.tolist() == [[3.0], [6.0], [5.0]]
+    assert maxed.feats.tolist() == [[2.0], [3.0], [3.0]]
+    assert averaged.feats.tolist() == [[1.5], [2.0], [2.5]]
+
+
+def test_local_pooling_fp16_accumulates_in_fp32_on_metal(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('float16 local pooling is Metal-only')
+    x = SparseTensor(
+        mx.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
+            dtype=mx.int32,
+        ),
+        mx.array([[4096.0], [1.0], [-4096.0]], dtype=mx.float16),
+    )
+
+    result = sum_pool3d(x, kernel_size=(3, 1, 1), stride=1)
+    mx.eval(result.feats)
+
+    values = cast('list[list[float]]', result.feats.tolist())
+    assert values[1] == [1.0]
+
+
+def test_local_pooling_rejects_fp16_autodiff_on_metal(
+    selected_backend,
+) -> None:
+    if selected_backend.name != 'metal':
+        pytest.skip('float16 local pooling autodiff is Metal-specific')
+    coords = mx.array([[0, 0, 0, 0]], dtype=mx.int32)
+    feats = mx.ones((1, 1), dtype=mx.float16)
+
+    def loss(features: mx.array) -> mx.array:
+        return mx.sum(sum_pool3d(SparseTensor(coords, features)).feats)
+
+    with pytest.raises(ValueError, match='autodiff is not supported'):
+        mx.eval(mx.grad(loss)(feats))
+
+
+def test_local_pooling_rejects_fp16_on_cpu(selected_backend) -> None:
+    if selected_backend.name != 'cpu':
+        pytest.skip('this contract applies only to the CPU native reducer')
+    x = SparseTensor(
+        mx.array([[0, 0, 0, 0]], dtype=mx.int32),
+        mx.ones((1, 1), dtype=mx.float16),
+    )
+
+    with pytest.raises(ValueError, match='requires Metal'):
+        sum_pool3d(x)
+
+
 def test_local_pooling_modes_are_autogradable() -> None:
     coords = mx.array(
         [[0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0]],
@@ -289,6 +363,6 @@ def test_pool3d_rejects_invalid_mode_and_dtype() -> None:
     with pytest.raises(ValueError, match='mode'):
         pool3d(x, mode=cast('Any', 'median'))
 
-    half = x.astype(mx.float16)
-    with pytest.raises(ValueError, match='float32'):
-        sum_pool3d(half)
+    unsupported = x.astype(mx.int32)
+    with pytest.raises(ValueError, match='float32 and float16'):
+        sum_pool3d(unsupported)
